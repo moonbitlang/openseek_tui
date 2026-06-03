@@ -12,7 +12,11 @@ struct Queue {
 pub async fn[T] Queue::wait(self : Queue, f : async () -> T) -> T {
   let result : @aqueue.Queue[Result[T, Error]] = Queue(kind=Blocking(1))
   self.aq.put(() => {
-    let value : Result[T, Error] = try? f()
+    let value : Result[T, Error] = try f() catch {
+      err => Err(err)
+    } noraise {
+      value => Ok(value)
+    }
     result.put(value)
   })
   result.get().unwrap_or_error()
