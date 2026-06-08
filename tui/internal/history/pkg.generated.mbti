@@ -25,3 +25,4 @@ pub fn History::reset_navigation(Self) -> Unit
 // Type aliases
 
 // Traits
+

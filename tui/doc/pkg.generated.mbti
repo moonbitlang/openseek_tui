@@ -40,3 +40,4 @@ pub fn Text::split_lines(Self) -> Array[Self]
 pub(open) trait ToDoc {
   fn to_doc(Self) -> Doc
 }
+

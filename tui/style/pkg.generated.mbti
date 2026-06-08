@@ -27,3 +27,4 @@ pub fn Style::Style(foreground? : @color.Color, background? : @color.Color, unde
 // Type aliases
 
 // Traits
+
