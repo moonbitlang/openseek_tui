@@ -29,7 +29,7 @@ pub fn Doc::Doc(texts : Array[Text]) -> Doc {
 /// row breaks.
 struct Text {
   spans : Array[Span]
-}
+} derive(Debug)
 
 ///|
 /// Build a text block from a sequence of styled spans.
@@ -80,10 +80,17 @@ pub fn Text::split_lines(self : Text) -> Array[Text] {
 
 ///|
 /// A string fragment with an associated terminal style.
+///
+/// A span normally holds a single display line. Callers split hard line breaks
+/// into separate `Text` blocks with `Text::split_lines` (e.g. to prefix each
+/// line with its own bullet), but a span that reaches layout with an embedded
+/// newline is still handled: `Text::wrap` iterates the span's `DisplayText`
+/// directly and forces a row break on CR/LF/CRLF inline, without re-segmenting
+/// the string.
 struct Span {
   display : @displaytext.DisplayText
   style : @style.Style
-}
+} derive(Debug)
 
 ///|
 /// Build a styled span.
@@ -104,52 +111,86 @@ pub fn Span::plain(text : String) -> Span {
 
 ///|
 /// Lay this block out into physical rows for `width` columns, wrapping by
-/// display width, expanding tabs to the next stop, and dropping stray controls.
+/// display width, expanding tabs to the next stop, forcing a row break on every
+/// hard line break (CR, LF, or CRLF), and dropping other stray controls.
 fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
   let rows : Array[@surface.Line] = []
   let mut spans : Array[@surface.Span] = []
   let mut used = 0
   let width = width.max(1)
+  // Accumulate consecutive units into one surface span rather than emitting one
+  // span per grapheme. The renderer writes a style set + reset and an (unbuffered)
+  // terminal write per span, so a per-grapheme line becomes hundreds of syscalls;
+  // coalescing collapses a single-style line into one span. A span's style is
+  // constant, so a run is flushed only when the input span ends or a wrap/line
+  // break splits the physical row.
+  let mut run = StringBuilder()
+  let mut run_empty = true
+  fn flush_run(style : @style.Style) -> Unit {
+    if !run_empty {
+      spans.push(Span(DisplayText(run.to_string()), style~))
+      run = StringBuilder()
+      run_empty = true
+    }
+  }
+
   for span in self.spans {
     let style = span.style
-    let display_lines = @displaytext.split_lines(span.display.text())
-    for line_index, display_line in display_lines {
-      if line_index > 0 {
+    // Iterate the span's precomputed `DisplayText` directly instead of
+    // re-segmenting its string on every layout. Spans are usually newline-free
+    // (callers pre-split with `Text::split_lines`), but a hard line break that
+    // does reach here is honored as a row break inline (below), so layout never
+    // re-runs the grapheme segmentation the `DisplayText` already paid for.
+    let display_line = span.display
+    let mut start = display_line.start()
+    while display_line.next(start) is Some(end) {
+      let unit = display_line.view(start, end)
+      // Normalize control characters so the columns we count match what the
+      // terminal draws. A hard line break ends the current physical row; a raw
+      // `\t` jumps to the terminal's tab stop, which is not modeled by `used`,
+      // so it would shove following text into the wrong column; every other
+      // control is dropped.
+      //
+      // `Text::wrap` honors the documented contract that layout splits on hard
+      // line breaks even for a span that was not pre-split with `split_lines`.
+      // Grapheme segmentation already clusters CRLF into one unit, so "\r\n" is a
+      // single break, matching `Text::split_lines`; a lone CR and lone LF each
+      // arrive as their own unit and break once too.
+      if unit == "\n" || unit == "\r" || unit == "\r\n" {
+        flush_run(style)
         rows.push(@surface.Line::new(spans))
         spans = []
         used = 0
-      }
-      let mut start = display_line.start()
-      while display_line.next(start) is Some(end) {
-        let unit = display_line.view(start, end)
-        // Normalize control characters so the columns we count match what the
-        // terminal draws. A raw `\t` jumps to the terminal's tab stop, which
-        // is not modeled by `used`, so it would shove following text into the
-        // wrong column; every other control is dropped.
-        if unit == "\t" {
-          let spaces = @text.TabWidth - used % @text.TabWidth
-          for _ in 0..<spaces {
-            if used > 0 && used + 1 > width {
-              rows.push(@surface.Line::new(spans))
-              spans = []
-              used = 0
-            }
-            spans.push(Span(DisplayText(" "), style~))
-            used += 1
-          }
-        } else if !@text.is_control_unit(unit) {
-          let next = @text.unit_width(display_line, start~, end~)
-          if used > 0 && used + next > width {
+      } else if unit == "\t" {
+        let spaces = @text.TabWidth - used % @text.TabWidth
+        for _ in 0..<spaces {
+          if used > 0 && used + 1 > width {
+            flush_run(style)
             rows.push(@surface.Line::new(spans))
             spans = []
             used = 0
           }
-          spans.push(Span(DisplayText(unit.to_owned()), style~))
-          used += next
+          run.write_string(" ")
+          run_empty = false
+          used += 1
         }
-        start = end
+      } else if !@text.is_control_unit(unit) {
+        let next = @text.unit_width(display_line, start~, end~)
+        if used > 0 && used + next > width {
+          flush_run(style)
+          rows.push(@surface.Line::new(spans))
+          spans = []
+          used = 0
+        }
+        run.write_stringview(unit)
+        run_empty = false
+        used += next
       }
+      start = end
     }
+    // Flush at the input-span boundary so the next span starts its own run
+    // (its style may differ).
+    flush_run(style)
   }
   rows.push(@surface.Line::new(spans))
   rows

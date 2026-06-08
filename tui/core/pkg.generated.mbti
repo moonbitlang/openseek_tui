@@ -29,7 +29,7 @@ pub fn Input::text(Self) -> String
 
 pub struct ToolCall {
   // private fields
-}
+} derive(@debug.Debug)
 pub fn ToolCall::ToolCall(@doc.Text, status? : ToolStatus, details? : Array[@doc.Text]) -> Self
 
 pub(all) enum ToolStatus {
@@ -41,8 +41,9 @@ pub(all) enum TranscriptItem {
   Input(Input)
   Response(String)
   ToolCall(ToolCall)
+  Notice(ToolCall)
   Error(String)
-}
+} derive(@debug.Debug)
 pub impl @doc.ToDoc for TranscriptItem
 
 // Type aliases

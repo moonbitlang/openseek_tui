@@ -32,6 +32,26 @@ test "transcript response renders bullet and continuation prefix" {
 }
 
 ///|
+test "transcript notice renders a ↻ marker with tool-style detail lines" {
+  inspect(
+    @doc.ToDoc::to_doc(
+      @core.TranscriptItem::Notice(
+        ToolCall(@doc.Text::plain("moon_check · running"), details=[
+          @doc.Text::plain("Warning: unused variable"),
+          @doc.Text::plain("ok"),
+        ]),
+      ),
+    )
+    .layout(width=40)
+    .map(line => line.text())
+    .join("|"),
+    content=(
+      #|↻ moon_check · running|  └ Warning: unused variable|    ok
+    ),
+  )
+}
+
+///|
 test "transcript tool call renders detail texts without caller-side joining" {
   inspect(
     @doc.ToDoc::to_doc(

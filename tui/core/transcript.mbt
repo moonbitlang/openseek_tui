@@ -24,7 +24,7 @@ struct ToolCall {
   title : @doc.Text
   status : ToolStatus?
   details : Array[@doc.Text]
-}
+} derive(Debug)
 
 ///|
 /// Build a `ToolCall` from its `title`, an optional `status`, and optional
@@ -39,13 +39,16 @@ pub fn ToolCall::ToolCall(
 
 ///|
 /// One committed entry in the transcript: a submitted `Input`, an agent
-/// `Response`, a `ToolCall`, or an `Error`.
+/// `Response`, a `ToolCall`, an out-of-band runtime `Notice` (e.g. background
+/// `moon check --watch` diagnostics the agent was fed — a titled, detail-bearing
+/// block like a tool call but flagged with a `↻` marker), or an `Error`.
 pub(all) enum TranscriptItem {
   Input(Input)
   Response(String)
   ToolCall(ToolCall)
+  Notice(ToolCall)
   Error(String)
-}
+} derive(Debug)
 
 ///|
 /// Prefix each split line of `text` with a bullet/continuation marker in
@@ -75,10 +78,41 @@ let continuation : @displaytext.DisplayText = DisplayText("  ")
 let square : @displaytext.DisplayText = DisplayText("■ ")
 
 ///|
+/// Marker for an out-of-band runtime notice (`Notice`): a `↻` so a background
+/// watcher update reads as a refresh, distinct from a `⏺` agent/tool line.
+let notice : @displaytext.DisplayText = DisplayText("↻ ")
+
+///|
+/// Render a `ToolCall` as a `marker`-bulleted title followed by its detail lines,
+/// each `└`/space-indented and dimmed. Shared by the `⏺` tool-call projection and
+/// the `↻` runtime-notice projection so both lay details out identically.
+fn tool_call_doc(
+  call : ToolCall,
+  marker~ : @displaytext.DisplayText,
+  marker_style~ : @style.Style,
+) -> @doc.Doc {
+  let texts : Array[@doc.Text] = [
+    call.title.prepend_span(Span(marker, style=marker_style)),
+  ]
+  let mut has_detail_line = false
+  for detail in call.details {
+    for line in detail.split_lines() {
+      let detail_marker = if has_detail_line { "    " } else { "  └ " }
+      texts.push(
+        line.prepend_span(Span(DisplayText(detail_marker), style=@style.dim)),
+      )
+      has_detail_line = true
+    }
+  }
+  Doc(texts)
+}
+
+///|
 /// Project a transcript item into a renderable `@doc.Doc`: inputs use their own
 /// prefixed projection, responses become dim `⏺`-bulleted blocks, tool calls
-/// render a status-styled `⏺` bullet with `└`-indented detail lines, and errors
-/// become an error-styled `■`-bulleted block.
+/// render a status-styled `⏺` bullet with `└`-indented detail lines, runtime
+/// notices use the same detail layout under a dim `↻` marker, and errors become
+/// an error-styled `■`-bulleted block.
 pub impl @doc.ToDoc for TranscriptItem with fn to_doc(self) {
   match self {
     Input(input) => input.to_doc()
@@ -95,20 +129,9 @@ pub impl @doc.ToDoc for TranscriptItem with fn to_doc(self) {
       let bullet_style = call.status
         .map(status => status.style())
         .unwrap_or(@style.dim)
-      let texts : Array[@doc.Text] = [
-        call.title.prepend_span(Span(bullet, style=bullet_style)),
-      ]
-      let mut has_detail_line = false
-      for detail in call.details {
-        for line in detail.split_lines() {
-          let marker = if has_detail_line { "    " } else { "  └ " }
-          let marker = @displaytext.DisplayText(marker)
-          texts.push(line.prepend_span(Span(marker, style=@style.dim)))
-          has_detail_line = true
-        }
-      }
-      Doc(texts)
+      tool_call_doc(call, marker=bullet, marker_style=bullet_style)
     }
+    Notice(call) => tool_call_doc(call, marker=notice, marker_style=@style.dim)
     Error(message) => {
       let error_style = @style.error
       Doc(

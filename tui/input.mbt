@@ -144,8 +144,14 @@ async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
     Enter => self.submit_current_input().map(input => Steer(input))
     Tab => self.submit_current_input().map(input => Queue(input))
     Escape => {
+      // Esc only resets history navigation; it deliberately does NOT interrupt.
+      // Under the kitty keyboard protocol every key is an ESC-prefixed sequence,
+      // and a sequence split across reads (the decoder's esc-timeout firing
+      // before the rest arrives) surfaces as a phantom bare Esc. Routing that to
+      // Interrupt would spuriously cancel a running task or, when idle, quit.
+      // Ctrl+C is the deliberate interrupt/quit key.
       self.history.reset_navigation()
-      Some(Interrupt)
+      None
     }
     Char('k') if key.modifiers.ctrl() => {
       self.composer.kill_after()

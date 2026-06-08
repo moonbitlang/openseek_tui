@@ -17,7 +17,7 @@ test "doc layout wraps styled text by display width" {
 }
 
 ///|
-test "layout expands tabs to the next stop and drops other control chars" {
+test "layout expands tabs, breaks rows on hard newlines, and drops other controls" {
   // `\t` expands to spaces up to the next 8-column tab stop so following text
   // is not shoved to a terminal tab stop we never accounted for.
   inspect(
@@ -34,8 +34,10 @@ test "layout expands tabs to the next stop and drops other control chars" {
     .join("|"),
     content="abcdef  g",
   )
-  // `\r\n` (a single grapheme cluster) and a lone `\r` are line breaks, so they
-  // split rows instead of being dropped — CRLF content keeps its lines.
+  // Hard line breaks force a row break at layout time even when the span was not
+  // pre-split with `Text::split_lines` — `Text::plain`/`Text::Text` are public and
+  // the documented contract is that layout splits on '\n'. CRLF and a lone CR
+  // each split exactly once (the LF of a CRLF pair is swallowed, not a second row).
   inspect(
     @doc.Doc::Doc([@doc.Text::plain("x\r\ny")])
     .layout(width=40)
@@ -43,7 +45,14 @@ test "layout expands tabs to the next stop and drops other control chars" {
     .join("|"),
     content="x|y",
   )
-  // Other C0 controls (here `ESC`) are dropped entirely.
+  inspect(
+    @doc.Doc::Doc([@doc.Text::plain("x\ry\nz")])
+    .layout(width=40)
+    .map(line => line.text())
+    .join("|"),
+    content="x|y|z",
+  )
+  // Other C0 controls (here `ESC`) are still dropped, not treated as breaks.
   inspect(
     @doc.Doc::Doc([@doc.Text::plain("x\u{1b}y")])
     .layout(width=40)

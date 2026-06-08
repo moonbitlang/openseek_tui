@@ -7,7 +7,7 @@ pub struct Style {
   foreground : @tty/color.Color
   background : @tty/color.Color
   underline : Bool
-} derive(Eq)
+} derive(Eq, Debug)
 
 ///|
 pub let default : Style = Style()

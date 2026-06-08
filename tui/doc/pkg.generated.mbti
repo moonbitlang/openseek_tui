@@ -5,6 +5,7 @@ import {
   "bobzhang/openseek/tui/internal/surface",
   "bobzhang/openseek/tui/style",
   "moonbit-community/displaytext",
+  "moonbitlang/core/debug",
 }
 
 // Values
@@ -21,13 +22,13 @@ pub fn Doc::layout(Self, width~ : Int) -> Array[@surface.Line]
 
 pub struct Span {
   // private fields
-}
+} derive(@debug.Debug)
 pub fn Span::Span(@displaytext.DisplayText, style? : @style.Style) -> Self
 pub fn Span::plain(String) -> Self
 
 pub struct Text {
   // private fields
-}
+} derive(@debug.Debug)
 pub fn Text::Text(Array[Span]) -> Self
 pub fn Text::first_line(Self, width~ : Int) -> @surface.Line
 pub fn Text::plain(String) -> Self
