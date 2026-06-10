@@ -244,8 +244,8 @@ async fn Ui::handle_tty_event(self : Self, event : @tty.Event) -> Event? {
       None
     }
     Input(FocusIn | FocusOut | Mouse(_)) => None
-    Resize(_) => {
-      self.redraw_after_resize()
+    Resize(size) => {
+      self.redraw_after_resize(size)
       None
     }
   }

@@ -9,7 +9,6 @@ import {
   "bobzhang/openseek/tui/internal/render",
   "bobzhang/openseek/tui/internal/surface",
   "bobzhang/openseek/tui/internal/task",
-  "bobzhang/openseek/tui/internal/terminal_size",
   "bobzhang/openseek/tui/internal/viewport",
   "moonbit-community/tty",
   "moonbit-community/tty/input" @tty/input,
