@@ -58,11 +58,16 @@ fn Ui::transcript_rows(self : Self, cols~ : Int) -> Array[@surface.Line] {
 }
 
 ///|
-async fn Ui::redraw_after_resize(self : Self) -> Unit {
+async fn Ui::redraw_after_resize(self : Self, size : @tty.WindowSize) -> Unit {
   guard self.viewport is Some(viewport) else {
     abort("resize without an entered UI")
   }
-  viewport.refresh_size(self.tty)
+  viewport.refresh_size_after_resize(
+    self.tty,
+    rows=size.rows,
+    cols=size.cols,
+    timeout_ms=self.config.esc_timeout_ms,
+  )
   viewport.replay_scrollback(
     self.tty,
     scrollback=self.transcript_rows(cols=viewport.cols()),
@@ -75,14 +80,13 @@ async fn Ui::redraw_after_resize(self : Self) -> Unit {
 /// must run before the tty reader starts (see `with_entered`).
 async fn Ui::enter(self : Self) -> Unit {
   let size = @viewport.read_terminal_size(self.tty)
-  self.viewport = Some(
-    @viewport.Viewport::enter(
-      self.tty,
-      size~,
-      surface=self.composer_surface(cols=size.cols(), rows=size.rows()),
-      timeout_ms=self.config.esc_timeout_ms,
-    ),
+  let viewport = @viewport.Viewport::enter(
+    self.tty,
+    size~,
+    surface=(cols, rows) => self.composer_surface(cols~, rows~),
+    timeout_ms=self.config.esc_timeout_ms,
   )
+  self.viewport = Some(viewport)
 }
 
 ///|

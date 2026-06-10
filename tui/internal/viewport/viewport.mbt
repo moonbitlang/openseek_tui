@@ -14,6 +14,7 @@ async fn clear_screen_and_scrollback(tty : @tty.Tty) -> Unit {
 ///|
 struct Viewport {
   mut size : @terminal_size.TerminalSize
+  size_source : SizeSource
   // The live area's placement. Set once by `enter` (which anchors it at the
   // terminal cursor) and re-clamped on resize; a `Viewport` only exists once
   // its area has been placed.
@@ -22,6 +23,19 @@ struct Viewport {
   // or, once dropped, the footprint it left behind (for clearing). See
   // `FrameCache`.
   mut cache : FrameCache
+}
+
+///|
+priv enum SizeSource {
+  Ioctl
+  Protocol
+}
+
+///|
+priv struct EnterGeometry {
+  size : @terminal_size.TerminalSize
+  cursor_row : Int
+  source : SizeSource
 }
 
 ///|
@@ -37,14 +51,14 @@ fn Viewport::height(self : Viewport) -> Int {
 }
 
 ///|
-/// Current terminal width in columns, as last read by `refresh_size`.
+/// Current trusted terminal width in columns.
 pub fn Viewport::cols(self : Viewport) -> Int {
   self.size.cols()
 }
 
 ///|
-/// Current terminal height in rows, as last read by `refresh_size`. The live
-/// area can never exceed this, so the composer view uses it to bound previews.
+/// Current trusted terminal height in rows. The live area can never exceed this,
+/// so the composer view uses it to bound previews.
 pub fn Viewport::rows(self : Viewport) -> Int {
   self.size.rows()
 }
@@ -83,9 +97,8 @@ fn Viewport::set_geometry(self : Viewport, top~ : Int, height~ : Int) -> Unit {
 }
 
 ///|
-/// Read the terminal window size, falling back to the default if it can't be
-/// queried (for example before the first `ioctl`). This is the one place that
-/// turns a live tty into a `@terminal_size.TerminalSize`; the value type itself
+/// Read the ioctl terminal window size, falling back to the default if it can't
+/// be queried (for example before the first `ioctl`). The value type itself
 /// stays free of terminal IO.
 pub fn read_terminal_size(tty : @tty.Tty) -> @terminal_size.TerminalSize {
   try tty.window_size() catch {
@@ -96,13 +109,158 @@ pub fn read_terminal_size(tty : @tty.Tty) -> @terminal_size.TerminalSize {
 }
 
 ///|
-/// Re-query the terminal window size and re-clamp the live area to it.
+fn cursor_position_fits_size(
+  size : @terminal_size.TerminalSize,
+  row~ : Int,
+  col~ : Int,
+) -> Bool {
+  row >= 1 && row <= size.rows() && col >= 1 && col <= size.cols()
+}
+
+///|
+fn terminal_geometry_error_message(
+  ioctl_size : @terminal_size.TerminalSize,
+  cursor_row~ : Int,
+  cursor_col~ : Int,
+  protocol_size? : @terminal_size.TerminalSize,
+) -> String {
+  let ioctl_rows = ioctl_size.rows()
+  let ioctl_cols = ioctl_size.cols()
+  if protocol_size is Some(size) {
+    let protocol_rows = size.rows()
+    let protocol_cols = size.cols()
+    "terminal geometry is inconsistent: CPR cursor=\{cursor_row}x\{cursor_col}, ioctl=\{ioctl_rows}x\{ioctl_cols}, protocol=\{protocol_rows}x\{protocol_cols}"
+  } else {
+    "terminal geometry is inconsistent: CPR cursor=\{cursor_row}x\{cursor_col}, ioctl=\{ioctl_rows}x\{ioctl_cols}, protocol probe failed"
+  }
+}
+
+///|
+fn choose_enter_geometry_for_cursor(
+  ioctl_size : @terminal_size.TerminalSize,
+  cursor_row~ : Int,
+  cursor_col~ : Int,
+  protocol_size? : @terminal_size.TerminalSize,
+) -> EnterGeometry raise {
+  if cursor_position_fits_size(ioctl_size, row=cursor_row, col=cursor_col) {
+    { size: ioctl_size, cursor_row, source: Ioctl }
+  } else if protocol_size is Some(size) &&
+    cursor_position_fits_size(size, row=cursor_row, col=cursor_col) {
+    { size, cursor_row, source: Protocol }
+  } else {
+    fail(
+      terminal_geometry_error_message(
+        ioctl_size,
+        cursor_row~,
+        cursor_col~,
+        protocol_size?,
+      ),
+    )
+  }
+}
+
+///|
+const SaveCursor : String = "\u{1b}7"
+
+///|
+const RestoreCursor : String = "\u{1b}8"
+
+///|
+const ProtocolProbeRow : Int = 9999
+
+///|
+const ProtocolProbeCol : Int = 9999
+
+///|
+async fn probe_terminal_protocol_size(
+  tty : @tty.Tty,
+  timeout_ms~ : Int,
+) -> @terminal_size.TerminalSize? {
+  tty.write(SaveCursor)
+  try {
+    tty.set_cursor_position(ProtocolProbeRow, ProtocolProbeCol)
+    tty.query_cursor_position(timeout_ms~)
+  } catch {
+    error => {
+      tty.write(RestoreCursor)
+      raise error
+    }
+  } noraise {
+    position => {
+      tty.write(RestoreCursor)
+      if position is Some(position) && position.row >= 1 && position.col >= 1 {
+        Some(TerminalSize(rows=position.row, cols=position.col))
+      } else {
+        None
+      }
+    }
+  }
+}
+
+///|
+async fn resolve_enter_geometry(
+  tty : @tty.Tty,
+  ioctl_size : @terminal_size.TerminalSize,
+  timeout_ms~ : Int,
+) -> EnterGeometry {
+  if tty.query_cursor_position(timeout_ms~) is Some(position) {
+    if cursor_position_fits_size(ioctl_size, row=position.row, col=position.col) {
+      { size: ioctl_size, cursor_row: position.row, source: Ioctl }
+    } else {
+      let protocol_size = probe_terminal_protocol_size(tty, timeout_ms~)
+      choose_enter_geometry_for_cursor(
+        ioctl_size,
+        cursor_row=position.row,
+        cursor_col=position.col,
+        protocol_size?,
+      )
+    }
+  } else {
+    { size: ioctl_size, cursor_row: ioctl_size.rows(), source: Ioctl }
+  }
+}
+
+///|
+/// Re-query the ioctl terminal window size and re-clamp the live area to it when
+/// this viewport still trusts ioctl.
 ///
 /// When the dimensions actually change the cached frame is invalidated (a resize
 /// can reflow rows off their old footprint) and the live area is re-clamped to
-/// stay on screen.
+/// stay on screen. Protocol-sized viewports deliberately skip this synchronous
+/// path because the ioctl value is already known stale for their terminal chain.
 pub fn Viewport::refresh_size(self : Viewport, tty : @tty.Tty) -> Unit {
-  self.set_size(read_terminal_size(tty))
+  match self.size_source {
+    Ioctl => self.set_size(read_terminal_size(tty))
+    Protocol => ()
+  }
+}
+
+///|
+/// Refresh terminal dimensions after an explicit resize event.
+///
+/// Ioctl-sized viewports can trust the size carried by the event. Protocol-sized
+/// viewports cannot: that event is still ioctl-derived, so they probe through
+/// the same coordinated `Tty` reader. `read_tty_events` is blocked on the command
+/// queue while handling this resize, and `Tty::query_cursor_position` preserves
+/// user input it reads while waiting for the terminal response.
+pub async fn Viewport::refresh_size_after_resize(
+  self : Viewport,
+  tty : @tty.Tty,
+  rows~ : Int,
+  cols~ : Int,
+  timeout_ms~ : Int,
+) -> Unit {
+  match self.size_source {
+    Ioctl => self.set_size(TerminalSize(rows~, cols~))
+    Protocol =>
+      if probe_terminal_protocol_size(tty, timeout_ms~) is Some(size) {
+        self.set_size(size)
+      } else {
+        fail(
+          "terminal geometry is inconsistent: protocol viewport resize could not probe screen size",
+        )
+      }
+  }
 }
 
 ///|
@@ -412,8 +570,9 @@ pub async fn Viewport::replay_scrollback(
 }
 
 ///|
-/// Draw `surface` as the live area for the first time, anchoring it at the
-/// terminal cursor.
+/// Build and draw the live area for the first time, anchoring it at the
+/// terminal cursor. The surface is built only after the trusted size is known,
+/// so the first frame uses the same geometry that `enter` places on screen.
 ///
 /// Anchor at the row the cursor currently sits on — where the shell left it when
 /// the app started — so committed output above stays put. When the cursor is
@@ -423,19 +582,21 @@ pub async fn Viewport::replay_scrollback(
 /// area at `calculate_max_top` (here 18). Without that scroll the area would be
 /// drawn straight over the lines above the cursor, destroying them. When the
 /// cursor position can't be queried, assume the worst case (cursor on the last
-/// row). The cursor query is the one blocking read, hence `timeout_ms`.
+/// row). If the cursor position contradicts the ioctl size, probe the terminal
+/// protocol for a trustworthy screen size and fail clearly if that also cannot
+/// explain the cursor. The cursor queries are the blocking reads, hence
+/// `timeout_ms`.
 pub async fn Viewport::enter(
   tty : @tty.Tty,
   size~ : @terminal_size.TerminalSize,
-  surface~ : @surface.Surface,
+  surface~ : (Int, Int) -> @surface.Surface,
   timeout_ms~ : Int,
 ) -> Viewport {
+  let enter_geometry = resolve_enter_geometry(tty, size, timeout_ms~)
+  let size = enter_geometry.size
+  let surface = surface(size.cols(), size.rows())
   let height = @geometry.clamp_height(size, height=surface.height())
-  let cursor_row = if tty.query_cursor_position(timeout_ms~) is Some(position) {
-    position.row
-  } else {
-    size.rows()
-  }
+  let cursor_row = enter_geometry.cursor_row
   let top = @geometry.clamp_top(size, height~, top=cursor_row)
   // The live area spans `cursor_row ..= cursor_row + height - 1`; anything past
   // the last row must be made by scrolling, not by drawing over the lines above.
@@ -448,7 +609,7 @@ pub async fn Viewport::enter(
   let surface = surface.with_max_rows(geometry.height())
   let frame = PlacedSurface::{ surface, top: geometry.top() }
   enter_placed_surface_rows(tty, frame)
-  { size, geometry, cache: Drawn(surface) }
+  { size, size_source: enter_geometry.source, geometry, cache: Drawn(surface) }
 }
 
 ///|
