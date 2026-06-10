@@ -5,20 +5,7 @@ fn drain_test_state() -> State {
     model: V4Pro,
     cwd: ".",
     max_steps: 10,
-    session_id: Some(SessionId("test")),
-    session_root: ".openseek",
-    engine: "openseek",
-  })
-}
-
-///|
-fn ephemeral_drain_test_state() -> State {
-  State::new({
-    api_key: "k",
-    model: V4Pro,
-    cwd: ".",
-    max_steps: 10,
-    session_id: None,
+    session_id: SessionId("test"),
     session_root: ".openseek",
     engine: "openseek",
   })
@@ -76,13 +63,6 @@ test "agent engine argv stays replay-compatible while session config uses env" {
 }
 
 ///|
-test "agent engine env omits session config for fresh runs" {
-  let env = engine_env(ephemeral_drain_test_state().config, {})
-  assert_true(env.get("OPENSEEK_SESSION") is None)
-  assert_true(env.get("OPENSEEK_SESSION_ROOT") is None)
-}
-
-///|
 test "agent engine env overrides inherited session config" {
   let inherited = {
     "OPENSEEK_SESSION": "parent",
@@ -94,18 +74,6 @@ test "agent engine env overrides inherited session config" {
   assert_true(env.get("OPENSEEK_SESSION") == Some("test"))
   assert_true(env.get("OPENSEEK_SESSION_ROOT") == Some(".openseek"))
   assert_true(inherited.get("OPENSEEK_SESSION") == Some("parent"))
-}
-
-///|
-test "agent engine env clears inherited session config for fresh runs" {
-  let env = engine_env(ephemeral_drain_test_state().config, {
-    "OPENSEEK_SESSION": "parent",
-    "OPENSEEK_SESSION_ROOT": "/tmp/parent",
-    "PATH": "/bin",
-  })
-  assert_true(env.get("PATH") == Some("/bin"))
-  assert_true(env.get("OPENSEEK_SESSION") is None)
-  assert_true(env.get("OPENSEEK_SESSION_ROOT") is None)
 }
 
 ///|

@@ -53,7 +53,7 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
 
 ///|
 async fn append_session_history(config : AppConfig, ui : @ui.Ui) -> Unit {
-  guard config.session_id is Some(session_id) else { return }
+  let session_id = config.session_id
   let store = @store.SessionStore(config.session_root)
   let exists = store.exists(session_id) catch {
     error => {

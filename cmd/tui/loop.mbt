@@ -103,16 +103,13 @@ fn engine_args(task : String) -> Array[String] {
 
 ///|
 fn engine_extra_env(config : AppConfig) -> Map[String, String] {
-  let env = {
+  {
     "DEEPSEEK": config.api_key,
     "DEEPSEEK_MODEL": config.model.to_string(),
     "OPENSEEK_MAX_STEPS": config.max_steps.to_string(),
+    "OPENSEEK_SESSION": config.session_id.value(),
+    "OPENSEEK_SESSION_ROOT": config.session_root,
   }
-  if config.session_id is Some(session_id) {
-    env["OPENSEEK_SESSION"] = session_id.value()
-    env["OPENSEEK_SESSION_ROOT"] = config.session_root
-  }
-  env
 }
 
 ///|
@@ -120,9 +117,9 @@ fn engine_env(
   config : AppConfig,
   inherited : Map[String, String],
 ) -> Map[String, String] {
+  // The merge overwrites every OpenSeek setting — including the always-present
+  // session id — so inherited session vars can never shadow this TUI's config.
   let env = inherited.copy()
-  env.remove("OPENSEEK_SESSION")
-  env.remove("OPENSEEK_SESSION_ROOT")
   env.merge_in_place(engine_extra_env(config))
   env
 }

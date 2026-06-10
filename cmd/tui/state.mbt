@@ -4,7 +4,12 @@ priv struct AppConfig {
   model : @deepseek.Model
   cwd : String
   max_steps : Int
-  session_id : @agent_session.SessionId?
+  // The durable session every prompt of this TUI run converses in. The engine
+  // is spawned fresh per prompt, so context only carries between prompts
+  // through the session store: without one, each prompt would be an amnesiac
+  // one-shot. `--session` picks (or resumes) an id; otherwise one is generated
+  // per launch.
+  session_id : @agent_session.SessionId
   session_root : String
   // The agent engine the TUI spawns and reads JSONL events from. Defaults to
   // the `openseek` binary on `PATH`; override (e.g. to a recorded-stream

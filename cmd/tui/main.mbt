@@ -108,13 +108,53 @@ fn session_root(matches : @argparse.Matches) -> String raise {
 }
 
 ///|
+/// Session id for a TUI launch that did not pick one: a UTC wall-clock stamp,
+/// `tui-YYYYMMDD-HHMMSS-mmm`.
+///
+/// Conversation continuity is the TUI's default. The engine runs once per
+/// prompt, so context only carries between prompts through the durable session
+/// store — without a session, telling the assistant something and asking about
+/// it in the next prompt would hit a fresh one-shot that never saw the first
+/// message. The timestamp form keeps generated ids unique per launch, sorted
+/// chronologically in `--session-list`, and valid as a directory name on every
+/// platform.
+fn generated_session_id(now_ms : Int64) -> @agent_session.SessionId {
+  fn pad2(value : Int) -> String {
+    if value < 10 {
+      "0\{value}"
+    } else {
+      "\{value}"
+    }
+  }
+
+  fn pad3(value : Int) -> String {
+    if value < 10 {
+      "00\{value}"
+    } else if value < 100 {
+      "0\{value}"
+    } else {
+      "\{value}"
+    }
+  }
+
+  let time = @time.unix(now_ms / 1000) catch {
+    // A wall clock unrepresentable as a date (absurd system time): the raw
+    // millisecond count still yields a unique, valid directory name.
+    _ => return SessionId("tui-\{now_ms}")
+  }
+  SessionId(
+    "tui-\{time.year()}\{pad2(time.month())}\{pad2(time.day())}-\{pad2(time.hour())}\{pad2(time.minute())}\{pad2(time.second())}-\{pad3((now_ms % 1000).to_int())}",
+  )
+}
+
+///|
 fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   let cwd = match @env.current_dir() {
     Some(cwd) => cwd
     None => "."
   }
-  let session_id = session_id(matches)
-  let session_root_value = if session_id is Some(_) {
+  let explicit_session = session_id(matches)
+  let session_root_value = if explicit_session is Some(_) {
     session_root(matches)
   } else {
     let root = value(matches, "session-root").trim().to_owned()
@@ -129,7 +169,10 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     model: @deepseek.Model::parse(value(matches, "model")),
     cwd,
     max_steps: parse_positive_int(value(matches, "max-steps"), "--max-steps"),
-    session_id,
+    session_id: match explicit_session {
+      Some(id) => id
+      None => generated_session_id(@env.now().reinterpret_as_int64())
+    },
     session_root: session_root_value,
     engine: value(matches, "engine"),
   }
@@ -157,7 +200,12 @@ async fn run_app(config : AppConfig, initial : String?, ui : @ui.Ui) -> Unit {
   let state = State::new(config)
   let messages = @async.Queue(kind=Unbounded)
   append_session_history(state.config, ui)
-  ui.append_item(Response("OpenSeek TUI ready"))
+  // Name the session so the conversation is resumable later with
+  // `--session <id>` — for generated ids this line is the only place the user
+  // ever sees one.
+  ui.append_item(
+    Response("OpenSeek TUI ready · session \{config.session_id.value()}"),
+  )
   refresh_ui(ui, state)
   @async.with_task_group(group => {
     group.spawn_bg(no_wait=true) <| () => { read_ui_events(ui, messages) }
@@ -221,8 +269,21 @@ test "cli accepts no initial task" {
   assert_eq(config.api_key, "test-key")
   assert_eq(config.max_steps, 1000)
   assert_eq(config.engine, "openseek")
-  assert_true(config.session_id is None)
+  // No --session still converses in a session: a generated per-launch id, so
+  // consecutive prompts share context instead of running amnesiac one-shots.
+  assert_true(config.session_id.value().has_prefix("tui-"))
   assert_eq(config.session_root, ".openseek")
+}
+
+///|
+test "generated session ids are timestamped and directory-safe" {
+  assert_eq(generated_session_id(0).value(), "tui-19700101-000000-000")
+  assert_eq(generated_session_id(86_399_999).value(), "tui-19700101-235959-999")
+  // 2026-06-10T03:14:07.089Z
+  assert_eq(
+    generated_session_id(1_781_061_247_089).value(),
+    "tui-20260610-031407-089",
+  )
 }
 
 ///|
@@ -242,8 +303,7 @@ test "cli accepts session configuration" {
     env={ "DEEPSEEK": "test-key" },
   )
   let config = parse_config(parsed)
-  guard config.session_id is Some(id) else { fail("expected session id") }
-  assert_eq(id.value(), "demo")
+  assert_eq(config.session_id.value(), "demo")
   assert_eq(config.session_root, "/tmp/openseek-sessions")
 }
 
