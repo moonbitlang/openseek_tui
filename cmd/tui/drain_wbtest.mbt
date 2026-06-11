@@ -2,6 +2,7 @@
 fn drain_test_state() -> State {
   State::new({
     api_key: "k",
+    api_url: Some("https://proxy.example/v1/chat/completions"),
     model: V4Pro,
     cwd: ".",
     max_steps: 10,
@@ -61,6 +62,10 @@ test "engine configuration travels through the environment" {
   assert_eq(session_root, ".openseek")
   assert_true(env.get("OPENSEEK_THINKING") == Some("enabled"))
   assert_true(env.get("OPENSEEK_REASONING_EFFORT") == Some("max"))
+  assert_true(
+    env.get("OPENSEEK_API_URL") ==
+    Some("https://proxy.example/v1/chat/completions"),
+  )
 }
 
 ///|
@@ -68,13 +73,27 @@ test "agent engine env overrides inherited session config" {
   let inherited = {
     "OPENSEEK_SESSION": "parent",
     "OPENSEEK_SESSION_ROOT": "/tmp/parent",
+    "OPENSEEK_API_URL": "https://parent.example/chat/completions",
     "PATH": "/bin",
   }
   let env = engine_env(drain_test_state().config, inherited)
   assert_true(env.get("PATH") == Some("/bin"))
   assert_true(env.get("OPENSEEK_SESSION") == Some("test"))
   assert_true(env.get("OPENSEEK_SESSION_ROOT") == Some(".openseek"))
+  assert_true(
+    env.get("OPENSEEK_API_URL") ==
+    Some("https://proxy.example/v1/chat/completions"),
+  )
   assert_true(inherited.get("OPENSEEK_SESSION") == Some("parent"))
+}
+
+///|
+test "agent engine env clears inherited api url without override" {
+  let config = { ..drain_test_state().config, api_url: None }
+  let env = engine_env(config, {
+    "OPENSEEK_API_URL": "https://parent.example/chat/completions",
+  })
+  assert_true(env.get("OPENSEEK_API_URL") == Some(""))
 }
 
 ///|
@@ -242,6 +261,7 @@ test "steering a running agent sends a steer command" {
 test "oneshot engines reject steering with the legacy notice" {
   let state = State::new({
     api_key: "k",
+    api_url: None,
     model: V4Pro,
     cwd: ".",
     max_steps: 10,

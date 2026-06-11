@@ -19,6 +19,13 @@ fn cli_command() -> @argparse.Command {
         about="DeepSeek model: deepseek-v4-flash or deepseek-v4-pro.",
       ),
       OptionArg(
+        "api-url",
+        long="api-url",
+        env="OPENSEEK_API_URL",
+        default_values=[""],
+        about="DeepSeek-compatible chat completions endpoint.",
+      ),
+      OptionArg(
         "max-steps",
         long="max-steps",
         env="OPENSEEK_MAX_STEPS",
@@ -148,6 +155,16 @@ fn parse_positive_int(input : String, label : String) -> Int raise {
 }
 
 ///|
+fn api_url(matches : @argparse.Matches) -> String? raise {
+  let url = value(matches, "api-url").trim().to_owned()
+  if url.is_empty() {
+    None
+  } else {
+    Some(url)
+  }
+}
+
+///|
 fn session_id(matches : @argparse.Matches) -> @agent_session.SessionId? {
   let session = match values(matches, "session") {
     [session, ..] => session.trim().to_owned()
@@ -228,6 +245,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   }
   {
     api_key: value(matches, "api-key"),
+    api_url: api_url(matches),
     model: @deepseek.Model::parse(value(matches, "model")),
     cwd,
     max_steps: parse_positive_int(value(matches, "max-steps"), "--max-steps"),
@@ -339,12 +357,25 @@ test "cli accepts no initial task" {
   assert_true(initial_task(parsed) is None)
   let config = parse_config(parsed)
   assert_eq(config.api_key, "test-key")
+  assert_true(config.api_url is None)
   assert_eq(config.max_steps, 1000)
   assert_eq(config.engine, "openseek")
   // No --session still converses in a session: a generated per-launch id, so
   // consecutive prompts share context instead of running amnesiac one-shots.
   assert_true(config.session_id.value().has_prefix("tui-"))
   assert_eq(config.session_root, ".openseek")
+}
+
+///|
+test "cli parses api url" {
+  let parsed = cli_command().parse(argv=[], env={
+    "DEEPSEEK": "test-key",
+    "OPENSEEK_API_URL": " https://proxy.example/v1/chat/completions ",
+  })
+  guard parse_config(parsed).api_url is Some(url) else {
+    fail("expected api url")
+  }
+  assert_eq(url, "https://proxy.example/v1/chat/completions")
 }
 
 ///|

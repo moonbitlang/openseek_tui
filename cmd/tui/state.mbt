@@ -1,6 +1,7 @@
 ///|
 priv struct AppConfig {
   api_key : String
+  api_url : String?
   model : @deepseek.Model
   cwd : String
   max_steps : Int
