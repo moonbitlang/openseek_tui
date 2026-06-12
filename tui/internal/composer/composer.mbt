@@ -302,7 +302,7 @@ fn Model::set_logical_lines(
   cursor~ : TextCursor,
   view_start~ : Int,
   preferred_column? : Int,
-  mode? : Mode = Input,
+  mode~ : Mode,
   at_wrap_end? : Bool = false,
 ) -> Unit {
   let logical_lines = if logical_lines is [] {
