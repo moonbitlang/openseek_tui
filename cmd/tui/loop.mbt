@@ -133,6 +133,7 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
     "OPENSEEK_THINKING": config.thinking.to_string(),
     "OPENSEEK_SESSION": config.session_id.value(),
     "OPENSEEK_SESSION_ROOT": config.session_root,
+    "OPENSEEK_DIR": config.cwd,
   }
 }
 

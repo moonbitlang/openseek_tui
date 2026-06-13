@@ -57,8 +57,12 @@ test "engine configuration travels through the environment" {
   guard env.get("OPENSEEK_SESSION_ROOT") is Some(session_root) else {
     fail("missing session root env")
   }
+  guard env.get("OPENSEEK_DIR") is Some(dir) else {
+    fail("missing workspace dir env")
+  }
   assert_eq(session_id, "test")
   assert_eq(session_root, ".openseek")
+  assert_eq(dir, ".")
   assert_true(env.get("OPENSEEK_THINKING") == Some("max"))
   assert_true(
     env.get("OPENSEEK_API_URL") ==
@@ -71,6 +75,7 @@ test "agent engine env overrides inherited session config" {
   let inherited = {
     "OPENSEEK_SESSION": "parent",
     "OPENSEEK_SESSION_ROOT": "/tmp/parent",
+    "OPENSEEK_DIR": "/tmp/parent-workspace",
     "OPENSEEK_API_URL": "https://parent.example/chat/completions",
     "PATH": "/bin",
   }
@@ -78,6 +83,7 @@ test "agent engine env overrides inherited session config" {
   assert_true(env.get("PATH") == Some("/bin"))
   assert_true(env.get("OPENSEEK_SESSION") == Some("test"))
   assert_true(env.get("OPENSEEK_SESSION_ROOT") == Some(".openseek"))
+  assert_true(env.get("OPENSEEK_DIR") == Some("."))
   assert_true(
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
