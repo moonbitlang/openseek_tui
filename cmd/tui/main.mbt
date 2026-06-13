@@ -78,7 +78,6 @@ fn cli_command() -> @argparse.Command {
       PositionArg(
         "task",
         num_args=ValueRange(lower=0),
-        allow_hyphen_values=true,
         about="Optional initial task description.",
       ),
     ],
@@ -379,6 +378,27 @@ test "cli accepts initial task and max steps" {
   )
   assert_true(initial_task(parsed) == Some("inspect project"))
   assert_eq(parse_config(parsed).max_steps, 5)
+}
+
+///|
+test "cli rejects unknown option before initial task" {
+  let _ = cli_command().parse(argv=["--xxy", "he"], env={
+    "DEEPSEEK": "test-key",
+  }) catch {
+    error => {
+      assert_true("\{error}".contains("unexpected argument '--xxy' found"))
+      return
+    }
+  }
+  fail("unknown option accepted as initial task")
+}
+
+///|
+test "cli accepts hyphen-leading initial task after option delimiter" {
+  let parsed = cli_command().parse(argv=["--", "--xxy", "he"], env={
+    "DEEPSEEK": "test-key",
+  })
+  assert_true(initial_task(parsed) == Some("--xxy he"))
 }
 
 ///|

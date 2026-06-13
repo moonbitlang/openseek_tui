@@ -69,3 +69,33 @@ Options:
 
 [1]
 ```
+
+## Unknown Options Are Rejected Before Initial Task Text
+
+Like the one-shot CLI, the TUI treats option-looking tokens as options until
+the normal `--` delimiter stops option parsing.
+
+```mooncram
+$ sh <<'EOF'
+> stdout=$(mktemp)
+> stderr=$(mktemp)
+> if env DEEPSEEK=test-key tui.exe --xxy he > "$stdout" 2> "$stderr"; then echo exit-zero; else echo exit-non-zero; fi
+> sed -n '1p' "$stdout"
+> if test -s "$stderr"; then echo stderr-not-empty; else echo stderr-empty; fi
+> rm -f "$stdout" "$stderr"
+> EOF
+exit-non-zero
+error: unexpected argument '--xxy' found
+stderr-empty
+```
+
+When the initial task itself must start with `-`, use `--`. This gets past
+argument parsing; the fake engine then fails the preflight check before the TUI
+takes over the terminal.
+
+```mooncram
+$ env DEEPSEEK=test-key tui.exe --engine openseek-not-a-real-binary -- '--xxy he'
+error: engine 'openseek-not-a-real-binary' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
+Pass --engine <path>, set OPENSEEK_ENGINE, or install the openseek binary.
+[1]
+```

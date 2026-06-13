@@ -178,14 +178,13 @@ async fn run_agent_task(
     let proc = @process.spawn(
       group,
       config.engine,
-      // The TUI accepts hyphen-valued tasks (`allow_hyphen_values`), so a task
-      // can start with `-`/`--` (e.g. the literal text `--help`). Forward it
-      // after a `--` delimiter so the engine's argparse treats it as the task
-      // positional rather than parsing it as one of its own options (which would
-      // exit/print help and never emit a terminal JSONL event). Session settings
-      // go through a fully materialized environment so custom replay engines do
-      // not need to accept OpenSeek-specific flags, and inherited session vars
-      // cannot shadow explicit TUI config.
+      // The queued task is already prompt text here. Forward it after a `--`
+      // delimiter so the engine's argparse treats any leading `-`/`--` as the
+      // task positional rather than parsing it as one of its own options (which
+      // would exit/print help and never emit a terminal JSONL event). Session
+      // settings go through a fully materialized environment so custom replay
+      // engines do not need to accept OpenSeek-specific flags, and inherited
+      // session vars cannot shadow explicit TUI config.
       engine_args(task),
       inherit_env=false,
       extra_env=child_env,
