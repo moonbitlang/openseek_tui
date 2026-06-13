@@ -36,15 +36,8 @@ fn cli_command() -> @argparse.Command {
         "thinking",
         long="thinking",
         env="OPENSEEK_THINKING",
-        default_values=["enabled"],
-        about="DeepSeek thinking mode: enabled or disabled.",
-      ),
-      OptionArg(
-        "reasoning-effort",
-        long="reasoning-effort",
-        env="OPENSEEK_REASONING_EFFORT",
         default_values=["max"],
-        about="DeepSeek reasoning effort in thinking mode: high or max.",
+        about="DeepSeek thinking mode: no, high, or max.",
       ),
       OptionArg(
         "engine",
@@ -225,9 +218,6 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     // Parsed eagerly so a typo fails at launch with a CLI error instead of
     // inside the first turn's engine run.
     thinking: @deepseek.ThinkingMode::parse(value(matches, "thinking")),
-    reasoning_effort: @deepseek.ReasoningEffort::parse(
-      value(matches, "reasoning-effort"),
-    ),
     session_id: match explicit_session {
       Some(id) => id
       None => generated_session_id(@env.now().reinterpret_as_int64())
@@ -364,13 +354,11 @@ test "generated session ids are timestamped and directory-safe" {
 
 ///|
 test "cli parses and validates thinking controls" {
-  let parsed = cli_command().parse(
-    argv=["--thinking", "disabled", "--reasoning-effort", "high"],
-    env={ "DEEPSEEK": "test-key" },
-  )
+  let parsed = cli_command().parse(argv=["--thinking", "high"], env={
+    "DEEPSEEK": "test-key",
+  })
   let config = parse_config(parsed)
-  assert_true(config.thinking is Disabled)
-  assert_true(config.reasoning_effort is High)
+  assert_true(config.thinking is High)
   let bad = cli_command().parse(argv=["--thinking", "sometimes"], env={
     "DEEPSEEK": "test-key",
   })

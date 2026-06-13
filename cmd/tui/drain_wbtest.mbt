@@ -6,8 +6,7 @@ fn drain_test_state() -> State {
     model: V4Pro,
     cwd: ".",
     max_steps: 10,
-    thinking: Enabled,
-    reasoning_effort: Max,
+    thinking: Max,
     session_id: SessionId("test"),
     session_root: ".openseek",
     engine: "openseek",
@@ -60,8 +59,7 @@ test "engine configuration travels through the environment" {
   }
   assert_eq(session_id, "test")
   assert_eq(session_root, ".openseek")
-  assert_true(env.get("OPENSEEK_THINKING") == Some("enabled"))
-  assert_true(env.get("OPENSEEK_REASONING_EFFORT") == Some("max"))
+  assert_true(env.get("OPENSEEK_THINKING") == Some("max"))
   assert_true(
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
@@ -265,8 +263,7 @@ test "oneshot engines reject steering with the legacy notice" {
     model: V4Pro,
     cwd: ".",
     max_steps: 10,
-    thinking: Enabled,
-    reasoning_effort: Max,
+    thinking: Max,
     session_id: SessionId("test"),
     session_root: ".openseek",
     engine: "./replayer",

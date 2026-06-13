@@ -24,18 +24,17 @@ Arguments:
   task...  Optional initial task description.
 
 Options:
-  -h, --help                             Show help information.
-  --continue                             Resume the most recently active session in --session-root.
-  --api-key <api-key>                    DeepSeek API key. [env: DEEPSEEK]
-  --model <model>                        DeepSeek model: deepseek-v4-flash or deepseek-v4-pro. [env: DEEPSEEK_MODEL] [default: deepseek-v4-pro]
-  --api-url <api-url>                    DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
-  --max-steps <max-steps>                Maximum number of agent loop steps before stopping. [env: OPENSEEK_MAX_STEPS] [default: 1000]
-  --thinking <thinking>                  DeepSeek thinking mode: enabled or disabled. [env: OPENSEEK_THINKING] [default: enabled]
-  --reasoning-effort <reasoning-effort>  DeepSeek reasoning effort in thinking mode: high or max. [env: OPENSEEK_REASONING_EFFORT] [default: max]
-  --engine <engine>                      Agent engine binary to spawn; reads its JSONL event stream from stdout. [env: OPENSEEK_ENGINE] [default: openseek]
-  --engine-mode <engine-mode>            Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]
-  --session <session>                    Create or resume this durable session id. [env: OPENSEEK_SESSION]
-  --session-root <session-root>          Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
+  -h, --help                     Show help information.
+  --continue                     Resume the most recently active session in --session-root.
+  --api-key <api-key>            DeepSeek API key. [env: DEEPSEEK]
+  --model <model>                DeepSeek model: deepseek-v4-flash or deepseek-v4-pro. [env: DEEPSEEK_MODEL] [default: deepseek-v4-pro]
+  --api-url <api-url>            DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
+  --max-steps <max-steps>        Maximum number of agent loop steps before stopping. [env: OPENSEEK_MAX_STEPS] [default: 1000]
+  --thinking <thinking>          DeepSeek thinking mode: no, high, or max. [env: OPENSEEK_THINKING] [default: max]
+  --engine <engine>              Agent engine binary to spawn; reads its JSONL event stream from stdout. [env: OPENSEEK_ENGINE] [default: openseek]
+  --engine-mode <engine-mode>    Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]
+  --session <session>            Create or resume this durable session id. [env: OPENSEEK_SESSION]
+  --session-root <session-root>  Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
 ```
 
 ## A DeepSeek API Key Is Required
@@ -56,18 +55,17 @@ Arguments:
   task...  Optional initial task description.
 
 Options:
-  -h, --help                             Show help information.
-  --continue                             Resume the most recently active session in --session-root.
-  --api-key <api-key>                    DeepSeek API key. [env: DEEPSEEK]
-  --model <model>                        DeepSeek model: deepseek-v4-flash or deepseek-v4-pro. [env: DEEPSEEK_MODEL] [default: deepseek-v4-pro]
-  --api-url <api-url>                    DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
-  --max-steps <max-steps>                Maximum number of agent loop steps before stopping. [env: OPENSEEK_MAX_STEPS] [default: 1000]
-  --thinking <thinking>                  DeepSeek thinking mode: enabled or disabled. [env: OPENSEEK_THINKING] [default: enabled]
-  --reasoning-effort <reasoning-effort>  DeepSeek reasoning effort in thinking mode: high or max. [env: OPENSEEK_REASONING_EFFORT] [default: max]
-  --engine <engine>                      Agent engine binary to spawn; reads its JSONL event stream from stdout. [env: OPENSEEK_ENGINE] [default: openseek]
-  --engine-mode <engine-mode>            Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]
-  --session <session>                    Create or resume this durable session id. [env: OPENSEEK_SESSION]
-  --session-root <session-root>          Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
+  -h, --help                     Show help information.
+  --continue                     Resume the most recently active session in --session-root.
+  --api-key <api-key>            DeepSeek API key. [env: DEEPSEEK]
+  --model <model>                DeepSeek model: deepseek-v4-flash or deepseek-v4-pro. [env: DEEPSEEK_MODEL] [default: deepseek-v4-pro]
+  --api-url <api-url>            DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
+  --max-steps <max-steps>        Maximum number of agent loop steps before stopping. [env: OPENSEEK_MAX_STEPS] [default: 1000]
+  --thinking <thinking>          DeepSeek thinking mode: no, high, or max. [env: OPENSEEK_THINKING] [default: max]
+  --engine <engine>              Agent engine binary to spawn; reads its JSONL event stream from stdout. [env: OPENSEEK_ENGINE] [default: openseek]
+  --engine-mode <engine-mode>    Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]
+  --session <session>            Create or resume this durable session id. [env: OPENSEEK_SESSION]
+  --session-root <session-root>  Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
 
 [1]
 ```
