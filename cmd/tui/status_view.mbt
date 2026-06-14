@@ -56,7 +56,7 @@ fn format_status_bar_text(state : State) -> @doc.Text {
 ///|
 fn format_two_digits(value : Int64) -> String {
   if value < 10L {
-    "0" + value.to_string()
+    "0\{value}"
   } else {
     value.to_string()
   }

@@ -3,7 +3,7 @@
 /// reserve: label width + chrome columns + preview width never exceeds the
 /// terminal width, and the kept text is the tail (newest characters).
 test "streaming activity line fits the label and preview to the row" {
-  let long = String::make(300, 'x') + " tail-end"
+  let long = "\{String::make(300, 'x')} tail-end"
   for label in ["Streaming ", "Thinking "] {
     let cols = 60
     let line : @doc.Text = Text(

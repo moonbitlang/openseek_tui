@@ -27,8 +27,8 @@ fn terminal_item(terminal : @agent_session.TurnTerminal) -> @ui.TranscriptItem? 
   match terminal {
     Finished(answer) if !answer.trim().is_empty() => Some(Response(answer))
     Finished(_) => None
-    Aborted(reason) => Some(Error("aborted: " + reason))
-    Interrupted(reason) => Some(Error("interrupted: " + reason))
+    Aborted(reason) => Some(Error("aborted: \{reason}"))
+    Interrupted(reason) => Some(Error("interrupted: \{reason}"))
     Failed(message) => Some(Error(message))
   }
 }

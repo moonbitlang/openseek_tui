@@ -26,7 +26,7 @@ fn queued_input_line(
   indent~ : Int,
 ) -> @surface.Line {
   let marker = @displaytext.DisplayText(
-    String::make(indent, ' ') + "\{index + 1}. ",
+    "\{String::make(indent, ' ')}\{index + 1}. ",
   )
   let prefix = input.prefix()
   let marker_width = marker.width()
@@ -51,7 +51,7 @@ fn indented_dim_line(
 ) -> @surface.Line {
   @surface.Line::new([
     Span(
-      DisplayText(String::make(indent, ' ') + line.truncate(cols - indent)),
+      DisplayText("\{String::make(indent, ' ')}\{line.truncate(cols - indent)}"),
       style=@style.dim,
     ),
   ])

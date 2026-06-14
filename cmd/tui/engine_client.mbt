@@ -149,7 +149,7 @@ async fn EngineClient::send(
     )
     return
   }
-  live.writer.write(command.stringify() + "\n") catch {
+  live.writer.write("\{command.stringify()}\n") catch {
     error => {
       self.live = None
       self.messages.put(AgentFailed(run_id~, error))

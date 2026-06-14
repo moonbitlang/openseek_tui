@@ -297,7 +297,7 @@ fn tail_columns(text : String, max_cols : Int) -> String {
   let keep_from = display.textual_position_at_or_after(
     @displaytext.DisplayPosition::new(column=display.width() - max_cols + 1),
   )
-  "…" + display.view(keep_from, display.end()).to_owned()
+  "…\{display.view(keep_from, display.end())}"
 }
 
 ///|
@@ -325,7 +325,7 @@ fn collapse_preview_whitespace(text : String) -> String {
 ///|
 fn append_streaming_preview(current : String?, delta : String) -> String {
   let combined = match current {
-    Some(text) => text + delta
+    Some(text) => "\{text}\{delta}"
     None => delta
   }
   // Re-collapsing the bounded buffer keeps a whitespace run that spans two
@@ -429,7 +429,7 @@ fn handle_agent_event(
       state.finish_run()
     }
     AgentAborted(reason) => {
-      cmds.push(AppendItem(Error("aborted: " + reason)))
+      cmds.push(AppendItem(Error("aborted: \{reason}")))
       state.finish_run()
     }
     MaxStepsExhausted => {

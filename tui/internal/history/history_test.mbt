@@ -7,7 +7,7 @@ fn prompt_entry(text : String) -> @history.Entry {
 ///|
 fn shell_entry(text : String) -> @history.Entry {
   let composer = @composer.Model::new("")
-  composer.insert_user_text("!" + text)
+  composer.insert_user_text("!\{text}")
   @history.Entry::new(composer.text(), composer.mode())
 }
 

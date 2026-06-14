@@ -50,7 +50,7 @@ fn detail_texts(lines : Array[String]) -> Array[@doc.Text] {
 ///|
 fn tool_title(result : @event.ToolResultEvent) -> @doc.Text {
   let label = if result.is_error { "Tool failed" } else { "Tool" }
-  @doc.Text::plain(label + " " + result.name)
+  @doc.Text::plain("\{label} \{result.name}")
 }
 
 ///|
