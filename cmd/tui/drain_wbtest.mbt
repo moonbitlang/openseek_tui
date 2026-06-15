@@ -16,35 +16,35 @@ fn drain_test_state() -> State {
 
 ///|
 fn start_agent_count(cmds : Array[Cmd]) -> Int {
-  let mut count = 0
-  for cmd in cmds {
+  for cmd in cmds; count = 0 {
     if cmd is StartAgent(_, ..) {
-      count = count + 1
+      continue count + 1
     }
+  } nobreak {
+    count
   }
-  count
 }
 
 ///|
 fn error_item_count(cmds : Array[Cmd]) -> Int {
-  let mut count = 0
-  for cmd in cmds {
+  for cmd in cmds; count = 0 {
     if cmd is AppendItem(Error(_)) {
-      count = count + 1
+      continue count + 1
     }
+  } nobreak {
+    count
   }
-  count
 }
 
 ///|
 fn run_command_count(cmds : Array[Cmd]) -> Int {
-  let mut count = 0
-  for cmd in cmds {
+  for cmd in cmds; count = 0 {
     if cmd is RunCommand(_, ..) {
-      count = count + 1
+      continue count + 1
     }
+  } nobreak {
+    count
   }
-  count
 }
 
 ///|
@@ -181,13 +181,13 @@ test "a stale terminal event from a superseded run is ignored" {
 
 ///|
 fn quit_count(cmds : Array[Cmd]) -> Int {
-  let mut count = 0
-  for cmd in cmds {
+  for cmd in cmds; count = 0 {
     if cmd is Quit {
-      count = count + 1
+      continue count + 1
     }
+  } nobreak {
+    count
   }
-  count
 }
 
 ///|
