@@ -1,7 +1,7 @@
 ///|
 fn submitted_input(text : String, mode : @composer.Mode) -> Input {
   if mode.is_shell() {
-    Command(text.trim().to_owned())
+    Command("\{text.trim()}")
   } else {
     Prompt(text)
   }

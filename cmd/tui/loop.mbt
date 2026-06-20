@@ -307,16 +307,15 @@ fn tail_columns(text : String, max_cols : Int) -> String {
 /// renderer as control characters.
 fn collapse_preview_whitespace(text : String) -> String {
   let out = StringBuilder()
-  let mut last_was_space = false
-  for ch in text {
+  for ch in text; last_was_space = false {
     if ch is (' ' | '\t' | '\n' | '\r') {
       if !last_was_space {
-        out <+ " "
+        out.write_char(' ')
       }
-      last_was_space = true
+      continue true
     } else {
-      out <+ "\{ch}"
-      last_was_space = false
+      out.write_char(ch)
+      continue false
     }
   }
   out.to_string()

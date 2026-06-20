@@ -159,7 +159,7 @@ fn api_url(matches : @argparse.Matches) -> String? raise {
 ///|
 fn session_id(matches : @argparse.Matches) -> @agent_session.SessionId? {
   let session = match values(matches, "session") {
-    [session, ..] => session.trim().to_owned()
+    [session, ..] => "\{session.trim()}"
     [] => ""
   }
   if session.is_empty() {
