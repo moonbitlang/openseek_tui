@@ -41,22 +41,21 @@ pub fn Input::text(self : Input) -> String {
 /// prompt style.
 impl @doc.ToDoc for Input with fn to_doc(self) {
   let source = @displaytext.split_lines(self.text())
-  let texts : Array[@doc.Text] = []
-  for index in 0..<source.length() {
-    let line = source[index]
-    texts.push(
-      Text([
-        Span(
-          if index == 0 {
-            self.prefix()
-          } else {
-            DisplayText("  ")
-          },
-          style=@style.dim,
-        ),
-        @doc.Span::plain(line.text()),
-      ]),
-    )
-  }
-  Doc(texts)
+  Doc(
+    [
+      for index in 0..<source.length() => {
+        Text([
+          Span(
+            if index == 0 {
+              self.prefix()
+            } else {
+              DisplayText("  ")
+            },
+            style=@style.dim,
+          ),
+          @doc.Span::plain(source[index].text()),
+        ])
+      }
+    ],
+  )
 }

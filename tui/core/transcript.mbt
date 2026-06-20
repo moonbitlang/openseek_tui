@@ -62,13 +62,14 @@ fn bulleted_lines(
   rest~ : @displaytext.DisplayText,
   style~ : @style.Style,
 ) -> Array[@doc.Text] {
-  let texts : Array[@doc.Text] = []
   let lines = text.split_lines()
-  for index, line in lines {
-    let marker = if index == 0 { first } else { rest }
-    texts.push(line.prepend_span(Span(marker, style~)))
-  }
-  texts
+  [
+    for index in 0..<lines.length() => {
+      lines[index].prepend_span(
+        Span(if index == 0 { first } else { rest }, style~),
+      )
+    }
+  ]
 }
 
 ///|
