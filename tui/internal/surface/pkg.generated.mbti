@@ -21,9 +21,7 @@ pub fn Line::new(Array[Span]) -> Self
 pub fn Line::spans(Self) -> Array[Span]
 pub fn Line::text(Self) -> String
 
-pub struct Span {
-  // private fields
-} derive(Eq)
+type Span derive(Eq)
 pub fn Span::Span(@displaytext.DisplayText, style? : @style.Style) -> Self
 pub fn Span::style(Self) -> @style.Style
 pub fn Span::text(Self) -> String

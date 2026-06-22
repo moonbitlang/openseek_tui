@@ -7,9 +7,7 @@ pub let default : TerminalSize
 // Errors
 
 // Types and methods
-pub struct TerminalSize {
-  // private fields
-}
+type TerminalSize
 pub fn TerminalSize::TerminalSize(rows~ : Int, cols~ : Int) -> Self
 pub fn TerminalSize::cols(Self) -> Int
 pub fn TerminalSize::rows(Self) -> Int

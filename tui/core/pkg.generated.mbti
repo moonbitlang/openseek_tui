@@ -27,9 +27,7 @@ pub(all) enum Input {
 pub fn Input::prefix(Self) -> @displaytext.DisplayText
 pub fn Input::text(Self) -> String
 
-pub struct ToolCall {
-  // private fields
-} derive(@debug.Debug)
+type ToolCall derive(@debug.Debug)
 pub fn ToolCall::ToolCall(@doc.Text, status? : ToolStatus, details? : Array[@doc.Text]) -> Self
 
 pub(all) enum ToolStatus {

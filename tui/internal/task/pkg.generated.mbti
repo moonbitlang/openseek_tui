@@ -10,9 +10,7 @@ import {
 // Errors
 
 // Types and methods
-pub struct Queue {
-  // private fields
-}
+type Queue
 pub fn Queue::Queue(kind~ : @aqueue.Kind) -> Self
 pub async fn Queue::run(Self) -> Unit
 pub async fn[T] Queue::wait(Self, async () -> T) -> T
