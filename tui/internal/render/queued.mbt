@@ -3,22 +3,6 @@
 // so it lives here rather than as a `@core` projection.
 
 ///|
-fn input_preview_line(input : @core.Input) -> @displaytext.DisplayText {
-  // Defense-in-depth: queued previews are written straight to the terminal, so
-  // strip any control bytes the input may carry (composer input is already
-  // sanitized, but other sources — e.g. an initial CLI task — are not).
-  let lines = @text.sanitize_lines(input.text())
-  let first = lines[0]
-  if lines.length() > 1 {
-    let builder = StringBuilder()
-    builder <+ "\{first.text()} …"
-    DisplayText(builder.to_string())
-  } else {
-    first
-  }
-}
-
-///|
 fn queued_input_line(
   input : @core.Input,
   index~ : Int,
@@ -31,12 +15,17 @@ fn queued_input_line(
   let prefix = input.prefix()
   let marker_width = marker.width()
   let prefix_width = prefix.width()
+  // Defense-in-depth: queued previews are written straight to the terminal, so
+  // collapse the input to one sanitized line (composer input is already
+  // sanitized, but other sources — e.g. an initial CLI task — are not).
   @surface.Line::new([
     Span(marker, style=@style.dim),
     Span(prefix, style=@style.dim),
     Span(
       DisplayText(
-        input_preview_line(input).truncate(cols - marker_width - prefix_width),
+        @text.sanitize_oneline(input.text()).truncate(
+          cols - marker_width - prefix_width,
+        ),
       ),
       style=@style.dim,
     ),

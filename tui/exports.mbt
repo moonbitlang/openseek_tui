@@ -4,3 +4,9 @@
 
 ///|
 pub using @core {type Input, type Event, type ToolStatus, type TranscriptItem}
+
+///|
+pub using @completion {type CompletionItem}
+
+///|
+pub using @slash {type SlashCommandSpec}

@@ -110,6 +110,50 @@ test "a failed serve turn decodes to a terminal agent error" {
 }
 
 ///|
+test "a rejected command decodes to a non-terminal CommandRejected" {
+  // An engine that does not understand a command keeps serving and emits no
+  // terminal event. The rejection carries the raw error; the loop decides
+  // whether it ends a run (only `/compact` needs that), so it is not decoded as
+  // a terminal `AgentError`.
+  assert_true(
+    @event.decode_event(
+      Json::object({
+        "event": "command_error",
+        "error": "unknown command: compact",
+      }),
+    )
+    is Some(CommandRejected("unknown command: compact")),
+  )
+}
+
+///|
+test "compaction wire events decode to their terminal forms" {
+  // Success carries the summary so the controller can preview the new context.
+  assert_true(
+    @event.decode_event(
+      Json::object({
+        "event": "compaction_finished",
+        "from_sequence": 1,
+        "to_sequence": 42,
+        "summary": "handoff",
+      }),
+    )
+    is Some(CompactionFinished("handoff")),
+  )
+  // Failure folds into the general agent-error category like a failed turn.
+  assert_true(
+    @event.decode_event(
+      Json::object({ "event": "compaction_failed", "error": "cancelled" }),
+    )
+    is Some(AgentError("compaction failed: cancelled")),
+  )
+  // The start marker carries no controller state, so it drops like any unknown.
+  assert_true(
+    @event.decode_event(Json::object({ "event": "compaction_started" })) is None,
+  )
+}
+
+///|
 test "decode returns None for a non-object value or unknown event" {
   // `@jsonl` handles blank and malformed lines before decoding; the mapping only
   // has to tolerate a non-object value and a newer engine's unknown event kind.

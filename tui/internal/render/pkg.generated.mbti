@@ -2,6 +2,7 @@
 package "bobzhang/openseek/tui/internal/render"
 
 import {
+  "bobzhang/openseek/tui/completion",
   "bobzhang/openseek/tui/core",
   "bobzhang/openseek/tui/doc",
   "bobzhang/openseek/tui/internal/composer",
@@ -9,7 +10,9 @@ import {
 }
 
 // Values
-pub fn composer_surface(@composer.Model, activity~ : @doc.Text?, queued_inputs~ : Array[@core.Input], status~ : @doc.Text, notice~ : @doc.Text?, cols~ : Int, max_rows~ : Int) -> @surface.Surface
+pub fn completion_menu_fits(max_rows~ : Int) -> Bool
+
+pub fn composer_surface(@composer.Model, activity~ : @doc.Text?, queued_inputs~ : Array[@core.Input], completion? : @completion.Model, status~ : @doc.Text, notice~ : @doc.Text?, cols~ : Int, max_rows~ : Int) -> @surface.Surface
 
 // Errors
 

@@ -240,6 +240,185 @@ test "composer surface renders the input viewport" {
 }
 
 ///|
+test "composer surface renders slash command completions below composer" {
+  let surface = @render.composer_surface(
+    @composer.Model::new("/"),
+    activity=None,
+    queued_inputs=[],
+    completion=@completion.Model::open(items=[
+      @completion.CompletionItem::new(
+        label="/model",
+        insert_text="model",
+        description="show or change the model",
+      ),
+    ]),
+    status=@doc.Text::plain("ready"),
+    notice=None,
+    cols=60,
+    max_rows=24,
+  )
+  inspect(surface.height(), content="6")
+  inspect(
+    surface.line_at(4).text().trim(),
+    content=(
+      #|› /model  show or change the model
+    ),
+  )
+  inspect(surface.cursor().row(), content="2")
+  inspect(surface.cursor().col(), content="3")
+}
+
+///|
+test "composer surface renders model argument completions below composer" {
+  let surface = @render.composer_surface(
+    @composer.Model::new("/model deepseek-v4-f"),
+    activity=None,
+    queued_inputs=[],
+    completion=@completion.Model::open(items=[
+      @completion.CompletionItem::new(
+        label="deepseek-v4-flash",
+        description="model",
+      ),
+    ]),
+    status=@doc.Text::plain("ready"),
+    notice=None,
+    cols=50,
+    max_rows=24,
+  )
+  inspect(surface.height(), content="6")
+  inspect(
+    surface.line_at(4).text().trim(),
+    content=(
+      #|› deepseek-v4-flash  model
+    ),
+  )
+}
+
+///|
+test "composer surface renders prefiltered completion items" {
+  let surface = @render.composer_surface(
+    @composer.Model::new("/mo"),
+    activity=None,
+    queued_inputs=[],
+    completion=@completion.Model::open(items=[
+      @completion.CompletionItem::new(
+        label="/model",
+        insert_text="model",
+        description="show model",
+      ),
+    ]),
+    status=@doc.Text::plain("ready"),
+    notice=None,
+    cols=40,
+    max_rows=24,
+  )
+  inspect(surface.height(), content="6")
+  inspect(
+    surface.line_at(4).text().trim(),
+    content=(
+      #|› /model  show model
+    ),
+  )
+}
+
+///|
+test "composer surface reserves completion rows from the queue budget" {
+  // With the menu open and a queue competing for rows on a short terminal, the
+  // total live area (menu and status included) must stay within the budget, or
+  // the viewport keeps only the leading rows and clips the menu off the bottom.
+  let surface = @render.composer_surface(
+    @composer.Model::new("/"),
+    activity=None,
+    queued_inputs=[
+      Prompt("a"),
+      Prompt("b"),
+      Prompt("c"),
+      Prompt("d"),
+      Prompt("e"),
+    ],
+    completion=@completion.Model::open(items=[
+      @completion.CompletionItem::new(label="/model", description="m1"),
+      @completion.CompletionItem::new(label="/exit", description="m2"),
+      @completion.CompletionItem::new(label="/resume", description="m3"),
+    ]),
+    status=@doc.Text::plain("ready"),
+    notice=None,
+    cols=40,
+    max_rows=12,
+  )
+  assert_true(surface.height() <= 12)
+  // The status line and the menu it sits below both survive within budget.
+  inspect(surface.line_at(surface.height() - 1).text().trim(), content="ready")
+  inspect(
+    surface.line_at(surface.height() - 2).text().trim(),
+    content=(
+      #|/resume  m3
+    ),
+  )
+}
+
+///|
+test "composer surface keeps a multi-line completion description on one row" {
+  let surface = @render.composer_surface(
+    @composer.Model::new("/"),
+    activity=None,
+    queued_inputs=[],
+    completion=@completion.Model::open(items=[
+      @completion.CompletionItem::new(
+        label="session-1",
+        description="first line\nsecond line",
+      ),
+    ]),
+    status=@doc.Text::plain("ready"),
+    notice=None,
+    cols=50,
+    max_rows=24,
+  )
+  let menu_row = surface.line_at(surface.height() - 2).text()
+  // A raw newline would move the terminal cursor while the surface still counts
+  // the item as a single row, corrupting the live frame.
+  assert_true(!menu_row.contains("\n"))
+  inspect(
+    menu_row.trim(),
+    content=(
+      #|› session-1  first line …
+    ),
+  )
+}
+
+///|
+test "completion menu fits only above the minimum live height" {
+  // At or below MinLiveRows the menu gets a zero budget and is not drawn, so it
+  // must not be treated as active by the input layer.
+  assert_true(!@render.completion_menu_fits(max_rows=4))
+  assert_true(!@render.completion_menu_fits(max_rows=5))
+  assert_true(@render.completion_menu_fits(max_rows=6))
+}
+
+///|
+test "composer surface drops completion menu when terminal is only minimum height" {
+  let surface = @render.composer_surface(
+    @composer.Model::new("/"),
+    activity=None,
+    queued_inputs=[],
+    completion=@completion.Model::open(items=[
+      @completion.CompletionItem::new(
+        label="/model",
+        insert_text="model",
+        description="show model",
+      ),
+    ]),
+    status=@doc.Text::plain("ready"),
+    notice=None,
+    cols=40,
+    max_rows=5,
+  )
+  inspect(surface.height(), content="5")
+  inspect(surface.line_at(4).text().trim(), content="ready")
+  inspect(surface.cursor().row(), content="2")
+}
+
+///|
 test "composer surface renders activity above separator" {
   let surface = @render.composer_surface(
     @composer.Model::new(""),

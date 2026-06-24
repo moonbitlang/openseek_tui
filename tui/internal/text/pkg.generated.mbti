@@ -14,6 +14,8 @@ pub fn sanitize(String) -> String
 
 pub fn sanitize_lines(String) -> Array[@displaytext.DisplayText]
 
+pub fn sanitize_oneline(String) -> @displaytext.DisplayText
+
 pub fn unit_width(@displaytext.DisplayText, start~ : @displaytext.TextualPosition, end~ : @displaytext.TextualPosition) -> Int
 
 // Errors

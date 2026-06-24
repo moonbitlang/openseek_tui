@@ -115,8 +115,11 @@ fn confirm_pending_steer(state : State, text : String) -> Unit {
 ///|
 fn is_terminal_event(event : @event.AgentEvent) -> Bool {
   match event {
-    AgentFinished(_) | AgentAborted(_) | MaxStepsExhausted | AgentError(_) =>
-      true
+    AgentFinished(_)
+    | AgentAborted(_)
+    | MaxStepsExhausted
+    | AgentError(_)
+    | CompactionFinished(_) => true
     _ => false
   }
 }
@@ -447,6 +450,97 @@ fn handle_agent_event(
       cmds.push(AppendItem(Error(message)))
       state.finish_run()
     }
+    // A rejected control command keeps the engine serving and carries no
+    // identity for which command produced it: the engine client stamps it with
+    // the mutable `latest_run`, so a delayed rejection of an earlier command
+    // (e.g. the context delivered after a `!` shell command) can arrive once a
+    // later run — including a `/compact` run — is already in flight. With no way
+    // to know whether the rejection belongs to the active run, never end a run on
+    // it; only surface it, and let the run finish on its own terminal event. The
+    // supported serve engine answers `/compact` with `compaction_finished`/
+    // `compaction_failed`, so the only command this leaves unacknowledged is one
+    // sent to an engine that does not implement it — which the user can cancel.
+    CommandRejected(message) =>
+      cmds.push(AppendItem(Error("engine rejected command: \{message}")))
+    // Compaction landed: the engine summarized the conversation into the durable
+    // session. The transcript on screen is unchanged — it is the display, not
+    // the model's context — so confirm with a notice that previews the summary
+    // now standing in for the prior turns, and close the run.
+    CompactionFinished(summary) => {
+      cmds.push(AppendItem(compaction_item(summary)))
+      state.finish_run()
+    }
+  }
+}
+
+///|
+fn command_notice(title : String) -> @ui.TranscriptItem {
+  Notice(ToolCall(@doc.Text::plain(title)))
+}
+
+///|
+fn handle_compact_command(
+  state : State,
+  arguments : String,
+  cmds : Array[Cmd],
+) -> Unit {
+  if !arguments.trim().is_empty() {
+    cmds.push(AppendItem(Error("/compact does not accept arguments")))
+    return
+  }
+  // Compaction is a command on the persistent serve engine; a oneshot engine is
+  // spawned per prompt and has no session to summarize between turns.
+  if state.config.engine_mode is OneShot {
+    cmds.push(
+      AppendItem(Error("Compaction is not supported by a oneshot engine.")),
+    )
+    return
+  }
+  if !(state.run is Idle) {
+    cmds.push(
+      AppendItem(
+        Error("Context can only be compacted when no task is running."),
+      ),
+    )
+    return
+  }
+  if state.queued.length() > 0 {
+    cmds.push(
+      AppendItem(
+        Error("Context cannot be compacted with queued input pending."),
+      ),
+    )
+    return
+  }
+  // Hold the loop busy for the duration: compaction is a model call that can run
+  // for many seconds, and a slash command never echoes itself into the
+  // transcript, so the notice is the only sign work has begun until it lands.
+  cmds.push(AppendItem(command_notice("compacting context…")))
+  let run_id = state.start_run(@async.now())
+  // Mark the run non-steerable: a prompt typed while this is in flight must be
+  // queued, not steered into a compaction the engine will refuse it from.
+  state.run_is_compaction = true
+  cmds.push(CompactSession(run_id~))
+}
+
+///|
+
+///|
+fn handle_slash_command(
+  state : State,
+  name : String,
+  arguments : String,
+  cmds : Array[Cmd],
+) -> Unit {
+  match name.to_lower() {
+    "exit" =>
+      if arguments.trim().is_empty() {
+        cmds.push(Quit)
+      } else {
+        cmds.push(AppendItem(Error("/exit does not accept arguments")))
+      }
+    "compact" => handle_compact_command(state, arguments, cmds)
+    other => cmds.push(AppendItem(Error("Unknown slash command: /\{other}")))
   }
 }
 
@@ -464,6 +558,8 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
   match message {
     UiInput(event) =>
       match event {
+        SlashCommand(name~, arguments~) =>
+          handle_slash_command(state, name, arguments, cmds)
         // Enter while idle submits; Enter while a task runs steers it — prompt
         // text is folded into the running turn at its next step boundary, and
         // `!` commands run locally before their output is steered.
@@ -489,6 +585,17 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
               AppendItem(
                 Error(
                   "A local shell command is running and cannot be steered. Press Tab to queue this input.",
+                ),
+              ),
+            )
+          } else if state.run_is_compaction {
+            // Compaction is a non-steerable model call; the serve engine drops
+            // steers during it. Reject locally so the prompt is not lost — the
+            // user can queue it to run once compaction lands.
+            cmds.push(
+              AppendItem(
+                Error(
+                  "Context is being compacted and cannot be steered. Press Tab to queue this input.",
                 ),
               ),
             )
@@ -686,6 +793,13 @@ async fn[G] run_message_loop(
             }
           }
         SteerAgent(input) => engine.steer(group, input)
+        // Compaction is an engine operation with no local task. Clear any stale
+        // command handle (as a queued prompt would) so a Ctrl-C cancels this
+        // compaction turn rather than a finished command task.
+        CompactSession(run_id~) => {
+          running_task = None
+          engine.compact(group, run_id)
+        }
         CancelAgent =>
           match running_task {
             // A local shell command (or a one-shot engine run) in flight:

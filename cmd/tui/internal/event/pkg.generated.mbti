@@ -27,6 +27,8 @@ pub(all) enum AgentEvent {
   AgentAborted(String)
   MaxStepsExhausted
   AgentError(String)
+  CommandRejected(String)
+  CompactionFinished(String)
 }
 
 pub(all) struct ToolResultEvent {

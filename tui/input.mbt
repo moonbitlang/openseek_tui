@@ -24,6 +24,7 @@ async fn Ui::submit_current_input(self : Self) -> Input? {
     self.history.push(@history.Entry::new(text, mode))
     self.composer.reset()
     self.notice = None
+    self.completion.reset()
     self.redraw()
     Some(submitted_input(text, mode))
   }
@@ -40,12 +41,16 @@ async fn Ui::redraw_after_cursor_move(self : Self) -> Unit {
 ///|
 async fn Ui::redraw_after_text_change(self : Self) -> Unit {
   self.history.reset_navigation()
+  self.completion.dismissed = false
+  self.sync_completion_menu()
   self.notice = None
   self.redraw()
 }
 
 ///|
 async fn Ui::redraw_after_history_recall(self : Self) -> Unit {
+  self.completion.dismissed = false
+  self.sync_completion_menu()
   self.notice = None
   self.redraw()
 }
@@ -88,6 +93,7 @@ async fn Ui::move_down_or_recall_history(self : Self) -> Unit {
 
 ///|
 async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
+  self.sync_completion_menu()
   match key.code {
     Char('a') if key.modifiers.ctrl() => {
       self.composer.move_home()
@@ -141,8 +147,38 @@ async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
       self.redraw_after_text_change()
       None
     }
-    Enter => self.submit_current_input().map(input => Steer(input))
-    Tab => self.submit_current_input().map(input => Queue(input))
+    Enter =>
+      match
+        ui_enter_decision(
+          self.config.slash_commands,
+          self.composer,
+          self.completion,
+          menu_visible=self.completion_menu_visible(),
+        ) {
+        RunSlashCommand(name~, arguments~) =>
+          self.submit_slash_command(name~, arguments~)
+        SubmitInput => self.submit_current_input().map(input => Steer(input))
+        NoCompletionMatch => {
+          self.notice = Some(@doc.dim_text("no matching completion"))
+          self.redraw()
+          None
+        }
+      }
+    Tab =>
+      // In a completion menu, Tab accepts the highlighted item (completes the
+      // text) rather than submitting. A slash-command line is never queued as a
+      // prompt — even a bare `/` — so it falls through to a no-op when there is
+      // nothing to complete. Only ordinary input is queued.
+      if self.completion_menu_open() {
+        self.accept_completion()
+      } else if composer_is_slash_entry(
+          self.config.slash_commands,
+          self.composer,
+        ) {
+        None
+      } else {
+        self.submit_current_input().map(input => Queue(input))
+      }
     Escape => {
       // Esc only resets history navigation; it deliberately does NOT interrupt.
       // Under the kitty keyboard protocol every key is an ESC-prefixed sequence,
@@ -151,6 +187,10 @@ async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
       // Interrupt would spuriously cancel a running task or, when idle, quit.
       // Ctrl+C is the deliberate interrupt/quit key.
       self.history.reset_navigation()
+      if self.completion_menu_open() {
+        self.completion.dismissed = true
+        self.redraw()
+      }
       None
     }
     Char('k') if key.modifiers.ctrl() => {
@@ -159,11 +199,19 @@ async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
       None
     }
     Char('n') if key.modifiers.ctrl() => {
-      self.move_down_or_recall_history()
+      if self.completion_menu_open() {
+        self.move_completion_selection(1)
+      } else {
+        self.move_down_or_recall_history()
+      }
       None
     }
     Char('p') if key.modifiers.ctrl() => {
-      self.move_up_or_recall_history()
+      if self.completion_menu_open() {
+        self.move_completion_selection(-1)
+      } else {
+        self.move_up_or_recall_history()
+      }
       None
     }
     Char('u') if key.modifiers.ctrl() => {
@@ -172,11 +220,19 @@ async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
       None
     }
     Up => {
-      self.move_up_or_recall_history()
+      if self.completion_menu_open() {
+        self.move_completion_selection(-1)
+      } else {
+        self.move_up_or_recall_history()
+      }
       None
     }
     Down => {
-      self.move_down_or_recall_history()
+      if self.completion_menu_open() {
+        self.move_completion_selection(1)
+      } else {
+        self.move_down_or_recall_history()
+      }
       None
     }
     Left => {

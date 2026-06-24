@@ -70,6 +70,17 @@ fn run_background_command_count(cmds : Array[Cmd]) -> Int {
 }
 
 ///|
+fn compact_session_count(cmds : Array[Cmd]) -> Int {
+  for cmd in cmds; count = 0 {
+    if cmd is CompactSession(_) {
+      continue count + 1
+    }
+  } nobreak {
+    count
+  }
+}
+
+///|
 test "engine configuration travels through the environment" {
   let config = drain_test_state().config
   let env = engine_extra_env(config)
@@ -120,6 +131,162 @@ test "agent engine env clears inherited api url without override" {
     "OPENSEEK_API_URL": "https://parent.example/chat/completions",
   })
   assert_true(env.get("OPENSEEK_API_URL") == Some(""))
+}
+
+///|
+test "exit slash command quits" {
+  let state = drain_test_state()
+  let cmds = update(state, UiInput(SlashCommand(name="exit", arguments="")))
+  assert_eq(quit_count(cmds), 1)
+
+  let rejected = update(
+    state,
+    UiInput(SlashCommand(name="exit", arguments="now")),
+  )
+  assert_eq(quit_count(rejected), 0)
+  assert_eq(error_item_count(rejected), 1)
+}
+
+///|
+test "compact slash command starts a compaction run when idle" {
+  let state = drain_test_state()
+  let cmds = update(state, UiInput(SlashCommand(name="compact", arguments="")))
+  assert_eq(compact_session_count(cmds), 1)
+  assert_eq(error_item_count(cmds), 0)
+  // The run is held busy so a concurrent prompt cannot interleave with the
+  // engine's compaction, and so the activity line shows work in progress.
+  assert_false(state.run is Idle)
+  // The start notice precedes the command, so the compaction is the tail.
+  guard cmds is [_, CompactSession(run_id~)] else {
+    fail("expected a compaction command")
+  }
+  assert_true(state.owns_run(run_id))
+
+  // A second compact while the first is still running is refused, not queued.
+  let busy = update(state, UiInput(SlashCommand(name="compact", arguments="")))
+  assert_eq(compact_session_count(busy), 0)
+  assert_eq(error_item_count(busy), 1)
+
+  // The engine's terminal event closes the run and previews the new context.
+  let done = update(
+    state,
+    AgentProgress(run_id~, CompactionFinished("- goal: ship /compact")),
+  )
+  assert_eq(compact_session_count(done), 0)
+  guard done is [AppendItem(Notice(_))] else {
+    fail("expected a compaction preview notice")
+  }
+  assert_true(state.run is Idle)
+}
+
+///|
+test "a prompt during compaction is rejected locally, not steered" {
+  let state = drain_test_state()
+  let started = update(
+    state,
+    UiInput(SlashCommand(name="compact", arguments="")),
+  )
+  guard started is [_, CompactSession(_)] else {
+    fail("expected compaction to start")
+  }
+  assert_true(state.run_is_compaction)
+
+  // Enter with a prompt must not steer (the engine drops steers during
+  // compaction); it is rejected locally so the text is not lost.
+  let steered = update(state, UiInput(Steer(Prompt("hello"))))
+  assert_eq(error_item_count(steered), 1)
+  assert_true(steered.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_eq(state.pending_steers.length(), 0)
+
+  // Tab queues it instead, to run once compaction lands.
+  let _ = update(state, UiInput(Queue(Prompt("hello"))))
+  assert_eq(state.queued.length(), 1)
+
+  // When compaction finishes the queued prompt drains and starts.
+  let done = update(
+    state,
+    AgentProgress(run_id=state.run_id, CompactionFinished("summary")),
+  )
+  assert_false(state.run_is_compaction)
+  assert_eq(start_agent_count(done), 1)
+}
+
+///|
+test "a rejected command surfaces an error without ending the run in flight" {
+  // A command_error carries no identity for which command was rejected (it is
+  // stamped with the mutable latest_run), so a delayed rejection of an earlier
+  // command must never end the run currently in flight — only surface it.
+  // During a /compact run: the rejection does not end it; the real terminal
+  // event still does.
+  let compacting = drain_test_state()
+  let started = update(
+    compacting,
+    UiInput(SlashCommand(name="compact", arguments="")),
+  )
+  guard started is [_, CompactSession(run_id~)] else {
+    fail("expected compaction to start")
+  }
+  let rejected = update(
+    compacting,
+    AgentProgress(run_id~, CommandRejected("unknown command: steer")),
+  )
+  assert_eq(error_item_count(rejected), 1)
+  assert_false(compacting.run is Idle)
+  let _ = update(
+    compacting,
+    AgentProgress(run_id~, CompactionFinished("summary")),
+  )
+  assert_true(compacting.run is Idle)
+
+  // During an ordinary prompt turn, a rejected command (e.g. the context sent
+  // after a `!` shell command) must not terminate the turn it has nothing to do
+  // with — surface it, but keep the run active so its real output still lands.
+  let prompting = drain_test_state()
+  let _ = update(prompting, UiInput(Steer(Prompt("work"))))
+  guard prompting.run is Running(_) else { fail("expected a running prompt") }
+  let run_id = prompting.run_id
+  let noise = update(
+    prompting,
+    AgentProgress(run_id~, CommandRejected("unknown command: steer")),
+  )
+  assert_eq(error_item_count(noise), 1)
+  assert_true(prompting.run is Running(_))
+}
+
+///|
+test "compact slash command rejects arguments and pending work" {
+  let with_args = drain_test_state()
+  let rejected = update(
+    with_args,
+    UiInput(SlashCommand(name="compact", arguments="now")),
+  )
+  assert_eq(error_item_count(rejected), 1)
+  assert_eq(compact_session_count(rejected), 0)
+  assert_true(with_args.run is Idle)
+
+  let queued_state = drain_test_state()
+  queued_state.queued.push(Prompt("later"))
+  let queued_cmds : Array[Cmd] = []
+  handle_compact_command(queued_state, "", queued_cmds)
+  assert_eq(error_item_count(queued_cmds), 1)
+  assert_eq(compact_session_count(queued_cmds), 0)
+}
+
+///|
+test "compact slash command is unavailable on a oneshot engine" {
+  let state = State::new({ ..drain_test_state().config, engine_mode: OneShot })
+  let cmds = update(state, UiInput(SlashCommand(name="compact", arguments="")))
+  assert_eq(error_item_count(cmds), 1)
+  assert_eq(compact_session_count(cmds), 0)
+  assert_true(state.run is Idle)
+}
+
+///|
+test "unknown slash command reports an error" {
+  let state = drain_test_state()
+  let cmds = update(state, UiInput(SlashCommand(name="unknown", arguments="")))
+  assert_eq(error_item_count(cmds), 1)
+  assert_true(state.run is Idle)
 }
 
 ///|

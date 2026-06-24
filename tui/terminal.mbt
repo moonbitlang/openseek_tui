@@ -4,10 +4,19 @@ fn Ui::composer_surface(
   cols~ : Int,
   rows~ : Int,
 ) -> @surface.Surface {
+  let completion = match self.completion_menu() {
+    Some(menu) if !self.completion.dismissed =>
+      @completion.Model::open(
+        items=menu.items,
+        selected=self.completion.selected,
+      )
+    _ => @completion.Model::closed()
+  }
   @render.composer_surface(
     self.composer,
     activity=self.activity,
     queued_inputs=self.queued_inputs,
+    completion~,
     status=self.status,
     notice=self.notice,
     cols~,

@@ -54,6 +54,22 @@ pub fn sanitize_lines(text : String) -> Array[@displaytext.DisplayText] {
 }
 
 ///|
+/// Sanitize `text` and collapse it to a single display line: the first hard
+/// line, with a trailing ` …` when later lines were dropped. Live previews that
+/// echo app-provided text on one row (queued inputs, completion-menu items)
+/// use this so a multi-line value never writes a newline to the terminal while
+/// the surface still counts it as one row.
+pub fn sanitize_oneline(text : String) -> @displaytext.DisplayText {
+  let lines = sanitize_lines(text)
+  guard lines is [first, ..] else { return DisplayText("") }
+  if lines.length() > 1 {
+    DisplayText("\{first.text()} …")
+  } else {
+    first
+  }
+}
+
+///|
 /// Sanitize one already-segmented hard line into a plain string: expand tabs to
 /// the next `TabWidth` stop and drop C0 controls and `DEL`. Shared by `sanitize`
 /// (which joins the results) and `sanitize_lines` (which re-wraps each in a

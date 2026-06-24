@@ -289,6 +289,35 @@ async fn[G] EngineClient::steer(
 }
 
 ///|
+/// Ask the engine to compact the conversation. Like `prompt`, this is an
+/// explicit user operation on the durable session, so it may spawn the engine
+/// (a fresh process resumes the same session and compacts it) and it opens a
+/// run whose terminal event — `compaction_finished` or a failure — closes it.
+async fn[G] EngineClient::compact(
+  self : EngineClient,
+  group : @async.TaskGroup[G],
+  run_id : Int,
+) -> Unit {
+  if self.live is None {
+    self.start(group) catch {
+      error => {
+        self.messages.put(AgentFailed(run_id~, error))
+        return
+      }
+    }
+  }
+  guard self.live is Some(live) else {
+    self.messages.put(
+      AgentFailed(run_id~, Failure::Failure("engine is not running")),
+    )
+    return
+  }
+  live.latest_run = run_id
+  live.run_open = true
+  self.send(run_id, { "command": "compact" })
+}
+
+///|
 /// Cancel the running turn. With no live engine or open run this is a
 /// silent no-op — the turn the user wanted dead is already gone.
 async fn EngineClient::cancel_turn(self : EngineClient) -> Unit {

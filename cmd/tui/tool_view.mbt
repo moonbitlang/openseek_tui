@@ -78,6 +78,25 @@ fn reasoning_item(text : String) -> @ui.TranscriptItem {
 }
 
 ///|
+/// Lines of the post-compaction context preview shown in the transcript. The
+/// summary becomes the conversation's entire context, so a fuller preview than a
+/// tool's clipped output earns its space.
+const CompactionPreviewLineLimit : Int = 12
+
+///|
+/// Render a completed compaction as a `↻` notice whose detail lines preview the
+/// summary that is now the conversation's context — its head and tail, with the
+/// middle elided when it runs long, the same way tool output is compacted.
+fn compaction_item(summary : String) -> @ui.TranscriptItem {
+  Notice(
+    ToolCall(
+      @doc.Text::plain("context compacted"),
+      details=detail_texts(compact_lines(summary, CompactionPreviewLineLimit)),
+    ),
+  )
+}
+
+///|
 /// Render the result of a `!` shell command the TUI ran locally: the command
 /// line as the title (with a non-zero/cancelled marker), and its full captured
 /// output as dimmed detail lines. The output is already character-capped by the

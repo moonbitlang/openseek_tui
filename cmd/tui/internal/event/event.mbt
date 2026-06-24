@@ -48,4 +48,14 @@ pub(all) enum AgentEvent {
   AgentAborted(String)
   MaxStepsExhausted
   AgentError(String)
+  // The engine rejected a control command and keeps serving (no terminal event
+  // of its own). It carries no identity for which command was rejected, so the
+  // loop only surfaces it — it never ends the run in flight, which a delayed
+  // rejection of an earlier command must not do.
+  CommandRejected(String)
+  // The serve engine finished compacting the conversation: a terminal event for
+  // the controller's compaction run. Carries the summary the engine appended to
+  // the durable session — now the conversation's context — so the controller can
+  // preview it.
+  CompactionFinished(String)
 }

@@ -235,9 +235,17 @@ fn initial_task(matches : @argparse.Matches) -> String? {
 
 ///|
 async fn run_tui(config : AppConfig, initial : String?) -> Unit {
-  @ui.with_ui(config=@ui.Config::new(composer_max_rows=4), ui => {
-    run_app(config, initial, ui)
-  })
+  // Commands only name and describe themselves.
+  @ui.with_ui(
+    config=@ui.Config::new(composer_max_rows=4, slash_commands=[
+      @ui.SlashCommandSpec::new(name="exit", description="exit the TUI"),
+      @ui.SlashCommandSpec::new(
+        name="compact",
+        description="summarize and compact the conversation",
+      ),
+    ]),
+    ui => run_app(config, initial, ui),
+  )
 }
 
 ///|

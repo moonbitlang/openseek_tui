@@ -1,0 +1,33 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "bobzhang/openseek/tui/slash"
+
+import {
+  "bobzhang/openseek/tui/completion",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn has_arguments(String) -> Bool
+
+// Errors
+
+// Types and methods
+type SlashCommandInvocation derive(Eq, @debug.Debug)
+pub fn SlashCommandInvocation::arguments(Self) -> String
+pub fn SlashCommandInvocation::name(Self) -> String
+pub fn SlashCommandInvocation::parse(String) -> Self?
+
+type SlashCommandSpec derive(Eq, @debug.Debug)
+pub fn SlashCommandSpec::description(Self) -> String
+pub fn SlashCommandSpec::name(Self) -> String
+pub fn SlashCommandSpec::new(name~ : String, description~ : String) -> Self
+
+pub(all) struct SlashCommands(Array[SlashCommandSpec])
+pub fn SlashCommands::completion_items(Self) -> Array[@completion.CompletionItem]
+pub fn SlashCommands::get(Self, String) -> SlashCommandSpec?
+pub fn SlashCommands::is_empty(Self) -> Bool
+
+// Type aliases
+
+// Traits
+

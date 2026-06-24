@@ -61,6 +61,11 @@ priv struct State {
   // engine turn. Steering and interrupt escalation must not touch the
   // persistent engine while the work in flight is a local task.
   mut run_is_command : Bool
+  // Whether the active run is a conversation compaction rather than an engine
+  // turn. Compaction is a non-steerable model call (the serve engine drops
+  // steers during it), so a prompt typed mid-compaction is rejected locally with
+  // a queue hint rather than steered into the void.
+  mut run_is_compaction : Bool
   // Final assistant text for the current step, used to avoid appending the same
   // answer again when `AgentFinished` follows `AssistantMessage`.
   mut step_response : String?
@@ -94,6 +99,7 @@ fn State::new(config : AppConfig) -> State {
     run: Idle,
     run_id: 0,
     run_is_command: false,
+    run_is_compaction: false,
     pending_steers: [],
     step_response: None,
     streaming_response: None,
@@ -135,6 +141,7 @@ fn State::owns_run(self : State, id : Int) -> Bool {
 fn State::finish_run(self : State) -> Unit {
   self.run = Idle
   self.run_is_command = false
+  self.run_is_compaction = false
   // Anything still unconfirmed died with the turn; the engine sweeps its
   // queue at turn end and reports each leftover as steer_dropped, which
   // arrives untagged and renders its own resubmit notice.
@@ -227,6 +234,10 @@ priv enum Cmd {
   // steering lands at the running turn's next step boundary; command context
   // may also append into an idle engine session without starting a turn.
   SteerAgent(@agent_runtime.SteerInput)
+  // Ask the serve engine to summarize and compact the conversation; carries the
+  // run id so the compaction's wire events are tagged to the run that requested
+  // it, exactly like a prompt.
+  CompactSession(run_id~ : Int)
   CancelAgent
   // Second Ctrl-C while already interrupting: the cancel command was not
   // enough, so kill the engine process outright.

@@ -56,6 +56,19 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
 }
 
 ///|
+fn session_transcript_items(
+  session : @agent_session.Session,
+) -> Array[@ui.TranscriptItem] {
+  let items : Array[@ui.TranscriptItem] = []
+  for event in session.events() {
+    if session_item(event.item()) is Some(item) {
+      items.push(item)
+    }
+  }
+  items
+}
+
+///|
 async fn append_session_history(config : AppConfig, ui : @ui.Ui) -> Unit {
   let session_id = config.session_id
   let store = @store.SessionStore(config.session_root)
@@ -72,9 +85,7 @@ async fn append_session_history(config : AppConfig, ui : @ui.Ui) -> Unit {
       return
     }
   }
-  for event in session.events() {
-    if session_item(event.item()) is Some(item) {
-      ui.append_item(item)
-    }
+  for item in session_transcript_items(session) {
+    ui.append_item(item)
   }
 }

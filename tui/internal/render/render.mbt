@@ -44,6 +44,87 @@ fn status_line(
 }
 
 ///|
+const MaxCompletionMenuRows : Int = 6
+
+///|
+fn padded_line(spans : Array[@surface.Span], cols~ : Int) -> @surface.Line {
+  let used = for span in spans; width = 0 {
+    continue width + @displaytext.DisplayText(span.text()).width()
+  } nobreak {
+    width
+  }
+  if used < cols {
+    spans.push(
+      Span(DisplayText(String::make(cols - used, ' ')), style=@style.default),
+    )
+  }
+  @surface.Line::new(spans)
+}
+
+///|
+fn completion_menu_rows(
+  items : Array[@completion.CompletionItem],
+  selected : Int,
+  cols~ : Int,
+  indent~ : Int,
+  max_rows~ : Int,
+) -> Array[@surface.Line] {
+  if max_rows <= 0 {
+    return []
+  }
+  if items.length() == 0 {
+    return [
+      indent_line(
+        padded_line(
+          [Span(DisplayText("no completions match"), style=@style.dim)],
+          cols=cols - indent,
+        ),
+        indent~,
+      ),
+    ]
+  }
+  let selected = selected.clamp(min=0, max=items.length() - 1)
+  let visible_count = MaxCompletionMenuRows.min(max_rows).min(items.length())
+  let start = if selected >= visible_count {
+    selected - visible_count + 1
+  } else {
+    0
+  }
+  let end = (start + visible_count).min(items.length())
+  [
+    for index in start..<end => {
+      let item = items[index]
+      let active = index == selected
+      let style = if active { @style.ok } else { @style.dim }
+      let width = cols - indent
+      // App-provided label/description are echoed straight to the terminal, so
+      // collapse each to one sanitized line and truncate it to the row width —
+      // a newline would desync the surface row count from what is drawn.
+      let marker = @displaytext.DisplayText(if active { "› " } else { "  " })
+      let label = @displaytext.DisplayText(
+        @text.sanitize_oneline(item.label()).truncate(width - marker.width()),
+      )
+      let spans : Array[@surface.Span] = [
+        Span(marker, style~),
+        Span(label, style~),
+      ]
+      let used = marker.width() + label.width()
+      if !item.description().is_empty() && used + 2 < width {
+        let gap = @displaytext.DisplayText("  ")
+        let description = @displaytext.DisplayText(
+          @text.sanitize_oneline(item.description()).truncate(
+            width - used - gap.width(),
+          ),
+        )
+        spans.push(Span(gap, style=@style.dim))
+        spans.push(Span(description, style=@style.dim))
+      }
+      indent_line(padded_line(spans, cols=width), indent~)
+    }
+  ]
+}
+
+///|
 /// Prepend `indent` blank columns to a line so it lines up with the composer's
 /// editable text (which starts after the prompt prefix), not the left edge.
 fn indent_line(line : @surface.Line, indent~ : Int) -> @surface.Line {
@@ -62,6 +143,16 @@ fn indent_line(line : @surface.Line, indent~ : Int) -> @surface.Line {
 /// The shortest terminal the live area fits in without clipping: a spacer, two
 /// separators, one composer row, and the status line.
 const MinLiveRows : Int = 5
+
+///|
+/// Whether a terminal `max_rows` tall has room to draw at least one completion
+/// row below the composer — the live area reserves `MinLiveRows` for the
+/// composer and its chrome. The input layer gates completion key handling on
+/// this so a menu that is logically open but too short to render does not
+/// silently capture Enter/Up/Down.
+pub fn completion_menu_fits(max_rows~ : Int) -> Bool {
+  max_rows - MinLiveRows >= 1
+}
 
 ///|
 /// A one-line notice shown in place of the composer when the terminal is too
@@ -102,6 +193,7 @@ pub fn composer_surface(
   composer : @composer.Model,
   activity~ : @doc.Text?,
   queued_inputs~ : Array[@core.Input],
+  completion? : @completion.Model = @completion.Model::closed(),
   status~ : @doc.Text,
   notice~ : @doc.Text?,
   cols~ : Int,
@@ -116,16 +208,33 @@ pub fn composer_surface(
   // Status and activity rows have no prompt prefix, so indent them to the
   // composer's text column (after `❯ `) instead of the screen's left edge.
   let indent = composer.input_prefix(0).width()
+  let completion_rows = if completion.is_open() {
+    completion_menu_rows(
+      completion.items(),
+      completion.selected(),
+      cols~,
+      indent~,
+      max_rows=max_rows - MinLiveRows,
+    )
+  } else {
+    []
+  }
   // Lay the composer out first, capped to the rows left after its mandatory
   // chrome (spacer + two separators + status), so a tall multiline draft scrolls
   // to the cursor instead of overflowing the budget. Its height then bounds the
   // queued preview below.
-  composer.resize(cols~, max_rows=max_rows - (MinLiveRows - 1))
+  composer.resize(
+    cols~,
+    max_rows=max_rows - (MinLiveRows - 1) - completion_rows.length(),
+  )
   let composer_rows = composer.visible_text_rows()
   // Rows that must always stay visible — the composer and its chrome: a spacer,
-  // two separators, the composer itself, and the status line. The composer wins
-  // the row budget; the activity line and queue get whatever is left over.
-  let fixed = 1 + composer_rows + 2 + 1
+  // two separators, the composer itself, the open completion menu (drawn just
+  // above the status line), and the status line. The composer and menu win the
+  // row budget; the activity line and queue get whatever is left over. Counting
+  // the completion rows here keeps the queue from claiming their space and
+  // pushing the menu and status past the bottom of the terminal.
+  let fixed = 1 + composer_rows + 2 + completion_rows.length() + 1
   // Show the activity line only if it plus its trailing blank still fit, so a
   // very short terminal drops "Working …" rather than clipping the prompt.
   let show_activity = activity is Some(_) && max_rows >= fixed + 2
@@ -166,6 +275,9 @@ pub fn composer_surface(
     }
   }
   rows.push(separator_line(cols~))
+  for row in completion_rows {
+    rows.push(row)
+  }
   rows.push(
     indent_line(status_line(status, notice, cols=cols - indent), indent~),
   )
