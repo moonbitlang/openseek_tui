@@ -86,10 +86,7 @@ fn cli_command() -> @argparse.Command {
 
 ///|
 fn flag(matches : @argparse.Matches, name : String) -> Bool {
-  match matches.flags.get(name) {
-    Some(value) => value
-    None => false
-  }
+  matches.flags.get(name) is Some(true)
 }
 
 ///|
@@ -121,8 +118,7 @@ async fn with_latest_session(config : AppConfig) -> AppConfig {
 ///|
 fn value(matches : @argparse.Matches, name : String) -> String raise {
   match matches.values.get(name) {
-    Some([value]) => value
-    Some(values) if values.length() > 0 => values[0]
+    Some([value, ..]) => value
     _ => fail("missing parsed argument: \{name}")
   }
 }

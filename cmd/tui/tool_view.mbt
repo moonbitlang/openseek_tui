@@ -10,11 +10,9 @@ fn split_output_lines(source : String) -> Array[String] {
   if trimmed.is_empty() {
     return []
   }
-  let lines : Array[String] = []
-  for line in trimmed.split("\n") {
-    lines.push(line.trim_end(chars="\r").to_owned())
-  }
-  lines
+  [
+    for line in trimmed.split("\n") => line.trim_end(chars="\r").to_owned()
+  ]
 }
 
 ///|

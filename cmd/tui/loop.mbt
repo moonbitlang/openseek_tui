@@ -415,11 +415,8 @@ fn handle_agent_event(
     Usage(usage) => state.usage = Some(usage)
     ToolResult(result) => cmds.push(AppendItem(tool_item(result)))
     AgentFinished(answer) => {
-      let already_appended = if state.step_response is Some(response) {
+      let already_appended = state.step_response is Some(response) &&
         response == answer
-      } else {
-        false
-      }
       // `AgentFinished` follows `AssistantMessage` for normal chat responses,
       // but tool-controlled finish results may arrive without one.
       if !already_appended && !answer.trim().is_empty() {
