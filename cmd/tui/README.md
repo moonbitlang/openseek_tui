@@ -1,21 +1,30 @@
 # bobzhang/openseek/cmd/tui
 
-The OpenSeek terminal UI: a scrolling transcript with a live composer, built
-on the reusable [`tui`](../../tui/README.md) controller package.
+The OpenSeek terminal UI: a scrolling transcript with a live composer, built on
+the reusable [`tui`](../../tui/README.md) controller package. It ships as a
+library launched by the single `openseek` binary — it is the **default** mode
+(bare `openseek`, `openseek "PROMPT"`) and the explicit `openseek tui`
+subcommand. There is no separate `tui` executable.
 
-The TUI runs no agent code itself. It spawns the engine binary (`openseek`
-from `PATH`; override with `--engine` or `OPENSEEK_ENGINE`) **once per
-session** in `--serve` mode and drives it over stdin commands, rendering the
-engine's JSONL event stream: streamed thinking and answer text move live on
-the activity line, each turn's reasoning is kept as a dim `✻` transcript
-aside above its answer, and tool results land as `⏺` blocks. Pressing Enter
-while a task runs steers it mid-turn; Ctrl-C cancels the turn (a second
-Ctrl-C kills the engine, and the next prompt respawns it on the same
-session).
+The UI runs no agent code itself. It spawns the `openseek` engine — by default
+this same binary, re-launched in `serve` mode (so the UI and engine can never
+drift out of sync), resolved from `argv[0]` when invoked by path and otherwise
+from `PATH`; override with `--engine` or `OPENSEEK_ENGINE` — **once per session**
+and drives it over stdin commands, rendering the engine's JSONL event stream:
+streamed thinking and answer text move live on the activity line, each turn's
+reasoning is kept as a dim `✻` transcript aside above its answer, and tool
+results land as `⏺` blocks. Pressing Enter while a task runs steers it mid-turn;
+Ctrl-C cancels the turn (a second Ctrl-C kills the engine, and the next prompt
+respawns it on the same session).
 
 A custom or recorded-stream engine that only speaks the original
-one-process-per-prompt protocol still works with `--engine-mode oneshot`
-(env `OPENSEEK_ENGINE_MODE`); steering is unavailable there.
+one-process-per-prompt protocol works with `--engine-mode oneshot` (env
+`OPENSEEK_ENGINE_MODE`); it spawns `<engine> run -- <task>` per prompt, steering
+is unavailable, and it requires an explicit `--engine` (re-launching this binary
+in oneshot would only lose steering for no gain).
+
+Because the UI takes over the terminal, launching it without a TTY (a pipe, CI
+log, or cron) is refused with a pointer to `openseek run` / `openseek serve`.
 
 ## Sessions
 
@@ -28,13 +37,13 @@ startup banner) stores the conversation under `--session-root` (default
 - `--continue` resumes the most recently active session.
 - `--session <id>` resumes (or creates) a specific one; combining it with
   `--continue` is rejected.
-- `openseek --session-list` (on the engine CLI) lists what is resumable.
+- `openseek sessions list` lists what is resumable.
 
 ## Configuration
 
-`--api-key` (env `DEEPSEEK`) is required. `--model`, `--api-url`,
-`--max-steps`, and `--thinking` mirror the engine's flags and are forwarded to
-it through the environment, alongside the session settings.
+`--api-key` (env `DEEPSEEK`) is required. `--model`, `--api-url`, `--max-steps`,
+and `--thinking` mirror the engine's flags and are forwarded to it through the
+environment, alongside the session settings.
 
 The full flag reference lives in the executable help — verified verbatim in
 [`tests/cram/tui.md`](../../tests/cram/tui.md).
