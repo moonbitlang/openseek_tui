@@ -14,8 +14,10 @@ priv struct AppConfig {
   session_id : @agent_session.SessionId
   session_root : String
   // The agent engine the TUI spawns and reads JSONL events from. Defaults to
-  // the `openseek` binary on `PATH`; override (e.g. to a recorded-stream
-  // replayer) with `--engine` or `OPENSEEK_ENGINE`.
+  // this running `openseek` binary re-launched as the engine (see
+  // `default_engine`), so it never spawns a stale, separately-built engine;
+  // override (e.g. to a recorded-stream replayer) with `--engine` or
+  // `OPENSEEK_ENGINE`.
   engine : String
   engine_mode : EngineMode
 }

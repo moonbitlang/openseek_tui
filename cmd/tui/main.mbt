@@ -43,8 +43,7 @@ fn cli_command() -> @argparse.Command {
         "engine",
         long="engine",
         env="OPENSEEK_ENGINE",
-        default_values=["openseek"],
-        about="Agent engine binary to spawn; reads its JSONL event stream from stdout.",
+        about="Agent engine to spawn (default: this openseek binary); reads its JSONL event stream from stdout.",
       ),
       OptionArg(
         "engine-mode",
@@ -204,6 +203,23 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
       root
     }
   }
+  // An explicit --engine / OPENSEEK_ENGINE wins; otherwise re-launch this binary
+  // as the engine (see `default_engine`). Presence of a non-blank value, not a
+  // magic default string, decides — which also gates oneshot below. A blank
+  // `--engine ""` counts as unset rather than an empty command.
+  let explicit_engine : String? = match values(matches, "engine") {
+    [engine, ..] if !engine.trim().is_empty() => Some(engine)
+    _ => None
+  }
+  let engine_mode = EngineMode::parse(value(matches, "engine-mode"))
+  // `oneshot` only makes sense for a custom/replay engine that cannot speak the
+  // persistent `serve` protocol; re-launching ourselves in oneshot buys nothing
+  // and loses steering/compaction, so require an explicit engine.
+  if engine_mode is OneShot && explicit_engine is None {
+    fail(
+      "--engine-mode oneshot requires an explicit --engine / OPENSEEK_ENGINE (it is for replay/custom engines)",
+    )
+  }
   {
     api_key: value(matches, "api-key"),
     api_url: api_url(matches),
@@ -218,8 +234,26 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
       None => generated_session_id(@env.now().reinterpret_as_int64())
     },
     session_root: session_root_value,
-    engine: value(matches, "engine"),
-    engine_mode: EngineMode::parse(value(matches, "engine-mode")),
+    engine: match explicit_engine {
+      Some(engine) => engine
+      None => default_engine(@sys.get_cli_args())
+    },
+    engine_mode,
+  }
+}
+
+///|
+/// The engine command when `--engine`/`OPENSEEK_ENGINE` is unset: re-launch *this*
+/// executable so `openseek tui` never spawns a separately-installed, stale engine.
+/// `args[0]` (argv0) with a path separator (`/` or, on Windows, `\`) is used
+/// directly — spawn resolves it against the launch cwd (which the UI never
+/// changes) — so `./openseek` or an absolute path re-execs the same file; a bare
+/// name is left as `openseek` for a PATH lookup, which for a single binary is the
+/// same file. Split out so it is unit-testable without a real argv0.
+fn default_engine(args : ArrayView[String]) -> String {
+  match args {
+    [argv0, ..] if argv0.contains("/") || argv0.contains("\\") => argv0
+    _ => "openseek"
   }
 }
 
@@ -352,7 +386,9 @@ test "cli accepts no initial task" {
   assert_eq(config.api_key, "test-key")
   assert_true(config.api_url is None)
   assert_eq(config.max_steps, 1000)
-  assert_eq(config.engine, "openseek")
+  // With no --engine, the engine falls through to re-launching this binary
+  // (`default_engine` of the process args), not a hardcoded string.
+  assert_eq(config.engine, default_engine(@sys.get_cli_args()))
   // No --session still converses in a session: a generated per-launch id, so
   // consecutive prompts share context instead of running amnesiac one-shots.
   assert_true(config.session_id.value().has_prefix("tui-"))
@@ -475,6 +511,77 @@ test "cli accepts --continue and rejects combining it with --session" {
     }
   }
   fail("--continue with --session accepted")
+}
+
+///|
+test "default_engine re-launches a path argv0 and falls back to PATH otherwise" {
+  assert_eq(
+    default_engine(["/usr/local/bin/openseek"]),
+    "/usr/local/bin/openseek",
+  )
+  assert_eq(default_engine(["./openseek"]), "./openseek")
+  assert_eq(
+    default_engine(["target/native/openseek"]),
+    "target/native/openseek",
+  )
+  assert_eq(
+    default_engine(["target\\native\\openseek.exe"]),
+    "target\\native\\openseek.exe",
+  )
+  assert_eq(default_engine(["openseek"]), "openseek")
+  assert_eq(default_engine([]), "openseek")
+}
+
+///|
+async test "engine defaults to this binary; --engine/OPENSEEK_ENGINE override it" {
+  // No --engine and no env: fall through to re-launching this binary.
+  let default_cfg = parse_config(
+    cli_command().parse(argv=[], env={ "DEEPSEEK": "k" }),
+  )
+  assert_eq(default_cfg.engine, default_engine(@sys.get_cli_args()))
+  // OPENSEEK_ENGINE is treated as an explicit engine.
+  let env_cfg = parse_config(
+    cli_command().parse(argv=[], env={
+      "DEEPSEEK": "k",
+      "OPENSEEK_ENGINE": "./fake-engine",
+    }),
+  )
+  assert_eq(env_cfg.engine, "./fake-engine")
+}
+
+///|
+async test "oneshot engine mode requires an explicit engine" {
+  let _ = parse_config(
+    cli_command().parse(argv=["--engine-mode", "oneshot"], env={
+      "DEEPSEEK": "k",
+    }),
+  ) catch {
+    error => {
+      assert_true("\{error}".contains("oneshot requires an explicit"))
+      return
+    }
+  }
+  fail("oneshot without an explicit engine was accepted")
+}
+
+///|
+async test "oneshot with an explicit engine (flag or env) is accepted" {
+  let flag_cfg = parse_config(
+    cli_command().parse(
+      argv=["--engine-mode", "oneshot", "--engine", "./fake-engine"],
+      env={ "DEEPSEEK": "k" },
+    ),
+  )
+  assert_true(flag_cfg.engine_mode is OneShot)
+  assert_eq(flag_cfg.engine, "./fake-engine")
+  let env_cfg = parse_config(
+    cli_command().parse(argv=[], env={
+      "DEEPSEEK": "k",
+      "OPENSEEK_ENGINE": "./fake-engine",
+      "OPENSEEK_ENGINE_MODE": "oneshot",
+    }),
+  )
+  assert_true(env_cfg.engine_mode is OneShot)
 }
 
 ///|
