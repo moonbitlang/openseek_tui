@@ -3,7 +3,8 @@
 These examples are executed by `moon cram test tests/cram`. The Moon wrapper
 builds the native package at `cmd/openseek` and exposes the executable on `PATH`
 as `openseek.exe`. The interactive terminal UI is the **default** mode of that
-single binary; `openseek tui …` is the explicit form.
+single binary; `openseek tui` is the explicit form. An initial prompt is passed
+with `--prompt` (there is no free-form positional).
 
 These commands are offline: they exercise only the argument parser and the
 engine-usability preflight, which run before the terminal UI starts, so the
@@ -16,12 +17,9 @@ API-backed examples live in [`tests/live/deepseek.md`](../live/deepseek.md).
 
 ```mooncram
 $ openseek.exe tui --help
-Usage: openseek tui --api-key <api-key> [options] [task...]
+Usage: openseek tui --api-key <api-key> [options]
 
 OpenSeek terminal UI.
-
-Arguments:
-  task...  Optional initial task description.
 
 Options:
   -h, --help                     Show help information.
@@ -35,6 +33,7 @@ Options:
   --engine-mode <engine-mode>    Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]
   --session <session>            Create or resume this durable session id. [env: OPENSEEK_SESSION]
   --session-root <session-root>  Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
+  --prompt <prompt>              Initial prompt to send once the UI opens.
 ```
 
 ## A DeepSeek API Key Is Required
@@ -47,7 +46,7 @@ ever starts.
 $ sh <<'EOF'
 > stdout=$(mktemp)
 > stderr=$(mktemp)
-> if env -u DEEPSEEK openseek.exe tui "summarize this project" > "$stdout" 2> "$stderr"; then echo exit-zero; else echo exit-non-zero; fi
+> if env -u DEEPSEEK openseek.exe tui > "$stdout" 2> "$stderr"; then echo exit-zero; else echo exit-non-zero; fi
 > sed -n '1p' "$stderr"
 > if test -s "$stdout"; then echo stdout-not-empty; else echo stdout-empty; fi
 > rm -f "$stdout" "$stderr"
@@ -57,10 +56,9 @@ error: the following required argument was not provided: 'api-key'
 stdout-empty
 ```
 
-## Unknown Options Are Rejected Before Initial Task Text
+## Unknown Options Are Rejected
 
-Like the headless CLI, the UI treats option-looking tokens as options until the
-normal `--` delimiter stops option parsing.
+Option-looking tokens are validated by the parser before the UI starts.
 
 ```mooncram
 $ sh <<'EOF'
@@ -80,12 +78,24 @@ stdout-empty
 
 The UI spawns the `openseek` engine (by default this same binary, in `serve`
 mode; override with `--engine`/`OPENSEEK_ENGINE`) and probes it with `--help`
-first. A missing engine fails fast, before the UI takes over the terminal. Here
-`--` also lets the initial prompt begin with a dash.
+first. A missing engine fails fast, before the UI takes over the terminal.
 
 ```mooncram
-$ env DEEPSEEK=test-key openseek.exe tui --engine openseek-not-a-real-binary -- '--xxy he'
+$ env DEEPSEEK=test-key openseek.exe tui --engine openseek-not-a-real-binary
 error: engine 'openseek-not-a-real-binary' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
+Pass --engine <path>, set OPENSEEK_ENGINE, or install the openseek binary.
+[1]
+```
+
+## An Initial Prompt Comes From `--prompt`
+
+`--prompt` supplies the first message. It parses and reaches the engine preflight
+(shown here failing deterministically on a missing engine), which proves the
+prompt path is wired — there is no free-form positional.
+
+```mooncram
+$ env DEEPSEEK=test-key openseek.exe tui --engine does-not-exist --prompt "inspect project"
+error: engine 'does-not-exist' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
 Pass --engine <path>, set OPENSEEK_ENGINE, or install the openseek binary.
 [1]
 ```

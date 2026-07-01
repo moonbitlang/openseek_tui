@@ -65,19 +65,17 @@ fn cli_command() -> @argparse.Command {
         default_values=[".openseek"],
         about="Directory containing durable OpenSeek sessions.",
       ),
+      OptionArg(
+        "prompt",
+        long="prompt",
+        about="Initial prompt to send once the UI opens.",
+      ),
     ],
     flags=[
       FlagArg(
         "continue",
         long="continue",
         about="Resume the most recently active session in --session-root.",
-      ),
-    ],
-    positionals=[
-      PositionArg(
-        "task",
-        num_args=ValueRange(lower=0),
-        about="Optional initial task description.",
       ),
     ],
   )
@@ -258,12 +256,13 @@ fn default_engine(args : ArrayView[String]) -> String {
 }
 
 ///|
+/// The initial prompt to send when the UI opens, from `--prompt` (empty → none).
+/// There is no free-form positional: a bare non-subcommand token is a typo the
+/// top-level dispatcher rejects rather than silently treats as a prompt.
 fn initial_task(matches : @argparse.Matches) -> String? {
-  let task = values(matches, "task").join(" ").trim().to_owned()
-  if task.is_empty() {
-    None
-  } else {
-    Some(task)
+  match values(matches, "prompt") {
+    [prompt, ..] if !prompt.trim().is_empty() => Some(prompt.trim().to_owned())
+    _ => None
   }
 }
 
@@ -332,7 +331,7 @@ async fn engine_launchable(engine : String) -> Bool {
 
 ///|
 /// Run the interactive terminal UI — the default mode of the `openseek` binary
-/// (bare `openseek`, `openseek "PROMPT"`, or the explicit `openseek tui`). `argv`
+/// (bare `openseek`, `openseek --prompt "…"`, or the explicit `openseek tui`). `argv`
 /// is the argument list after any `tui` selector and `env` the process
 /// environment; both come from the single-binary dispatcher in `cmd/openseek`.
 pub async fn run(argv~ : ArrayView[String], env~ : Map[String, String]) -> Unit {
@@ -438,9 +437,9 @@ test "cli parses and validates thinking controls" {
 }
 
 ///|
-test "cli accepts initial task and max steps" {
+test "cli accepts an initial prompt and max steps" {
   let parsed = cli_command().parse(
-    argv=["--max-steps", "5", "inspect", "project"],
+    argv=["--max-steps", "5", "--prompt", "inspect project"],
     env={ "DEEPSEEK": "test-key" },
   )
   assert_true(initial_task(parsed) == Some("inspect project"))
@@ -461,11 +460,9 @@ test "cli rejects unknown option before initial task" {
 }
 
 ///|
-test "cli accepts hyphen-leading initial task after option delimiter" {
-  let parsed = cli_command().parse(argv=["--", "--xxy", "he"], env={
-    "DEEPSEEK": "test-key",
-  })
-  assert_true(initial_task(parsed) == Some("--xxy he"))
+test "no --prompt means no initial task" {
+  let parsed = cli_command().parse(argv=[], env={ "DEEPSEEK": "test-key" })
+  assert_true(initial_task(parsed) is None)
 }
 
 ///|

@@ -3,8 +3,8 @@
 The OpenSeek terminal UI: a scrolling transcript with a live composer, built on
 the reusable [`tui`](../../tui/README.md) controller package. It ships as a
 library launched by the single `openseek` binary — it is the **default** mode
-(bare `openseek`, `openseek "PROMPT"`) and the explicit `openseek tui`
-subcommand. There is no separate `tui` executable.
+(bare `openseek`, or with an initial prompt via `openseek --prompt "…"`) and the
+explicit `openseek tui` subcommand. There is no separate `tui` executable.
 
 The UI runs no agent code itself. It spawns the `openseek` engine — by default
 this same binary, re-launched in `serve` mode (so the UI and engine can never
