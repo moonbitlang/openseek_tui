@@ -1,83 +1,125 @@
 ///|
-fn cli_command() -> @argparse.Command {
+/// Options shared by the UI and the headless engine (`--api-key`, `--model`, …).
+/// `cmd/openseek` installs these on the root command with `global=true`, so they
+/// read the same value in any position — bare `openseek`, `openseek --api-key k
+/// tui`, `openseek tui --api-key k` — and the engine subcommands inherit them
+/// rather than redeclaring (redeclaring a global is a build error). `--api-key`
+/// is not argparse-`required`: argparse enforces a parent's required options for
+/// *every* subcommand, which would wrongly block key-free subcommands like
+/// `sessions list`; presence is enforced in `parse_config`. `global` is a
+/// parameter so tests can build a standalone (non-global) `tui` command.
+pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] {
+  [
+    OptionArg(
+      "api-key",
+      long="api-key",
+      env="DEEPSEEK",
+      default_values=[""],
+      global~,
+      about="DeepSeek API key.",
+    ),
+    OptionArg(
+      "model",
+      long="model",
+      env="DEEPSEEK_MODEL",
+      default_values=[@deepseek.V4Pro.to_string()],
+      global~,
+      about="DeepSeek model: deepseek-v4-flash or deepseek-v4-pro.",
+    ),
+    OptionArg(
+      "api-url",
+      long="api-url",
+      env="OPENSEEK_API_URL",
+      default_values=[""],
+      global~,
+      about="DeepSeek-compatible chat completions endpoint.",
+    ),
+    OptionArg(
+      "max-steps",
+      long="max-steps",
+      env="OPENSEEK_MAX_STEPS",
+      default_values=["1000"],
+      global~,
+      about="Maximum number of agent loop steps before stopping.",
+    ),
+    OptionArg(
+      "thinking",
+      long="thinking",
+      env="OPENSEEK_THINKING",
+      default_values=["max"],
+      global~,
+      about="DeepSeek thinking mode: no, high, or max.",
+    ),
+    OptionArg(
+      "session",
+      long="session",
+      env="OPENSEEK_SESSION",
+      global~,
+      about="Create or resume this durable session id.",
+    ),
+    OptionArg(
+      "session-root",
+      long="session-root",
+      env="OPENSEEK_SESSION_ROOT",
+      default_values=[".openseek"],
+      global~,
+      about="Directory containing durable OpenSeek sessions.",
+    ),
+  ]
+}
+
+///|
+/// UI-only options — meaningless to the headless engine, so they live ONLY on
+/// the `tui` subcommand (not the root, not global). This keeps them out of the
+/// engine subcommands' help and, crucially, makes `openseek --prompt x run` a
+/// clean error instead of a silent no-op. Bare `openseek` (which re-dispatches
+/// through `tui`) still honors their env bindings; set them via `openseek tui …`.
+pub fn tui_ui_options() -> Array[@argparse.OptionArg] {
+  [
+    OptionArg(
+      "engine",
+      long="engine",
+      env="OPENSEEK_ENGINE",
+      about="Agent engine to spawn (default: this openseek binary); reads its JSONL event stream from stdout.",
+    ),
+    OptionArg(
+      "engine-mode",
+      long="engine-mode",
+      env="OPENSEEK_ENGINE_MODE",
+      default_values=["serve"],
+      about="Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines).",
+    ),
+    OptionArg(
+      "prompt",
+      long="prompt",
+      about="Initial prompt to send once the UI opens.",
+    ),
+  ]
+}
+
+///|
+/// The interactive UI's flags — UI-only, so not global (see `tui_ui_options`).
+pub fn tui_ui_flags() -> Array[@argparse.FlagArg] {
+  [
+    FlagArg(
+      "continue",
+      long="continue",
+      about="Resume the most recently active session in --session-root.",
+    ),
+  ]
+}
+
+///|
+/// A standalone `tui` command with every UI option declared directly
+/// (non-global), for unit tests that parse the UI in isolation. Production wires
+/// the shared options onto the root as globals and gives the `tui` subcommand only
+/// the UI-only ones (see `cmd/openseek`).
+pub fn cli_command() -> @argparse.Command {
   Command(
-    "openseek tui",
+    "tui",
     about="OpenSeek terminal UI.",
-    options=[
-      OptionArg(
-        "api-key",
-        long="api-key",
-        env="DEEPSEEK",
-        required=true,
-        about="DeepSeek API key.",
-      ),
-      OptionArg(
-        "model",
-        long="model",
-        env="DEEPSEEK_MODEL",
-        default_values=[@deepseek.V4Pro.to_string()],
-        about="DeepSeek model: deepseek-v4-flash or deepseek-v4-pro.",
-      ),
-      OptionArg(
-        "api-url",
-        long="api-url",
-        env="OPENSEEK_API_URL",
-        default_values=[""],
-        about="DeepSeek-compatible chat completions endpoint.",
-      ),
-      OptionArg(
-        "max-steps",
-        long="max-steps",
-        env="OPENSEEK_MAX_STEPS",
-        default_values=["1000"],
-        about="Maximum number of agent loop steps before stopping.",
-      ),
-      OptionArg(
-        "thinking",
-        long="thinking",
-        env="OPENSEEK_THINKING",
-        default_values=["max"],
-        about="DeepSeek thinking mode: no, high, or max.",
-      ),
-      OptionArg(
-        "engine",
-        long="engine",
-        env="OPENSEEK_ENGINE",
-        about="Agent engine to spawn (default: this openseek binary); reads its JSONL event stream from stdout.",
-      ),
-      OptionArg(
-        "engine-mode",
-        long="engine-mode",
-        env="OPENSEEK_ENGINE_MODE",
-        default_values=["serve"],
-        about="Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines).",
-      ),
-      OptionArg(
-        "session",
-        long="session",
-        env="OPENSEEK_SESSION",
-        about="Create or resume this durable session id.",
-      ),
-      OptionArg(
-        "session-root",
-        long="session-root",
-        env="OPENSEEK_SESSION_ROOT",
-        default_values=[".openseek"],
-        about="Directory containing durable OpenSeek sessions.",
-      ),
-      OptionArg(
-        "prompt",
-        long="prompt",
-        about="Initial prompt to send once the UI opens.",
-      ),
-    ],
-    flags=[
-      FlagArg(
-        "continue",
-        long="continue",
-        about="Resume the most recently active session in --session-root.",
-      ),
-    ],
+    options=[..tui_shared_options(), ..tui_ui_options()],
+    flags=tui_ui_flags(),
   )
 }
 
@@ -209,7 +251,14 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     [engine, ..] if !engine.trim().is_empty() => Some(engine)
     _ => None
   }
-  let engine_mode = EngineMode::parse(value(matches, "engine-mode"))
+  // `--engine-mode` is a UI-only option on the `tui` subcommand; a bare
+  // `openseek` (no subcommand) never has it, so read it gracefully.
+  let engine_mode = EngineMode::parse(
+    match values(matches, "engine-mode") {
+      [mode, ..] => mode
+      [] => "serve"
+    },
+  )
   // `oneshot` only makes sense for a custom/replay engine that cannot speak the
   // persistent `serve` protocol; re-launching ourselves in oneshot buys nothing
   // and loses steering/compaction, so require an explicit engine.
@@ -218,8 +267,13 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
       "--engine-mode oneshot requires an explicit --engine / OPENSEEK_ENGINE (it is for replay/custom engines)",
     )
   }
+  // Enforced here rather than via argparse `required`: see `tui_shared_options`.
+  let api_key = value(matches, "api-key")
+  if api_key.trim().is_empty() {
+    fail("a DeepSeek API key is required: pass --api-key or set DEEPSEEK")
+  }
   {
-    api_key: value(matches, "api-key"),
+    api_key,
     api_url: api_url(matches),
     model: @deepseek.Model::parse(value(matches, "model")),
     cwd,
@@ -330,12 +384,10 @@ async fn engine_launchable(engine : String) -> Bool {
 }
 
 ///|
-/// Run the interactive terminal UI — the default mode of the `openseek` binary
-/// (bare `openseek`, `openseek --prompt "…"`, or the explicit `openseek tui`). `argv`
-/// is the argument list after any `tui` selector and `env` the process
-/// environment; both come from the single-binary dispatcher in `cmd/openseek`.
-pub async fn run(argv~ : ArrayView[String], env~ : Map[String, String]) -> Unit {
-  let matches = cli_command().parse(argv~, env~)
+/// Run the interactive UI from already-parsed argparse `matches` — the top-level
+/// `openseek` command (in `cmd/openseek`) owns parsing and dispatches here for
+/// both the default (no subcommand) and the explicit `tui` subcommand.
+pub async fn run(matches : @argparse.Matches) -> Unit {
   let mut config = parse_config(matches)
   if continue_requested(matches) {
     config = with_latest_session(config)

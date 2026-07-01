@@ -1,8 +1,20 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "bobzhang/openseek/cmd/tui"
 
+import {
+  "moonbitlang/core/argparse",
+}
+
 // Values
-pub async fn run(argv~ : ArrayView[String], env~ : Map[String, String]) -> Unit
+pub fn cli_command() -> @argparse.Command
+
+pub async fn run(@argparse.Matches) -> Unit
+
+pub fn tui_shared_options(global? : Bool) -> Array[@argparse.OptionArg]
+
+pub fn tui_ui_flags() -> Array[@argparse.FlagArg]
+
+pub fn tui_ui_options() -> Array[@argparse.OptionArg]
 
 // Errors
 

@@ -17,30 +17,32 @@ API-backed examples live in [`tests/live/deepseek.md`](../live/deepseek.md).
 
 ```mooncram
 $ openseek.exe tui --help
-Usage: openseek tui --api-key <api-key> [options]
+Usage: openseek tui [options]
 
 OpenSeek terminal UI.
 
 Options:
   -h, --help                     Show help information.
-  --continue                     Resume the most recently active session in --session-root.
-  --api-key <api-key>            DeepSeek API key. [env: DEEPSEEK]
+  --api-key <api-key>            DeepSeek API key. [env: DEEPSEEK] [default: ]
   --model <model>                DeepSeek model: deepseek-v4-flash or deepseek-v4-pro. [env: DEEPSEEK_MODEL] [default: deepseek-v4-pro]
   --api-url <api-url>            DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
   --max-steps <max-steps>        Maximum number of agent loop steps before stopping. [env: OPENSEEK_MAX_STEPS] [default: 1000]
   --thinking <thinking>          DeepSeek thinking mode: no, high, or max. [env: OPENSEEK_THINKING] [default: max]
-  --engine <engine>              Agent engine to spawn (default: this openseek binary); reads its JSONL event stream from stdout. [env: OPENSEEK_ENGINE]
-  --engine-mode <engine-mode>    Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]
   --session <session>            Create or resume this durable session id. [env: OPENSEEK_SESSION]
   --session-root <session-root>  Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
+  --continue                     Resume the most recently active session in --session-root.
+  --engine <engine>              Agent engine to spawn (default: this openseek binary); reads its JSONL event stream from stdout. [env: OPENSEEK_ENGINE]
+  --engine-mode <engine-mode>    Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]
   --prompt <prompt>              Initial prompt to send once the UI opens.
 ```
 
 ## A DeepSeek API Key Is Required
 
 With no `--api-key` flag and no `DEEPSEEK` in the environment, the UI reports the
-missing required argument on stderr and exits non-zero — before the terminal UI
-ever starts.
+missing key on stderr and exits non-zero — before the terminal UI ever starts.
+(The key is validated in the UI path rather than via argparse `required`, so the
+root command can stay key-optional for offline engine subcommands like
+`sessions list`.)
 
 ```mooncram
 $ sh <<'EOF'
@@ -52,7 +54,7 @@ $ sh <<'EOF'
 > rm -f "$stdout" "$stderr"
 > EOF
 exit-non-zero
-error: the following required argument was not provided: 'api-key'
+error: a DeepSeek API key is required: pass --api-key or set DEEPSEEK
 stdout-empty
 ```
 
