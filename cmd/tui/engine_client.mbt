@@ -15,7 +15,7 @@ priv struct EngineProcess {
 }
 
 ///|
-/// The TUI's connection to one long-lived `--serve` engine process — the
+/// The TUI's connection to one long-lived `serve` engine process — the
 /// client half of the persistent-engine design.
 ///
 /// One engine serves every prompt of a TUI session: prompts, steers, and

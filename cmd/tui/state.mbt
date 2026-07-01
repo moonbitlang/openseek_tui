@@ -24,7 +24,7 @@ priv struct AppConfig {
 
 ///|
 /// How the TUI talks to its engine. `Serve` (the default) keeps one
-/// persistent `--serve` process per session — warm watchers, steering,
+/// persistent `serve` process per session — warm watchers, steering,
 /// polite cancel. `OneShot` spawns the engine once per prompt with the task
 /// as an argument: the escape hatch for replay or custom engines that only
 /// speak the original protocol; steering is unavailable there.
