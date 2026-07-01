@@ -11,9 +11,11 @@ import {
   "bobzhang/openseek/tui/doc",
   "bobzhang/openseek/tui/style",
   "moonbit-community/displaytext",
+  "moonbit-community/tty",
   "moonbitlang/async",
   "moonbitlang/async/os_error",
   "moonbitlang/async/process",
+  "moonbitlang/async/stdio",
   "moonbitlang/core/argparse",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",
@@ -28,7 +30,3 @@ import {
 warnings = "+missing_doc+test_unqualified_package+unnecessary_annotation+unnecessary_view_op+ambiguous_range_direction+unqualified_local_using"
 
 supported_targets = "+native"
-
-options(
-  "is-main": true,
-)

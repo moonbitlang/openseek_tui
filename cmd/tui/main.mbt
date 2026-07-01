@@ -1,7 +1,7 @@
 ///|
 fn cli_command() -> @argparse.Command {
   Command(
-    "openseek-tui",
+    "openseek tui",
     about="OpenSeek terminal UI.",
     options=[
       OptionArg(
@@ -297,8 +297,12 @@ async fn engine_launchable(engine : String) -> Bool {
 }
 
 ///|
-async fn main {
-  let matches = cli_command().parse(env=@env.get_env_vars())
+/// Run the interactive terminal UI — the default mode of the `openseek` binary
+/// (bare `openseek`, `openseek "PROMPT"`, or the explicit `openseek tui`). `argv`
+/// is the argument list after any `tui` selector and `env` the process
+/// environment; both come from the single-binary dispatcher in `cmd/openseek`.
+pub async fn run(argv~ : ArrayView[String], env~ : Map[String, String]) -> Unit {
+  let matches = cli_command().parse(argv~, env~)
   let mut config = parse_config(matches)
   if continue_requested(matches) {
     config = with_latest_session(config)
@@ -314,7 +318,30 @@ async fn main {
     )
     @sys.exit(1)
   }
+  // The UI takes over the terminal, so refuse when stdin/stdout is not a TTY (a
+  // pipe, CI log, or cron) — otherwise it would garble a non-interactive stream.
+  // Checked after parsing and the engine probe so `--help`, argument errors, and
+  // the engine-usability error still surface when piped.
+  guard is_tty(@stdio.stdin) && is_tty(@stdio.stdout) else {
+    // To stderr: this guard exists precisely to keep a piped/redirected stdout
+    // clean, so the diagnostic must not land on it.
+    @stdio.stderr.write(
+      "error: the interactive UI needs a terminal; run a headless task with `openseek run \"…\"` (or `openseek serve` for the JSONL protocol).\n",
+    ) catch {
+      _ => ()
+    }
+    @sys.exit(1)
+  }
   run_tui(config, initial_task(matches))
+}
+
+///|
+/// Whether `fd` is an interactive terminal; a probe error counts as "not a TTY"
+/// so a missing capability degrades to the headless guidance rather than crashes.
+fn[T : @tty.Fd] is_tty(fd : T) -> Bool {
+  @tty.isatty(fd) catch {
+    _ => false
+  }
 }
 
 ///|

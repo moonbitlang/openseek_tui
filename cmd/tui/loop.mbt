@@ -151,8 +151,11 @@ fn engine_env(
 }
 
 ///|
+/// One-shot engine invocation: `<engine> run -- <task>`. The `run` subcommand is
+/// the headless one-shot mode; `--` stops option parsing so a task starting with
+/// `-` is taken literally.
 fn engine_args(task : String) -> Array[String] {
-  ["--", task]
+  ["run", "--", task]
 }
 
 ///|

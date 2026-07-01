@@ -2,6 +2,7 @@
 package "bobzhang/openseek/cmd/tui"
 
 // Values
+pub async fn run(argv~ : ArrayView[String], env~ : Map[String, String]) -> Unit
 
 // Errors
 

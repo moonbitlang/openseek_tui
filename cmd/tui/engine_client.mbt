@@ -64,7 +64,7 @@ async fn[G] EngineClient::start(
   let proc = @process.spawn(
     group,
     self.config.engine,
-    ["--serve"],
+    ["serve"],
     inherit_env=false,
     extra_env=child_env,
     stdin=child_stdin,
