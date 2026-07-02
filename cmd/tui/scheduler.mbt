@@ -1,9 +1,13 @@
 ///|
-/// `/loop` — a recurring scheduled prompt, driven entirely by the TUI.
+/// `/loop` — a recurring scheduled prompt, driven entirely by the TUI (the
+/// engine never knows a scheduler exists; fires are ordinary prompt turns).
 ///
-/// This file holds the pure pieces of the scheduler: the interval grammar and
-/// the `/loop` argument parser. The countdown itself is `Tick`-message-driven
-/// (see `scheduler_tick`), so nothing here touches wall-clock time.
+/// The whole scheduler lives here: the interval/argument grammar, the armed
+/// `Schedule` and its bookkeeping (`scheduler_tick` on the 1/s heartbeat,
+/// `scheduler_on_run_end` at run terminals — nothing touches wall-clock
+/// time), the `/loop` command handler, and the single dispatch choke point
+/// `scheduler_maybe_fire`, which the message loop invokes once per drained
+/// batch and which fires only at a provably idle moment.
 
 ///|
 /// The floor for `/loop` intervals: an accidental `/loop 1 …` must not turn the
