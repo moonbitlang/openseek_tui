@@ -59,17 +59,15 @@ pub fn SlashCommands::get(
 pub fn SlashCommands::completion_items(
   self : SlashCommands,
 ) -> Array[@completion.CompletionItem] {
-  let items : Array[@completion.CompletionItem] = []
-  for command in self.0 {
-    items.push(
+  [
+    for command in self.0 => {
       @completion.CompletionItem::new(
         label="/\{command.name()}",
         insert_text=command.name(),
         description=command.description(),
-      ),
-    )
-  }
-  items
+      )
+    }
+  ]
 }
 
 ///|
