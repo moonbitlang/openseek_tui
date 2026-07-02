@@ -65,14 +65,9 @@ pub fn History::reset_navigation(self : History) -> Unit {
 /// Append `entry` (unless empty or a duplicate of the most recent one) and reset
 /// navigation to the fresh draft.
 pub fn History::push(self : History, entry : Entry) -> Unit {
-  if entry.text.length() > 0 {
-    if self.entries.last() is Some(last) {
-      if !last.same_as(entry) {
-        self.entries.push(entry)
-      }
-    } else {
-      self.entries.push(entry)
-    }
+  if entry.text.length() > 0 &&
+    !(self.entries.last() is Some(last) && last.same_as(entry)) {
+    self.entries.push(entry)
   }
   self.reset_navigation()
 }
