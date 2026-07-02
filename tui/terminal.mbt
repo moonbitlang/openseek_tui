@@ -141,18 +141,20 @@ pub fn Ui::columns(self : Self) -> Int {
 /// user — the composer is private to the UI, so the update loop cannot see
 /// any of this directly.
 pub fn Ui::input_idle(self : Self) -> Bool {
-  !self.submission_in_flight &&
+  self.pending_submissions == 0 &&
   self.composer.text().is_empty() &&
   self.composer.mode().is_input()
 }
 
 ///|
-/// The app's event reader confirms a submitted event has reached its message
-/// queue: any earlier submission is now visible to queue drains, so the
-/// mid-flight window is over. Called after every delivered event — the reader
-/// is sequential, so at most one submission is ever in flight.
+/// The app's event reader confirms one submitted event has reached its
+/// message queue and is visible to queue drains. Called once per delivered
+/// *submission* event (a prompt, queued input, or slash command) — rapid
+/// submits can stack several in the UI's internal event queue while the app
+/// loop is busy, so deliveries and submissions must pair one-to-one. The
+/// floor guards a spurious call; it must never mask a real pending submit.
 pub fn Ui::submission_delivered(self : Self) -> Unit {
-  self.submission_in_flight = false
+  self.pending_submissions = (self.pending_submissions - 1).max(0)
 }
 
 ///|

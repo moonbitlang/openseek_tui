@@ -183,8 +183,8 @@ async fn Ui::submit_slash_command(
   let text = slash_command_text(name~, arguments~)
   self.history.push(@history.Entry::new(text, self.composer.mode()))
   // Mid-flight until the app's queue receives the event (the redraw below
-  // awaits); see `submission_in_flight`.
-  self.submission_in_flight = true
+  // awaits); see `pending_submissions`.
+  self.pending_submissions += 1
   self.composer.reset()
   self.history.reset_navigation()
   self.notice = None

@@ -3,12 +3,15 @@ async fn read_ui_events(ui : @ui.Ui, messages : @async.Queue[Msg]) -> Unit {
   for ;; {
     let event = ui.read_event()
     messages.put(UiInput(event))
-    // The event is in the queue: any submission it (or an earlier event)
-    // carried is now visible to the message loop's drain, so the UI's
-    // mid-flight window can close. Unconditional on purpose — the reader is
-    // sequential, so by the time any later event lands here, every earlier
-    // submission is already delivered.
-    ui.submission_delivered()
+    // A delivered submission is now visible to the message loop's drain, so
+    // its slice of the UI's mid-flight window can close. Exactly the
+    // submission events pair with `pending_submissions` increments (both
+    // submit helpers emit precisely one of these three); other events must
+    // not decrement, or a rapid second Enter still sitting in the UI's
+    // internal event queue would be masked and a due /loop could overtake it.
+    if event is (Steer(_) | Queue(_) | SlashCommand(_)) {
+      ui.submission_delivered()
+    }
     if event is Quit {
       break
     }
