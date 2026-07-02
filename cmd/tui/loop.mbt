@@ -781,13 +781,27 @@ async fn[G] run_message_loop(
   let engine = EngineClient(state.config, messages)
   let mut running_task : @async.Task[Unit]? = None
   outer~: for ;; {
-    let message = messages.get()
-    let cmds = update(state, message)
-    // The `/loop` dispatch choke point: runs after every update, once lifecycle
-    // changes are applied and queued input has drained, with the one gate
-    // `update` cannot see — whether the user has draft text in the composer. A
-    // due fire appends its StartAgent here, after any command-context steer the
-    // update produced.
+    // Apply every message already enqueued before deciding anything further:
+    // `read_event` resets the composer before its UiInput reaches this queue,
+    // so a due `/loop` fire deciding on composer emptiness alone could
+    // overtake a just-pressed Enter still in flight (or a `/loop pause` racing
+    // the very fire it meant to prevent). Updates are synchronous — nothing
+    // new can arrive mid-drain — so after the drain the queue is provably
+    // empty and the composer check cannot contradict pending input.
+    let cmds : Array[Cmd] = []
+    let mut message = messages.get()
+    drain_updates~: for ;; {
+      cmds.append(update(state, message))
+      match messages.try_get() {
+        Some(next) => message = next
+        None => break drain_updates~
+      }
+    }
+    // The `/loop` dispatch choke point: runs once per drained batch, after
+    // lifecycle changes are applied and queued input has drained, with the one
+    // gate `update` cannot see — whether the user has draft text in the
+    // composer. A due fire appends its StartAgent here, after any
+    // command-context steer the updates produced.
     scheduler_maybe_fire(state, composer_empty=ui.composer_is_empty(), cmds)
     for cmd in cmds {
       match cmd {
