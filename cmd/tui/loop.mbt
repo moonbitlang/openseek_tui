@@ -141,7 +141,7 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
   {
     "DEEPSEEK": config.api_key,
     "OPENSEEK_API_URL": config.api_url.unwrap_or(""),
-    "DEEPSEEK_MODEL": config.model.to_string(),
+    "OPENSEEK_MODEL": config.model.to_string(),
     "OPENSEEK_MAX_STEPS": config.max_steps.to_string(),
     "OPENSEEK_THINKING": config.thinking.to_string(),
     "OPENSEEK_SESSION": config.session_id.value(),
