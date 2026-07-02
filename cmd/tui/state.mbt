@@ -91,6 +91,16 @@ priv struct State {
   // from the most recent `runtime_update` for the status bar. Empty until the
   // first watcher update arrives.
   mut watcher_status : String
+  // The `/loop` schedule, when one is armed. Bookkeeping (countdown, re-arm,
+  // pause) lives in `update`; dispatch happens only at the post-update choke
+  // point `scheduler_maybe_fire`, which also needs the composer state that
+  // `update` cannot see.
+  mut schedule : Schedule?
+  // Outstanding fire-and-forget background `!` commands (run alongside a live
+  // turn, `run_id=None`). Their completion hands command context to the engine,
+  // so a scheduled fire must wait for them or that context would leak into the
+  // scheduled turn instead of the conversation it belongs to.
+  mut background_commands : Int
 }
 
 ///|
@@ -108,6 +118,8 @@ fn State::new(config : AppConfig) -> State {
     streaming_reasoning: None,
     usage: None,
     watcher_status: "",
+    schedule: None,
+    background_commands: 0,
   }
 }
 

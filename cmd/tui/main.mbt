@@ -336,6 +336,10 @@ async fn run_tui(config : AppConfig, initial : String?) -> Unit {
         name="compact",
         description="summarize and compact the conversation",
       ),
+      @ui.SlashCommandSpec::new(
+        name="loop",
+        description="recurring prompt: /loop [--max <n>] <interval> <prompt> | off | status | pause | resume",
+      ),
     ]),
     ui => run_app(config, initial, ui),
   )

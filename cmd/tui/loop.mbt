@@ -447,18 +447,22 @@ fn handle_agent_event(
       if !already_appended && !answer.trim().is_empty() {
         cmds.push(AppendItem(Response(answer)))
       }
+      scheduler_on_run_end(state, LoopRunFinished, cmds)
       state.finish_run()
     }
     AgentAborted(reason) => {
       cmds.push(AppendItem(Error("aborted: \{reason}")))
+      scheduler_on_run_end(state, LoopRunFailed("was aborted"), cmds)
       state.finish_run()
     }
     MaxStepsExhausted => {
       cmds.push(AppendItem(Error("max steps exhausted")))
+      scheduler_on_run_end(state, LoopRunFailed("hit max steps"), cmds)
       state.finish_run()
     }
     AgentError(message) => {
       cmds.push(AppendItem(Error(message)))
+      scheduler_on_run_end(state, LoopRunFailed("errored"), cmds)
       state.finish_run()
     }
     // A rejected control command keeps the engine serving and carries no
@@ -551,6 +555,7 @@ fn handle_slash_command(
         cmds.push(AppendItem(Error("/exit does not accept arguments")))
       }
     "compact" => handle_compact_command(state, arguments, cmds)
+    "loop" => handle_loop_command(state, arguments, cmds)
     other => cmds.push(AppendItem(Error("Unknown slash command: /\{other}")))
   }
 }
@@ -636,7 +641,14 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
               // `$ command`, and that card is the only form persisted, so an
               // echo here would double the command line live and diverge from a
               // resumed session, which only re-renders the card.
-              Command(command) => cmds.push(RunCommand(run_id=None, command))
+              Command(command) => {
+                // Its eventual completion hands command context to the engine;
+                // a scheduled `/loop` fire must not slip in between (the
+                // context would land in the scheduled turn instead of this
+                // conversation), so track it as busy until the result arrives.
+                state.background_commands += 1
+                cmds.push(RunCommand(run_id=None, command))
+              }
             }
           }
         Queue(input) => state.queued.push(input)
@@ -667,6 +679,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     AgentProgress(event, ..) => handle_agent_event(state, event, cmds)
     AgentCancelled(..) => {
       cmds.push(AppendItem(Error("interrupted")))
+      scheduler_on_run_end(state, LoopRunFailed("was interrupted"), cmds)
       state.finish_run()
     }
     CommandCancelled(command~, ..) => {
@@ -675,6 +688,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     }
     AgentFailed(error, ..) => {
       cmds.push(AppendItem(Error("agent failed: \{error}")))
+      scheduler_on_run_end(state, LoopRunFailed("failed"), cmds)
       state.finish_run()
     }
     CommandResult(command~, run_id~, result) => {
@@ -691,9 +705,12 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       // finished, which the immediate card exists to avoid.
       cmds.push(AppendItem(command_item(command, result)))
       // Only a foreground command (launched while idle) owns the run slot; a
-      // background command running alongside a live agent turn must leave it be.
+      // background command running alongside a live agent turn must leave it be
+      // — it only releases its hold on the `/loop` fire gate.
       if run_id is Some(_) {
         state.finish_run()
+      } else {
+        state.background_commands = (state.background_commands - 1).max(0)
       }
       // Serve appends the `!` output as durable user-shell context at its
       // current session boundary. OneShot has no live engine session to append
@@ -719,10 +736,11 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // The engine process is gone, and its watchers with it: an old
     // `moon_check running` segment would be a lie on the status bar.
     EngineExited => state.watcher_status = ""
-    // No state change: Tick is a 1s heartbeat that just keeps the message loop
-    // turning so the trailing refresh_ui re-runs and the elapsed-time activity
-    // line ("Working (12s)") keeps advancing during quiet stretches.
-    Tick => ()
+    // Tick is a 1s heartbeat: it keeps the message loop turning so the trailing
+    // refresh_ui re-runs (the elapsed-time activity line keeps advancing during
+    // quiet stretches) and steps the `/loop` countdown. Bookkeeping only — a
+    // due schedule is dispatched at the post-update choke point.
+    Tick => scheduler_tick(state)
   }
   // One input runs at a time: whenever the TUI is idle and inputs are waiting,
   // start the next one. A prompt is dispatched to the agent engine; a `!` shell
