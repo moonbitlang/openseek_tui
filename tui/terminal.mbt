@@ -130,11 +130,14 @@ pub fn Ui::columns(self : Self) -> Int {
 }
 
 ///|
-/// Whether the composer holds no draft text. Lets a scheduler (e.g. `/loop`)
-/// avoid starting a turn under a user who is halfway through typing — the
-/// composer is private to the UI, so the update loop cannot see it directly.
+/// Whether the composer is in its untouched default state: no draft text and
+/// plain input mode. Shell mode counts as engaged even with an empty buffer —
+/// a user sitting at a bare `! ` prompt is still mid-composition. Lets a
+/// scheduler (e.g. `/loop`) avoid starting a turn under a user who is halfway
+/// through typing — the composer is private to the UI, so the update loop
+/// cannot see it directly.
 pub fn Ui::composer_is_empty(self : Self) -> Bool {
-  self.composer.text().is_empty()
+  self.composer.text().is_empty() && self.composer.mode().is_input()
 }
 
 ///|

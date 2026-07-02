@@ -413,3 +413,26 @@ test "loop status segment mirrors schedule state" {
   schedule.paused = true
   assert_eq(loop_segment_text(Some(schedule)), "⟳ paused")
 }
+
+///|
+test "loop segment precedes the clippable variable-length fields" {
+  // The status line clips at terminal width from the right; an armed loop's
+  // countdown must sit ahead of a long cwd so it cannot be pushed off-screen.
+  let state = armed_state("5m do x")
+  let segments = status_segments(state)
+  let loop_index = for index, segment in segments {
+    if segment.text.has_prefix("⟳") {
+      break index
+    }
+  } nobreak {
+    fail("expected the loop segment")
+  }
+  let cwd_index = for index, segment in segments {
+    if segment.text == state.config.cwd {
+      break index
+    }
+  } nobreak {
+    fail("expected the cwd segment")
+  }
+  assert_true(loop_index < cwd_index)
+}

@@ -36,6 +36,13 @@ fn status_segments(state : State) -> Array[Segment] {
       text: state.config.model.to_string(),
       style: Style(foreground=Basic(Yellow)),
     },
+    // The loop slot sits ahead of the variable-length fields: the status line
+    // clips at the terminal width from the right, so a long cwd must not be
+    // able to push an armed loop's countdown out of view.
+    {
+      text: loop_segment_text(state.schedule),
+      style: Style(foreground=Basic(Blue)),
+    },
     { text: state.config.cwd, style: Style(foreground=Basic(Green)) },
     {
       text: format_usage_segment(state.usage),
@@ -44,10 +51,6 @@ fn status_segments(state : State) -> Array[Segment] {
     {
       text: watcher_segment_text(state.watcher_status),
       style: Style(foreground=Basic(Cyan)),
-    },
-    {
-      text: loop_segment_text(state.schedule),
-      style: Style(foreground=Basic(Blue)),
     },
   ]
 }
