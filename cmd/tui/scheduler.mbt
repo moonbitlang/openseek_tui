@@ -314,11 +314,12 @@ fn parse_loop_interval(text : StringView) -> Int? {
     (text, 1)
   }
   guard parse_loop_number(digits) is Some(value) else { return None }
-  let seconds = value * unit
-  if seconds > MaxLoopIntervalSecs {
+  // Bound before multiplying: `604800h * 3600` would overflow Int and wrap
+  // negative, dodging a post-multiplication ceiling check entirely.
+  if value > MaxLoopIntervalSecs / unit {
     None
   } else {
-    Some(seconds)
+    Some(value * unit)
   }
 }
 

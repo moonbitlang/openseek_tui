@@ -16,6 +16,12 @@ test "loop interval grammar" {
   assert_true(parse_loop_interval("m") is None)
   assert_true(parse_loop_interval("999999999") is None)
   assert_true(parse_loop_interval("200h") is None)
+  // Would overflow Int if multiplied before the ceiling check.
+  assert_true(parse_loop_interval("604800h") is None)
+  assert_true(parse_loop_interval("604800m") is None)
+  // The exact ceiling itself is accepted.
+  assert_true(parse_loop_interval("604800") is Some(604_800))
+  assert_true(parse_loop_interval("168h") is Some(604_800))
 }
 
 ///|
