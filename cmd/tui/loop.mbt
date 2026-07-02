@@ -139,7 +139,7 @@ fn engine_exit_without_result(
 ///|
 fn engine_extra_env(config : AppConfig) -> Map[String, String] {
   {
-    "DEEPSEEK": config.api_key,
+    "OPENSEEK_API_KEY": config.api_key,
     "OPENSEEK_API_URL": config.api_url.unwrap_or(""),
     "OPENSEEK_MODEL": config.model.to_string(),
     "OPENSEEK_MAX_STEPS": config.max_steps.to_string(),

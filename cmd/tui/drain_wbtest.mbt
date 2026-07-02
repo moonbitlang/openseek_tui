@@ -96,6 +96,7 @@ test "engine configuration travels through the environment" {
   assert_eq(session_id, "test")
   assert_eq(session_root, ".openseek")
   assert_eq(dir, ".")
+  assert_true(env.get("OPENSEEK_API_KEY") == Some(config.api_key))
   assert_true(env.get("OPENSEEK_THINKING") == Some("max"))
   assert_true(
     env.get("OPENSEEK_API_URL") ==

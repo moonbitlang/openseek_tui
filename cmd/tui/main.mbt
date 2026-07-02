@@ -13,10 +13,18 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
     OptionArg(
       "api-key",
       long="api-key",
-      env="DEEPSEEK",
+      env="OPENSEEK_API_KEY",
       default_values=[""],
       global~,
-      about="DeepSeek API key.",
+      about="API key for the selected chat provider.",
+    ),
+    OptionArg(
+      "kimi-api-key",
+      long="kimi-api-key",
+      env="KIMI",
+      default_values=[""],
+      global~,
+      hidden=true,
     ),
     OptionArg(
       "model",
@@ -268,14 +276,12 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     )
   }
   // Enforced here rather than via argparse `required`: see `tui_shared_options`.
-  let api_key = value(matches, "api-key")
-  if api_key.trim().is_empty() {
-    fail("a DeepSeek API key is required: pass --api-key or set DEEPSEEK")
-  }
+  let model = @deepseek.Model::parse(value(matches, "model"))
+  let api_key = api_key_for_model(matches, model)
   {
     api_key,
     api_url: api_url(matches),
-    model: @deepseek.Model::parse(value(matches, "model")),
+    model,
     cwd,
     max_steps: parse_positive_int(value(matches, "max-steps"), "--max-steps"),
     // Parsed eagerly so a typo fails at launch with a CLI error instead of
@@ -430,8 +436,51 @@ fn[T : @tty.Fd] is_tty(fd : T) -> Bool {
 }
 
 ///|
+fn uses_kimi_api_key_fallback(model : @deepseek.Model) -> Bool {
+  match model {
+    KimiK27Code | KimiK27CodeHighSpeed => true
+    V4Flash | V4Pro => false
+  }
+}
+
+///|
+fn non_empty_value(matches : @argparse.Matches, name : String) -> String? raise {
+  let key = value(matches, name).trim()
+  if key.is_empty() {
+    None
+  } else {
+    Some("\{key}")
+  }
+}
+
+///|
+fn api_key_for_model(
+  matches : @argparse.Matches,
+  model : @deepseek.Model,
+) -> String raise {
+  match non_empty_value(matches, "api-key") {
+    Some(key) => return key
+    None => ()
+  }
+  if uses_kimi_api_key_fallback(model) {
+    match non_empty_value(matches, "kimi-api-key") {
+      Some(key) => return key
+      None => ()
+    }
+  }
+  if uses_kimi_api_key_fallback(model) {
+    fail(
+      "an API key is required for Kimi models: pass --api-key or set OPENSEEK_API_KEY or KIMI",
+    )
+  }
+  fail("an API key is required: pass --api-key or set OPENSEEK_API_KEY")
+}
+
+///|
 test "cli accepts no initial task" {
-  let parsed = cli_command().parse(argv=[], env={ "DEEPSEEK": "test-key" })
+  let parsed = cli_command().parse(argv=[], env={
+    "OPENSEEK_API_KEY": "test-key",
+  })
   assert_true(initial_task(parsed) is None)
   let config = parse_config(parsed)
   assert_eq(config.api_key, "test-key")
@@ -449,13 +498,32 @@ test "cli accepts no initial task" {
 ///|
 test "cli parses api url" {
   let parsed = cli_command().parse(argv=[], env={
-    "DEEPSEEK": "test-key",
+    "OPENSEEK_API_KEY": "test-key",
     "OPENSEEK_API_URL": " https://proxy.example/v1/chat/completions ",
   })
   guard parse_config(parsed).api_url is Some(url) else {
     fail("expected api url")
   }
   assert_eq(url, "https://proxy.example/v1/chat/completions")
+}
+
+///|
+test "cli uses KIMI only for Kimi models" {
+  let kimi = cli_command().parse(argv=[], env={
+    "KIMI": "kimi-key",
+    "OPENSEEK_MODEL": "kimi-k2.7-code-highspeed",
+  })
+  let kimi_config = parse_config(kimi)
+  assert_eq(kimi_config.api_key, "kimi-key")
+  assert_true(kimi_config.model is KimiK27CodeHighSpeed)
+  let deepseek = cli_command().parse(argv=[], env={ "KIMI": "kimi-key" })
+  let _ = parse_config(deepseek) catch {
+    error => {
+      assert_true("\{error}".contains("OPENSEEK_API_KEY"))
+      return
+    }
+  }
+  fail("KIMI was accepted for a DeepSeek model")
 }
 
 ///|
@@ -472,12 +540,12 @@ test "generated session ids are timestamped and directory-safe" {
 ///|
 test "cli parses and validates thinking controls" {
   let parsed = cli_command().parse(argv=["--thinking", "high"], env={
-    "DEEPSEEK": "test-key",
+    "OPENSEEK_API_KEY": "test-key",
   })
   let config = parse_config(parsed)
   assert_true(config.thinking is High)
   let bad = cli_command().parse(argv=["--thinking", "sometimes"], env={
-    "DEEPSEEK": "test-key",
+    "OPENSEEK_API_KEY": "test-key",
   })
   let _ = parse_config(bad) catch {
     error => {
@@ -492,7 +560,7 @@ test "cli parses and validates thinking controls" {
 test "cli accepts an initial prompt and max steps" {
   let parsed = cli_command().parse(
     argv=["--max-steps", "5", "--prompt", "inspect project"],
-    env={ "DEEPSEEK": "test-key" },
+    env={ "OPENSEEK_API_KEY": "test-key" },
   )
   assert_true(initial_task(parsed) == Some("inspect project"))
   assert_eq(parse_config(parsed).max_steps, 5)
@@ -501,7 +569,7 @@ test "cli accepts an initial prompt and max steps" {
 ///|
 test "cli rejects unknown option before initial task" {
   let _ = cli_command().parse(argv=["--xxy", "he"], env={
-    "DEEPSEEK": "test-key",
+    "OPENSEEK_API_KEY": "test-key",
   }) catch {
     error => {
       assert_true("\{error}".contains("unexpected argument '--xxy' found"))
@@ -513,7 +581,9 @@ test "cli rejects unknown option before initial task" {
 
 ///|
 test "no --prompt means no initial task" {
-  let parsed = cli_command().parse(argv=[], env={ "DEEPSEEK": "test-key" })
+  let parsed = cli_command().parse(argv=[], env={
+    "OPENSEEK_API_KEY": "test-key",
+  })
   assert_true(initial_task(parsed) is None)
 }
 
@@ -521,7 +591,7 @@ test "no --prompt means no initial task" {
 test "cli accepts session configuration" {
   let parsed = cli_command().parse(
     argv=["--session", "demo", "--session-root", "/tmp/openseek-sessions"],
-    env={ "DEEPSEEK": "test-key" },
+    env={ "OPENSEEK_API_KEY": "test-key" },
   )
   let config = parse_config(parsed)
   assert_eq(config.session_id.value(), "demo")
@@ -532,7 +602,7 @@ test "cli accepts session configuration" {
 test "cli rejects empty session root when session is active" {
   let parsed = cli_command().parse(
     argv=["--session", "demo", "--session-root", ""],
-    env={ "DEEPSEEK": "test-key" },
+    env={ "OPENSEEK_API_KEY": "test-key" },
   )
   let _ = parse_config(parsed) catch {
     error => {
@@ -546,12 +616,12 @@ test "cli rejects empty session root when session is active" {
 ///|
 test "cli accepts --continue and rejects combining it with --session" {
   let parsed = cli_command().parse(argv=["--continue"], env={
-    "DEEPSEEK": "test-key",
+    "OPENSEEK_API_KEY": "test-key",
   })
   assert_true(continue_requested(parsed))
   let conflicted = cli_command().parse(
     argv=["--continue", "--session", "demo"],
-    env={ "DEEPSEEK": "test-key" },
+    env={ "OPENSEEK_API_KEY": "test-key" },
   )
   let _ = continue_requested(conflicted) catch {
     error => {
@@ -585,13 +655,13 @@ test "default_engine re-launches a path argv0 and falls back to PATH otherwise" 
 async test "engine defaults to this binary; --engine/OPENSEEK_ENGINE override it" {
   // No --engine and no env: fall through to re-launching this binary.
   let default_cfg = parse_config(
-    cli_command().parse(argv=[], env={ "DEEPSEEK": "k" }),
+    cli_command().parse(argv=[], env={ "OPENSEEK_API_KEY": "k" }),
   )
   assert_eq(default_cfg.engine, default_engine(@sys.get_cli_args()))
   // OPENSEEK_ENGINE is treated as an explicit engine.
   let env_cfg = parse_config(
     cli_command().parse(argv=[], env={
-      "DEEPSEEK": "k",
+      "OPENSEEK_API_KEY": "k",
       "OPENSEEK_ENGINE": "./fake-engine",
     }),
   )
@@ -602,7 +672,7 @@ async test "engine defaults to this binary; --engine/OPENSEEK_ENGINE override it
 async test "oneshot engine mode requires an explicit engine" {
   let _ = parse_config(
     cli_command().parse(argv=["--engine-mode", "oneshot"], env={
-      "DEEPSEEK": "k",
+      "OPENSEEK_API_KEY": "k",
     }),
   ) catch {
     error => {
@@ -618,14 +688,14 @@ async test "oneshot with an explicit engine (flag or env) is accepted" {
   let flag_cfg = parse_config(
     cli_command().parse(
       argv=["--engine-mode", "oneshot", "--engine", "./fake-engine"],
-      env={ "DEEPSEEK": "k" },
+      env={ "OPENSEEK_API_KEY": "k" },
     ),
   )
   assert_true(flag_cfg.engine_mode is OneShot)
   assert_eq(flag_cfg.engine, "./fake-engine")
   let env_cfg = parse_config(
     cli_command().parse(argv=[], env={
-      "DEEPSEEK": "k",
+      "OPENSEEK_API_KEY": "k",
       "OPENSEEK_ENGINE": "./fake-engine",
       "OPENSEEK_ENGINE_MODE": "oneshot",
     }),
@@ -636,7 +706,7 @@ async test "oneshot with an explicit engine (flag or env) is accepted" {
 ///|
 test "cli overrides the engine binary" {
   let parsed = cli_command().parse(argv=["--engine", "./fake-engine"], env={
-    "DEEPSEEK": "test-key",
+    "OPENSEEK_API_KEY": "test-key",
   })
   assert_eq(parse_config(parsed).engine, "./fake-engine")
 }
