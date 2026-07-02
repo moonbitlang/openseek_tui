@@ -154,6 +154,17 @@ fn scheduler_maybe_fire(
     input_idle else {
     return
   }
+  // Never fire into a batch that is tearing something down: a drained batch
+  // can hold a second Ctrl-C's KillEngine (or a Quit) together with the dying
+  // run's terminal event, leaving `run` idle here — but a StartAgent appended
+  // now would execute right after the kill and prompt a dead engine (or an
+  // exiting TUI). Let the teardown land; the fire stays due for the next
+  // batch.
+  for cmd in cmds {
+    if cmd is (CancelAgent | KillEngine | Quit) {
+      return
+    }
+  }
   let run_id = state.start_run(@async.now())
   schedule.fired_run_id = Some(run_id)
   // Attribution lives in the notice; the prompt itself is echoed — and reaches
@@ -188,6 +199,23 @@ fn format_loop_interval(seconds : Int) -> String {
     parts.push("\{secs}s")
   }
   parts.join("")
+}
+
+///|
+/// The `/loop status` phrase for where the schedule stands. A due-but-deferred
+/// fire is reported as exactly that — inventing a "next in 1s" would conflict
+/// with the status bar's `⟳ due` and could stay false indefinitely while the
+/// loop waits out a long run.
+fn loop_status_position(schedule : Schedule) -> String {
+  if schedule.fired_run_id is Some(_) {
+    "running now"
+  } else if schedule.paused {
+    "paused"
+  } else if schedule.remaining_secs == 0 {
+    "due, waiting for an idle moment"
+  } else {
+    "next in \{format_loop_interval(schedule.remaining_secs)}"
+  }
 }
 
 ///|
@@ -231,13 +259,7 @@ fn handle_loop_command(
     Ok(Status) =>
       match state.schedule {
         Some(schedule) => {
-          let position = if schedule.fired_run_id is Some(_) {
-            "running now"
-          } else if schedule.paused {
-            "paused"
-          } else {
-            "next in \{format_loop_interval(schedule.remaining_secs.max(1))}"
-          }
+          let position = loop_status_position(schedule)
           cmds.push(
             AppendItem(
               command_notice(

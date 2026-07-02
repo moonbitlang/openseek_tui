@@ -442,3 +442,47 @@ test "loop segment precedes the clippable variable-length fields" {
   }
   assert_true(loop_index < cwd_index)
 }
+
+///|
+test "a due loop never fires into a teardown batch" {
+  let state = armed_state("30s do x")
+  guard state.schedule is Some(schedule) else { fail("expected a schedule") }
+  schedule.remaining_secs = 0
+  // The drained batch carries a KillEngine (second Ctrl-C) alongside the dying
+  // run's terminal: run is idle again, but firing now would prompt a process
+  // the same batch kills.
+  let killing : Array[Cmd] = [KillEngine]
+  scheduler_maybe_fire(state, input_idle=true, killing)
+  assert_eq(start_agent_count(killing), 0)
+  let cancelling : Array[Cmd] = [CancelAgent]
+  scheduler_maybe_fire(state, input_idle=true, cancelling)
+  assert_eq(start_agent_count(cancelling), 0)
+  let quitting : Array[Cmd] = [Quit]
+  scheduler_maybe_fire(state, input_idle=true, quitting)
+  assert_eq(start_agent_count(quitting), 0)
+  // The fire stayed due: a clean batch dispatches it.
+  let clean : Array[Cmd] = []
+  scheduler_maybe_fire(state, input_idle=true, clean)
+  assert_eq(start_agent_count(clean), 1)
+}
+
+///|
+test "loop status reports a deferred fire as due" {
+  let schedule : Schedule = {
+    prompt: "do x",
+    interval_secs: 30,
+    max_fires: 20,
+    remaining_secs: 30,
+    fires: 0,
+    paused: false,
+    fired_run_id: None,
+  }
+  assert_eq(loop_status_position(schedule), "next in 30s")
+  schedule.remaining_secs = 0
+  assert_eq(loop_status_position(schedule), "due, waiting for an idle moment")
+  schedule.fired_run_id = Some(3)
+  assert_eq(loop_status_position(schedule), "running now")
+  schedule.fired_run_id = None
+  schedule.paused = true
+  assert_eq(loop_status_position(schedule), "paused")
+}
