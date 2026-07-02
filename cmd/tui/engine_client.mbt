@@ -134,12 +134,11 @@ async fn[G] EngineClient::start(
     // only ever sees its own process's bookkeeping.
     if engine.run_open {
       let diagnostics = stderr_task.wait().trim()
-      let detail = if diagnostics.is_empty() { "" } else { ":\n\{diagnostics}" }
       engine.run_open = false
       self.messages.put(
         AgentProgress(
           run_id=engine.latest_run,
-          AgentError("engine exited (code \{code}) without a result\{detail}"),
+          engine_exit_without_result(code, diagnostics),
         ),
       )
     }

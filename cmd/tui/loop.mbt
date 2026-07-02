@@ -125,6 +125,18 @@ fn is_terminal_event(event : @event.AgentEvent) -> Bool {
 }
 
 ///|
+/// The `AgentError` for an engine that closed its stdout without a terminal
+/// event: the exit `code` plus the captured stderr `diagnostics` (already
+/// trimmed) as detail, or no detail when there were none.
+fn engine_exit_without_result(
+  code : Int,
+  diagnostics : StringView,
+) -> @event.AgentEvent {
+  let detail = if diagnostics.is_empty() { "" } else { ":\n\{diagnostics}" }
+  AgentError("engine exited (code \{code}) without a result\{detail}")
+}
+
+///|
 fn engine_extra_env(config : AppConfig) -> Map[String, String] {
   {
     "DEEPSEEK": config.api_key,
@@ -238,12 +250,8 @@ async fn run_agent_task(
       // The engine produced no terminal event. Its stderr is the only clue to
       // why (a crash, a network/API error), so fold it into the reported error.
       let diagnostics = stderr_task.wait().trim()
-      let detail = if diagnostics.is_empty() { "" } else { ":\n\{diagnostics}" }
       messages.put(
-        AgentProgress(
-          run_id~,
-          AgentError("engine exited (code \{code}) without a result\{detail}"),
-        ),
+        AgentProgress(run_id~, engine_exit_without_result(code, diagnostics)),
       )
     }
   }) catch {

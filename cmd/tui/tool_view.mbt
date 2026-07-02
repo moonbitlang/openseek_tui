@@ -27,15 +27,7 @@ fn compact_lines(source : String, limit : Int) -> Array[String] {
   let head = limit / 2
   let tail = limit - head - 1
   let omitted = lines.length() - head - tail
-  let compacted : Array[String] = []
-  for index in 0..<head {
-    compacted.push(lines[index])
-  }
-  compacted.push("... +\{omitted} lines")
-  for index in (lines.length() - tail)..<lines.length() {
-    compacted.push(lines[index])
-  }
-  compacted
+  [..lines[:head], "... +\{omitted} lines", ..lines[lines.length() - tail:]]
 }
 
 ///|

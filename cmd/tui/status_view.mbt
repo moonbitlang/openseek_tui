@@ -152,8 +152,7 @@ fn streaming_activity_spans(
 fn format_activity_text(state : State, cols~ : Int) -> @doc.Text? {
   let started_ms = match state.run {
     Idle => return None
-    Running(started_ms) => started_ms
-    Interrupting(started_ms) => started_ms
+    Running(started_ms) | Interrupting(started_ms) => started_ms
   }
   let steer_segment = pending_steer_segment(state.pending_steers)
   // The acknowledgment sits at the row's end, where the renderer clips on
