@@ -347,6 +347,21 @@ async fn draw_surface_line_at(
 }
 
 ///|
+/// Repaint every terminal row in `top..=bottom` straight from `frame`, with no
+/// diffing. Rows past the frame's own height resolve to `None` and are cleared.
+/// The caller controls auto-wrap around the batch.
+async fn draw_frame_rows(
+  tty : @tty.Tty,
+  frame : PlacedSurface,
+  top~ : Int,
+  bottom~ : Int,
+) -> Unit {
+  for row in top..<=bottom {
+    draw_surface_line_at(tty, row, frame.line_at_terminal_row(row~))
+  }
+}
+
+///|
 /// Run `body` with the terminal's scroll region (DECSTBM margins) temporarily
 /// restricted to rows `top..=bottom`, then restore the full-screen region.
 ///
@@ -444,9 +459,7 @@ async fn enter_placed_surface_rows(
   // leaving the cursor hidden would break `with_ui`'s restore-on-error promise.
   try {
     without_auto_wrap(tty, () => {
-      for row in frame.top..<(frame.top + height) {
-        draw_surface_line_at(tty, row, frame.line_at_terminal_row(row~))
-      }
+      draw_frame_rows(tty, frame, top=frame.top, bottom=frame.top + height - 1)
     })
     place_cursor(tty, frame)
   } catch {
@@ -513,9 +526,7 @@ async fn Viewport::redraw_uncached_placed_surface_rows(
   guard draw_top <= draw_bottom else { return }
   tty.hide_cursor()
   without_auto_wrap(tty, () => {
-    for row in draw_top..<=draw_bottom {
-      draw_surface_line_at(tty, row, new_frame.line_at_terminal_row(row~))
-    }
+    draw_frame_rows(tty, new_frame, top=draw_top, bottom=draw_bottom)
   })
   place_cursor(tty, new_frame)
 }
@@ -550,9 +561,7 @@ pub async fn Viewport::replay_scrollback(
   let frame = PlacedSurface::{ surface, top: self.top() }
   let bottom = self.bottom()
   without_auto_wrap(tty, () => {
-    for row in self.top()..<=bottom {
-      draw_surface_line_at(tty, row, frame.line_at_terminal_row(row~))
-    }
+    draw_frame_rows(tty, frame, top=self.top(), bottom~)
     if bottom < self.size.rows() {
       for row in (bottom + 1)..<=self.size.rows() {
         draw_surface_line_at(tty, row, None)
@@ -686,8 +695,8 @@ async fn Viewport::shift_down_for_insert(
 ) -> Int {
   let top = self.top()
   let space = self.size.rows() - self.bottom()
-  let available = if space < 0 { 0 } else { space }
-  let shift = if lines < available { lines } else { available }
+  let available = @cmp.maximum(space, 0)
+  let shift = @cmp.minimum(lines, available)
   if shift > 0 {
     with_scroll_region(tty, top, self.size.rows(), () => {
       tty.set_cursor_position(top, 1)
