@@ -60,12 +60,10 @@ pub fn sanitize_lines(text : String) -> Array[@displaytext.DisplayText] {
 /// use this so a multi-line value never writes a newline to the terminal while
 /// the surface still counts it as one row.
 pub fn sanitize_oneline(text : String) -> @displaytext.DisplayText {
-  let lines = sanitize_lines(text)
-  guard lines is [first, ..] else { return DisplayText("") }
-  if lines.length() > 1 {
-    DisplayText("\{first.text()} …")
-  } else {
-    first
+  match sanitize_lines(text) {
+    [] => DisplayText("")
+    [first] => first
+    [first, ..] => DisplayText("\{first.text()} …")
   }
 }
 
