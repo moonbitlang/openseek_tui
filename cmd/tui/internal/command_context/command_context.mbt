@@ -49,7 +49,7 @@ pub fn encode(
     Ok(result) => shell_result_text(result)
     Err(error) => "error running shell: \{error}"
   }
-  let text =
+  (
     $|<user_shell_command>
     $|<command>
     $|\{command}
@@ -58,7 +58,7 @@ pub fn encode(
     $|\{result_text}
     $|</result>
     $|</user_shell_command>
-  text
+  )
 }
 
 ///|
@@ -102,23 +102,20 @@ fn exit_header(exit_code : Int?) -> String {
 fn shell_result_text(result : @shell.ShellOutput) -> String {
   if result.output_limit_reached {
     let shown_chars = result.text.char_length()
-    let text =
+    (
       $|\{exit_header(result.exit_code)}
       $|truncated=true
       $|output_limit_reached=true
       $|shown_chars=\{shown_chars}
       $|max_output_chars=\{shown_chars}
       $|\{result.text}
-    text
+    )
   } else {
-    let code = match result.exit_code {
-      Some(code) => code
-      None => 0
-    }
-    let text =
+    let code = result.exit_code.unwrap_or(0)
+    (
       $|exit=\{code}
       $|\{result.text}
-    text
+    )
   }
 }
 
