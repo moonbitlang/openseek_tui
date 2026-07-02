@@ -28,17 +28,23 @@ fn CompletionState::reset(self : CompletionState) -> Unit {
 }
 
 ///|
+/// The composer's text when it holds a single-line entry in input mode — the
+/// precondition shared by completion, slash-command parsing, and slash-entry
+/// detection. None in shell mode or for multi-line input, neither of which is a
+/// slash context.
+fn single_line_input_text(composer : @composer.Model) -> String? {
+  guard composer.mode().is_input() else { return None }
+  let text = composer.text()
+  guard !text.contains("\n") else { return None }
+  Some(text)
+}
+
+///|
 fn completion_menu_for_composer(
   commands : @slash.SlashCommands,
   composer : @composer.Model,
 ) -> CompletionMenu? {
-  if !composer.mode().is_input() {
-    return None
-  }
-  let text = composer.text()
-  if text.contains("\n") {
-    return None
-  }
+  guard single_line_input_text(composer) is Some(text) else { return None }
   guard text.strip_prefix("/") is Some(rest) else { return None }
   let rest = rest.to_owned()
   // A doubled leading slash (`//`, `//e`) is not a command-name prefix: the
@@ -80,13 +86,7 @@ fn slash_command_invocation_for_composer(
   if commands.is_empty() {
     return None
   }
-  if !composer.mode().is_input() {
-    return None
-  }
-  let text = composer.text()
-  if text.contains("\n") {
-    return None
-  }
+  guard single_line_input_text(composer) is Some(text) else { return None }
   @slash.SlashCommandInvocation::parse(text)
 }
 
@@ -226,13 +226,7 @@ fn composer_is_slash_entry(
   if commands.is_empty() {
     return false
   }
-  if !composer.mode().is_input() {
-    return false
-  }
-  let text = composer.text()
-  if text.contains("\n") {
-    return false
-  }
+  guard single_line_input_text(composer) is Some(text) else { return false }
   text.has_prefix("/")
 }
 

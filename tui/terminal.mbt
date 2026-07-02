@@ -48,11 +48,7 @@ async fn Ui::redraw(self : Self) -> Unit {
 /// are visually spaced apart (matching the Codex TUI). The separator is plain,
 /// outside any item background block.
 fn item_rows(doc : @doc.Doc, cols~ : Int) -> Array[@surface.Line] {
-  let rows : Array[@surface.Line] = [@surface.Line::new([])]
-  for row in doc.layout(width=cols) {
-    rows.push(row)
-  }
-  rows
+  [@surface.Line::new([]), ..doc.layout(width=cols)]
 }
 
 ///|
