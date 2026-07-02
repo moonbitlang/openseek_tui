@@ -139,18 +139,13 @@ pub fn cli_command() -> @argparse.Command {
 }
 
 ///|
-fn flag(matches : @argparse.Matches, name : String) -> Bool {
-  matches.flags.get(name) is Some(true)
-}
-
-///|
 /// Whether `--continue` asked to resume the latest session. Rejects the
 /// combination with an explicit `--session`: the flags give two different
 /// answers to "which conversation", and silently preferring either would
 /// surprise whoever typed the other.
 fn continue_requested(matches : @argparse.Matches) -> Bool raise {
-  let continue_flag = flag(matches, "continue")
-  if continue_flag && session_id(matches) is Some(_) {
+  let continue_flag = @cli.flag(matches, "continue")
+  if continue_flag && @agentcli.session_id(matches) is Some(_) {
     fail(
       "--continue resumes the latest session; it cannot be combined with --session",
     )
@@ -170,62 +165,10 @@ async fn with_latest_session(config : AppConfig) -> AppConfig {
 }
 
 ///|
-fn value(matches : @argparse.Matches, name : String) -> String raise {
-  match matches.values.get(name) {
-    Some([value, ..]) => value
-    _ => fail("missing parsed argument: \{name}")
-  }
-}
-
-///|
-fn values(matches : @argparse.Matches, name : String) -> Array[String] {
-  match matches.values.get(name) {
-    Some(values) => values
-    None => []
-  }
-}
-
-///|
-fn parse_positive_int(input : String, label : String) -> Int raise {
-  let parsed = @string.parse_int(input) catch {
-    _ => fail("\{label} must be a positive integer, got: \{input}")
-  }
-  guard parsed > 0 else {
-    fail("\{label} must be a positive integer, got: \{input}")
-  }
-  parsed
-}
-
-///|
-fn api_url(matches : @argparse.Matches) -> String? raise {
-  let url = value(matches, "api-url").trim().to_owned()
-  if url.is_empty() {
-    None
-  } else {
-    Some(url)
-  }
-}
-
-///|
-fn session_id(matches : @argparse.Matches) -> @agent_session.SessionId? {
-  let session = match values(matches, "session") {
-    [session, ..] => "\{session.trim()}"
-    [] => ""
-  }
-  if session.is_empty() {
-    None
-  } else {
-    Some(SessionId(session))
-  }
-}
-
-///|
 fn session_root(matches : @argparse.Matches) -> String raise {
-  let root = value(matches, "session-root").trim().to_owned()
-  if root.is_empty() {
-    fail("--session-root or OPENSEEK_SESSION_ROOT must not be empty")
-  }
-  root
+  @cli.require_non_empty(
+    matches, "session-root", "--session-root or OPENSEEK_SESSION_ROOT must not be empty",
+  )
 }
 
 ///|
@@ -247,11 +190,11 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     Some(cwd) => cwd
     None => "."
   }
-  let explicit_session = session_id(matches)
+  let explicit_session = @agentcli.session_id(matches)
   let session_root_value = if explicit_session is Some(_) {
     session_root(matches)
   } else {
-    let root = value(matches, "session-root").trim().to_owned()
+    let root = @cli.value(matches, "session-root").trim().to_owned()
     if root.is_empty() {
       ".openseek"
     } else {
@@ -262,14 +205,14 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   // as the engine (see `default_engine`). Presence of a non-blank value, not a
   // magic default string, decides — which also gates oneshot below. A blank
   // `--engine ""` counts as unset rather than an empty command.
-  let explicit_engine : String? = match values(matches, "engine") {
+  let explicit_engine : String? = match @cli.values(matches, "engine") {
     [engine, ..] if !engine.trim().is_empty() => Some(engine)
     _ => None
   }
   // `--engine-mode` is a UI-only option on the `tui` subcommand; a bare
   // `openseek` (no subcommand) never has it, so read it gracefully.
   let engine_mode = EngineMode::parse(
-    match values(matches, "engine-mode") {
+    match @cli.values(matches, "engine-mode") {
       [mode, ..] => mode
       [] => "serve"
     },
@@ -283,17 +226,20 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     )
   }
   // Enforced here rather than via argparse `required`: see `tui_shared_options`.
-  let model = @deepseek.Model::parse(value(matches, "model"))
-  let api_key = api_key_for_model(matches, model)
+  let model = @deepseek.Model::parse(@cli.value(matches, "model"))
+  let api_key = @agentcli.api_key(matches, model)
   {
     api_key,
-    api_url: api_url(matches),
+    api_url: @agentcli.api_url(matches),
     model,
     cwd,
-    max_steps: parse_positive_int(value(matches, "max-steps"), "--max-steps"),
+    max_steps: @cli.parse_positive_int(
+      @cli.value(matches, "max-steps"),
+      "--max-steps",
+    ),
     // Parsed eagerly so a typo fails at launch with a CLI error instead of
     // inside the first turn's engine run.
-    thinking: @deepseek.ThinkingMode::parse(value(matches, "thinking")),
+    thinking: @deepseek.ThinkingMode::parse(@cli.value(matches, "thinking")),
     session_id: match explicit_session {
       Some(id) => id
       None => generated_session_id(@env.now().reinterpret_as_int64())
@@ -327,7 +273,7 @@ fn default_engine(args : ArrayView[String]) -> String {
 /// There is no free-form positional: a bare non-subcommand token is a typo the
 /// top-level dispatcher rejects rather than silently treats as a prompt.
 fn initial_task(matches : @argparse.Matches) -> String? {
-  match values(matches, "prompt") {
+  match @cli.values(matches, "prompt") {
     [prompt, ..] if !prompt.trim().is_empty() => Some(prompt.trim().to_owned())
     _ => None
   }
@@ -444,58 +390,6 @@ fn[T : @tty.Fd] is_tty(fd : T) -> Bool {
   @tty.isatty(fd) catch {
     _ => false
   }
-}
-
-///|
-fn api_key_arg_for_model(model : @deepseek.Model) -> String {
-  match model {
-    KimiK27Code | KimiK27CodeHighSpeed => "kimi-api-key"
-    V4Flash | V4Pro => "deepseek-api-key"
-  }
-}
-
-///|
-fn api_key_env_for_model(model : @deepseek.Model) -> String {
-  match model {
-    KimiK27Code | KimiK27CodeHighSpeed => "KIMI"
-    V4Flash | V4Pro => "DEEPSEEK"
-  }
-}
-
-///|
-fn api_key_provider_for_model(model : @deepseek.Model) -> String {
-  match model {
-    KimiK27Code | KimiK27CodeHighSpeed => "Kimi"
-    V4Flash | V4Pro => "DeepSeek"
-  }
-}
-
-///|
-fn non_empty_value(matches : @argparse.Matches, name : String) -> String? raise {
-  let key = value(matches, name).trim()
-  if key.is_empty() {
-    None
-  } else {
-    Some("\{key}")
-  }
-}
-
-///|
-fn api_key_for_model(
-  matches : @argparse.Matches,
-  model : @deepseek.Model,
-) -> String raise {
-  match non_empty_value(matches, "api-key") {
-    Some(key) => return key
-    None => ()
-  }
-  match non_empty_value(matches, api_key_arg_for_model(model)) {
-    Some(key) => return key
-    None => ()
-  }
-  fail(
-    "an API key is required for \{api_key_provider_for_model(model)} models: pass --api-key or set \{api_key_env_for_model(model)}",
-  )
 }
 
 ///|

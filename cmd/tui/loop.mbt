@@ -156,7 +156,7 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
     "OPENSEEK_SESSION_ROOT": config.session_root,
     "OPENSEEK_DIR": config.cwd,
   }
-  env[api_key_env_for_model(config.model)] = config.api_key
+  env[@agentcli.api_key_env_for_model(config.model)] = config.api_key
   env
 }
 
