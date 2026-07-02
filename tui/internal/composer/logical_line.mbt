@@ -7,11 +7,9 @@ priv struct LogicLine {
 
 ///|
 fn split_logical_lines(text : StringView) -> Array[LogicLine] {
-  let lines : Array[LogicLine] = []
-  for display in @displaytext.split_lines(text) {
-    lines.push(LogicLine::new(display))
-  }
-  lines
+  [
+    for display in @displaytext.split_lines(text) => LogicLine::new(display)
+  ]
 }
 
 ///|
@@ -74,11 +72,11 @@ fn LogicLine::unit_text_before(
 ///|
 fn join_logical_lines(logical_lines : Array[LogicLine]) -> String {
   let builder = StringBuilder()
-  for index in 0..<logical_lines.length() {
+  for index, line in logical_lines {
     if index > 0 {
       builder <+ "\n"
     }
-    builder <+ "\{logical_lines[index].text()}"
+    builder <+ "\{line.text()}"
   }
   builder.to_string()
 }

@@ -30,13 +30,7 @@ const DefaultContentWidth : Int = 78
 /// one and `max_text_rows`.
 fn compute_visible_count(total~ : Int, max_text_rows~ : Int) -> Int {
   let max_text_rows = max_text_rows.max(MinTextRows)
-  if total < MinTextRows {
-    MinTextRows
-  } else if total > max_text_rows {
-    max_text_rows
-  } else {
-    total
-  }
+  total.clamp(min=MinTextRows, max=max_text_rows)
 }
 
 ///|
@@ -221,6 +215,17 @@ pub fn Model::input_prefix(self : Model, row : Int) -> @displaytext.DisplayText 
 }
 
 ///|
+/// Resolve the current cursor to its wrapped-row index for the live layout.
+fn Model::resolve_cursor_index(self : Model) -> Int {
+  resolve_cursor(
+    self.logical_lines,
+    rows=self.visual_rows,
+    cursor=self.cursor,
+    at_wrap_end=self.at_wrap_end,
+  )
+}
+
+///|
 /// Cursor row within the visible composer text area.
 ///
 /// The row is measured in wrapped rows and clamped to the current visible row
@@ -231,20 +236,9 @@ pub fn Model::cursor_row(self : Model) -> Int {
     total=self.visual_rows.length(),
     max_text_rows=self.visible_cap,
   )
-  let index = resolve_cursor(
-    self.logical_lines,
-    rows=self.visual_rows,
-    cursor=self.cursor,
-    at_wrap_end=self.at_wrap_end,
-  )
+  let index = self.resolve_cursor_index()
   let row = index - self.view_start
-  if row < 0 {
-    0
-  } else if row >= visible {
-    visible - 1
-  } else {
-    row
-  }
+  row.clamp(min=0, max=visible - 1)
 }
 
 ///|
@@ -253,25 +247,13 @@ pub fn Model::cursor_row(self : Model) -> Int {
 /// Vertical-up at this row hands off to history recall rather than moving within
 /// the buffer, so wrapped continuation rows count as interior rows here.
 pub fn Model::cursor_at_first_visual_row(self : Model) -> Bool {
-  let index = resolve_cursor(
-    self.logical_lines,
-    rows=self.visual_rows,
-    cursor=self.cursor,
-    at_wrap_end=self.at_wrap_end,
-  )
-  index == 0
+  self.resolve_cursor_index() == 0
 }
 
 ///|
 /// Whether the cursor is on the last wrapped row of the composer.
 pub fn Model::cursor_at_last_visual_row(self : Model) -> Bool {
-  let index = resolve_cursor(
-    self.logical_lines,
-    rows=self.visual_rows,
-    cursor=self.cursor,
-    at_wrap_end=self.at_wrap_end,
-  )
-  index == self.visual_rows.length() - 1
+  self.resolve_cursor_index() == self.visual_rows.length() - 1
 }
 
 ///|
@@ -282,12 +264,7 @@ pub fn Model::cursor_at_last_visual_row(self : Model) -> Bool {
 /// correct when a long line soft-wraps. It is based on `DisplayText` column
 /// measurement, not byte length.
 pub fn Model::cursor_offset(self : Model) -> Int {
-  let index = resolve_cursor(
-    self.logical_lines,
-    rows=self.visual_rows,
-    cursor=self.cursor,
-    at_wrap_end=self.at_wrap_end,
-  )
+  let index = self.resolve_cursor_index()
   let row = self.visual_rows[index]
   let line = self.logical_lines[self.cursor.line]
   PromptWidth +
@@ -324,7 +301,7 @@ fn Model::set_logical_lines(
   self.visual_rows = visual_rows
   self.cursor = cursor
   self.preferred_column = preferred_column
-  self.view_start = if view_start < 0 { 0 } else { view_start }
+  self.view_start = view_start.max(0)
   self.mode = mode
   self.at_wrap_end = at_wrap_end
   // The text or cursor may have moved; pull the scroll window back over the
@@ -355,13 +332,8 @@ fn Model::set_cursor(
 fn Model::reclamp_view(self : Model) -> Unit {
   let total = self.visual_rows.length()
   let visible = compute_visible_count(total~, max_text_rows=self.visible_cap)
-  let max_start = if total - visible > 0 { total - visible } else { 0 }
-  let cursor_row_index = resolve_cursor(
-    self.logical_lines,
-    rows=self.visual_rows,
-    cursor=self.cursor,
-    at_wrap_end=self.at_wrap_end,
-  )
+  let max_start = (total - visible).max(0)
+  let cursor_row_index = self.resolve_cursor_index()
   let mut start = self.view_start.clamp(min=0, max=max_start)
   if cursor_row_index < start {
     start = cursor_row_index
@@ -720,12 +692,7 @@ pub fn Model::move_vertical(self : Model, delta : Int) -> Unit {
   // If the position is exactly the right edge of a non-final slice, remember
   // `at_wrap_end` so the cursor renders on the upper row instead of the next
   // row's left edge; both are the same textual boundary.
-  let index = resolve_cursor(
-    self.logical_lines,
-    rows=self.visual_rows,
-    cursor=self.cursor,
-    at_wrap_end=self.at_wrap_end,
-  )
+  let index = self.resolve_cursor_index()
   let row = self.visual_rows[index]
   let line = self.logical_lines[self.cursor.line]
   let current_column = line.display_column(position=self.cursor.position) -
