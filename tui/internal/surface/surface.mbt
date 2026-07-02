@@ -166,17 +166,8 @@ pub fn Surface::cursor(self : Surface) -> Cursor {
 /// width and cursor. Used to fit a surface into a bounded terminal region; the
 /// caller decides the bound.
 pub fn Surface::with_max_rows(self : Surface, max_rows : Int) -> Surface {
-  let row_count = if max_rows < 0 {
-    0
-  } else if max_rows > self.rows.length() {
-    self.rows.length()
-  } else {
-    max_rows
-  }
-  let rows : Array[Line] = []
-  for index in 0..<row_count {
-    rows.push(self.rows[index])
-  }
+  let row_count = max_rows.clamp(min=0, max=self.rows.length())
+  let rows = self.rows[:row_count].to_owned()
   Surface::new(width=self.width, rows~, cursor=self.cursor)
 }
 
