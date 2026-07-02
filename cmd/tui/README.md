@@ -41,9 +41,10 @@ startup banner) stores the conversation under `--session-root` (default
 
 ## Configuration
 
-`--api-key` (env `DEEPSEEK`) is required. `--model`, `--api-url`, `--max-steps`,
-and `--thinking` mirror the engine's flags and are forwarded to it through the
-environment, alongside the session settings.
+`--api-key` (env `OPENSEEK_API_KEY`) is required; for Kimi models, `KIMI` is
+also accepted as the provider-specific API key. `--model`, `--api-url`,
+`--max-steps`, and `--thinking` mirror the engine's flags and are forwarded to
+it through the environment, alongside the session settings.
 
 The full flag reference lives in the executable help — verified verbatim in
 [`tests/cram/tui.md`](../../tests/cram/tui.md).
