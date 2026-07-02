@@ -24,7 +24,7 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
       env="DEEPSEEK_MODEL",
       default_values=[@deepseek.V4Pro.to_string()],
       global~,
-      about="DeepSeek model: deepseek-v4-flash or deepseek-v4-pro.",
+      about="Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, or kimi-k2.7-code-highspeed.",
     ),
     OptionArg(
       "api-url",
