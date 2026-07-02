@@ -37,7 +37,7 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
       "model",
       long="model",
       env="OPENSEEK_MODEL",
-      default_values=[@deepseek.V4Pro.to_string()],
+      default_values=[@deepseek.Deepseek(V4Pro).to_string()],
       global~,
       about="Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, or kimi-k2.7-code-highspeed.",
     ),
@@ -460,7 +460,7 @@ test "cli uses KIMI only for Kimi models" {
   })
   let kimi_config = parse_config(kimi)
   assert_eq(kimi_config.api_key, "kimi-key")
-  assert_true(kimi_config.model is KimiK27CodeHighSpeed)
+  assert_true(kimi_config.model is Kimi(K27CodeHighSpeed))
   let deepseek = cli_command().parse(argv=[], env={ "KIMI": "kimi-key" })
   let _ = parse_config(deepseek) catch {
     error => {

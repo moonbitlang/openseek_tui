@@ -3,7 +3,7 @@ fn drain_test_state() -> State {
   State::new({
     api_key: "k",
     api_url: Some("https://proxy.example/v1/chat/completions"),
-    model: V4Pro,
+    model: Deepseek(V4Pro),
     cwd: ".",
     max_steps: 10,
     thinking: Max,
@@ -104,7 +104,7 @@ test "engine configuration travels through the environment" {
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
   )
-  let kimi_env = engine_extra_env({ ..config, model: KimiK27CodeHighSpeed })
+  let kimi_env = engine_extra_env({ ..config, model: Kimi(K27CodeHighSpeed) })
   assert_true(kimi_env.get("KIMI") == Some(config.api_key))
   assert_true(kimi_env.get("DEEPSEEK") is None)
 }

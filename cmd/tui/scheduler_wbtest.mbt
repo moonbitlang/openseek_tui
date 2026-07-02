@@ -65,7 +65,7 @@ fn scheduler_test_state() -> State {
   State::new({
     api_key: "k",
     api_url: Some("https://proxy.example/v1/chat/completions"),
-    model: V4Pro,
+    model: Deepseek(V4Pro),
     cwd: ".",
     max_steps: 10,
     thinking: Max,
