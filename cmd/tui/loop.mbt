@@ -3,6 +3,12 @@ async fn read_ui_events(ui : @ui.Ui, messages : @async.Queue[Msg]) -> Unit {
   for ;; {
     let event = ui.read_event()
     messages.put(UiInput(event))
+    // The event is in the queue: any submission it (or an earlier event)
+    // carried is now visible to the message loop's drain, so the UI's
+    // mid-flight window can close. Unconditional on purpose — the reader is
+    // sequential, so by the time any later event lands here, every earlier
+    // submission is already delivered.
+    ui.submission_delivered()
     if event is Quit {
       break
     }
@@ -802,7 +808,7 @@ async fn[G] run_message_loop(
     // gate `update` cannot see — whether the user has draft text in the
     // composer. A due fire appends its StartAgent here, after any
     // command-context steer the updates produced.
-    scheduler_maybe_fire(state, composer_empty=ui.composer_is_empty(), cmds)
+    scheduler_maybe_fire(state, input_idle=ui.input_idle(), cmds)
     for cmd in cmds {
       match cmd {
         AppendItem(item) => ui.append_item(item)

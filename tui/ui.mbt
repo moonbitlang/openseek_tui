@@ -15,6 +15,14 @@ struct Ui {
   mut notice : @doc.Text?
   commands : @task.Queue
   events : @aqueue.Queue[Result[Event, Error]]
+  // A submitted input is mid-flight: the composer was reset but the event has
+  // not yet been delivered to the app's message queue (the submit helpers
+  // await a redraw in between). Consumers that infer "the user is not
+  // interacting" from an empty composer (see `Ui::input_idle`) must treat
+  // this window as engaged, or they can act past input that is about to
+  // arrive. The event reader is sequential, so at most one submission is in
+  // flight at a time; the app confirms delivery with `submission_delivered`.
+  mut submission_in_flight : Bool
 }
 
 ///|
@@ -37,6 +45,7 @@ fn Ui::new(tty : @tty.Tty, config : Config) -> Ui {
     notice: None,
     commands: Queue(kind=Unbounded),
     events: Queue(kind=Unbounded),
+    submission_in_flight: false,
   }
 }
 

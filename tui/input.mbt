@@ -22,6 +22,10 @@ async fn Ui::submit_current_input(self : Self) -> Input? {
     let text = self.composer.text()
     let mode = self.composer.mode()
     self.history.push(@history.Entry::new(text, mode))
+    // From this reset until the returned event reaches the app's queue, the
+    // submission is mid-flight (the redraw below awaits): `input_idle` must
+    // read as engaged so nothing acts past the Enter the user just pressed.
+    self.submission_in_flight = true
     self.composer.reset()
     self.notice = None
     self.completion.reset()

@@ -126,17 +126,19 @@ fn scheduler_on_run_end(
 /// `update` returns — after lifecycle changes have been applied and any queued
 /// user input has been drained — so every idle boundary (Tick, agent terminals,
 /// foreground `!` terminals, background-command completions) is covered with no
-/// per-site fire logic. `composer_empty` is the one gate `update` cannot see
-/// (the composer is private to the UI); the caller passes
-/// `ui.composer_is_empty()`.
+/// per-site fire logic. `input_idle` is the one gate `update` cannot see —
+/// the composer state and any submission still in flight toward the message
+/// queue are private to the UI; the caller passes `ui.input_idle()`.
 ///
 /// A due schedule fires only at a fully idle moment: no run in flight, nothing
 /// queued, no unconfirmed steers, no background `!` command whose context is
-/// still owed to the engine, and no draft under the user's cursor. Anything
-/// less defers — the fire stays due and dispatches at the next idle boundary.
+/// still owed to the engine, and no user interaction on the input surface
+/// (draft text, shell mode, or a just-submitted event still in flight).
+/// Anything less defers — the fire stays due and dispatches at the next idle
+/// boundary.
 fn scheduler_maybe_fire(
   state : State,
-  composer_empty~ : Bool,
+  input_idle~ : Bool,
   cmds : Array[Cmd],
 ) -> Unit {
   guard state.schedule is Some(schedule) else { return }
@@ -149,7 +151,7 @@ fn scheduler_maybe_fire(
     state.queued.is_empty() &&
     state.pending_steers.is_empty() &&
     state.background_commands == 0 &&
-    composer_empty else {
+    input_idle else {
     return
   }
   let run_id = state.start_run(@async.now())

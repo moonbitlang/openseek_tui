@@ -130,14 +130,29 @@ pub fn Ui::columns(self : Self) -> Int {
 }
 
 ///|
-/// Whether the composer is in its untouched default state: no draft text and
-/// plain input mode. Shell mode counts as engaged even with an empty buffer —
-/// a user sitting at a bare `! ` prompt is still mid-composition. Lets a
-/// scheduler (e.g. `/loop`) avoid starting a turn under a user who is halfway
-/// through typing — the composer is private to the UI, so the update loop
-/// cannot see it directly.
-pub fn Ui::composer_is_empty(self : Self) -> Bool {
-  self.composer.text().is_empty() && self.composer.mode().is_input()
+/// Whether the user is not interacting with the input surface at all: no
+/// draft text, plain input mode, and no submitted event still in flight
+/// toward the app's queue. Shell mode counts as engaged even with an empty
+/// buffer — a user sitting at a bare `! ` prompt is mid-composition — and so
+/// does the reset-to-delivery window of a just-pressed Enter (the submit
+/// helpers await a redraw between clearing the composer and returning the
+/// event, so an empty composer alone can lie about pending input). Lets a
+/// scheduler (e.g. `/loop`) avoid starting a turn under, or ahead of, the
+/// user — the composer is private to the UI, so the update loop cannot see
+/// any of this directly.
+pub fn Ui::input_idle(self : Self) -> Bool {
+  !self.submission_in_flight &&
+  self.composer.text().is_empty() &&
+  self.composer.mode().is_input()
+}
+
+///|
+/// The app's event reader confirms a submitted event has reached its message
+/// queue: any earlier submission is now visible to queue drains, so the
+/// mid-flight window is over. Called after every delivered event — the reader
+/// is sequential, so at most one submission is ever in flight.
+pub fn Ui::submission_delivered(self : Self) -> Unit {
+  self.submission_in_flight = false
 }
 
 ///|
