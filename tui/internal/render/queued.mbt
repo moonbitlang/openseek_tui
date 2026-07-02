@@ -69,14 +69,14 @@ fn queued_input_rows(
   )
   let item_budget = max_rows - 1
   if count <= item_budget {
-    for index in 0..<count {
-      rows.push(queued_input_line(inputs[index], index~, cols~, indent~))
+    for index, input in inputs {
+      rows.push(queued_input_line(input, index~, cols~, indent~))
     }
   } else {
     // Reserve the last row for the summary of everything that did not fit.
     let shown = item_budget - 1
-    for index in 0..<shown {
-      rows.push(queued_input_line(inputs[index], index~, cols~, indent~))
+    for index, input in inputs[:shown] {
+      rows.push(queued_input_line(input, index~, cols~, indent~))
     }
     rows.push(
       indented_dim_line(

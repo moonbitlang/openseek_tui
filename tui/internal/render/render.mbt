@@ -132,11 +132,7 @@ fn indent_line(line : @surface.Line, indent~ : Int) -> @surface.Line {
     return line
   }
   let indent = @displaytext.DisplayText(String::make(indent, ' '))
-  let spans : Array[@surface.Span] = [Span(indent, style=@style.default)]
-  for span in line.spans() {
-    spans.push(span)
-  }
-  @surface.Line::new(spans)
+  @surface.Line::new([Span(indent, style=@style.default), ..line.spans()])
 }
 
 ///|
