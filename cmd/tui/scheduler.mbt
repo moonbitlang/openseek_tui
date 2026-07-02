@@ -154,14 +154,20 @@ fn scheduler_maybe_fire(
     input_idle else {
     return
   }
-  // Never fire into a batch that is tearing something down: a drained batch
-  // can hold a second Ctrl-C's KillEngine (or a Quit) together with the dying
-  // run's terminal event, leaving `run` idle here — but a StartAgent appended
-  // now would execute right after the kill and prompt a dead engine (or an
-  // exiting TUI). Let the teardown land; the fire stays due for the next
-  // batch.
+  // Never fire into a batch that is tearing something down or still carrying
+  // the user's voice. A drained batch can hold a second Ctrl-C's KillEngine
+  // (or a Quit) together with the dying run's terminal event, leaving `run`
+  // idle here — but a StartAgent appended now would execute right after the
+  // kill and prompt a dead engine (or an exiting TUI). Likewise a
+  // prompt steer emitted earlier in this batch, with the turn's terminal
+  // behind it having already cleared `pending_steers`: that steer is about to
+  // bounce off the closed turn and come back as a resubmit notice, and firing
+  // now would put the loop's run in front of the user's still-unsettled text.
+  // Command-context steers are the designed exception — the fire is
+  // deliberately ordered after them. Either way the fire stays due for the
+  // next batch.
   for cmd in cmds {
-    if cmd is (CancelAgent | KillEngine | Quit) {
+    if cmd is (CancelAgent | KillEngine | Quit | SteerAgent(Prompt(_))) {
       return
     }
   }

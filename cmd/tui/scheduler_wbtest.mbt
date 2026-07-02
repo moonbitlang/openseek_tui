@@ -486,3 +486,21 @@ test "loop status reports a deferred fire as due" {
   schedule.paused = true
   assert_eq(loop_status_position(schedule), "paused")
 }
+
+///|
+test "a due loop defers behind a prompt steer racing the turn's terminal" {
+  let state = armed_state("30s do x")
+  guard state.schedule is Some(schedule) else { fail("expected a schedule") }
+  schedule.remaining_secs = 0
+  // The drained batch carries the user's prompt steer (emitted while the turn
+  // still ran) with the terminal event behind it having already cleared
+  // pending_steers: the steer is about to bounce off the closed turn, so the
+  // fire must wait rather than jump ahead of the user's unsettled text.
+  let steering : Array[Cmd] = [SteerAgent(Prompt("user text"))]
+  scheduler_maybe_fire(state, input_idle=true, steering)
+  assert_eq(start_agent_count(steering), 0)
+  // A command-context steer keeps the designed ordering: fire after it.
+  let command_context : Array[Cmd] = [SteerAgent(Command("ls output"))]
+  scheduler_maybe_fire(state, input_idle=true, command_context)
+  assert_eq(start_agent_count(command_context), 1)
+}
