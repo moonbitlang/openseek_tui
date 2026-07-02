@@ -130,6 +130,14 @@ pub fn Ui::columns(self : Self) -> Int {
 }
 
 ///|
+/// Whether the composer holds no draft text. Lets a scheduler (e.g. `/loop`)
+/// avoid starting a turn under a user who is halfway through typing — the
+/// composer is private to the UI, so the update loop cannot see it directly.
+pub fn Ui::composer_is_empty(self : Self) -> Bool {
+  self.composer.text().is_empty()
+}
+
+///|
 /// Replace the live view around the composer — the persistent status line
 /// below it, the transient activity line above it (`None` hides it; it never
 /// enters the transcript), and the queued-inputs preview (copied defensively)

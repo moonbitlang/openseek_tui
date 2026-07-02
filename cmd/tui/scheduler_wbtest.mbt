@@ -223,6 +223,143 @@ test "background command counter tracks spawn and completion" {
 }
 
 ///|
+/// Drive the countdown to due and invoke the choke point once, mirroring the
+/// message loop's `update`-then-`scheduler_maybe_fire` shape for a `Tick`.
+fn tick_and_fire(state : State, composer_empty~ : Bool) -> Array[Cmd] {
+  let cmds = update(state, Tick)
+  scheduler_maybe_fire(state, composer_empty~, cmds)
+  cmds
+}
+
+///|
+test "a due loop fires exactly once at an idle tick" {
+  let state = armed_state("30s do the rounds")
+  guard state.schedule is Some(schedule) else { fail("expected a schedule") }
+  // 29 ticks: armed but not due; the choke point stays silent.
+  for _ in 0..<29 {
+    let cmds = tick_and_fire(state, composer_empty=true)
+    assert_eq(start_agent_count(cmds), 0)
+  }
+  assert_eq(schedule.remaining_secs, 1)
+  // The 30th tick fires: notice + verbatim prompt echo + StartAgent.
+  let fired = tick_and_fire(state, composer_empty=true)
+  assert_eq(start_agent_count(fired), 1)
+  assert_eq(notice_count(fired), 1)
+  let echoes = [
+    for cmd in fired if cmd is AppendItem(Input(Prompt("do the rounds"))) => cmd
+  ]
+  assert_eq(echoes.length(), 1)
+  guard fired[fired.length() - 1] is StartAgent(run_id~, "do the rounds") else {
+    fail("expected the fire's StartAgent last")
+  }
+  assert_true(schedule.fired_run_id is Some(fired_id) && fired_id == run_id)
+  guard state.run is Running(_) else {
+    fail("expected the fired run in flight")
+  }
+  // Still due-held, not counting, while its own run is in flight.
+  let during = tick_and_fire(state, composer_empty=true)
+  assert_eq(start_agent_count(during), 0)
+}
+
+///|
+test "a due loop defers while anything is busy and fires at the idle boundary" {
+  let state = armed_state("30s do x")
+  guard state.schedule is Some(schedule) else { fail("expected a schedule") }
+  // A user prompt occupies the run slot; the countdown reaches due beneath it.
+  let _ = update(state, UiInput(Steer(Prompt("user work"))))
+  schedule.remaining_secs = 1
+  let held = tick_and_fire(state, composer_empty=true)
+  assert_eq(start_agent_count(held), 0)
+  assert_eq(schedule.remaining_secs, 0)
+  // More ticks while busy: still exactly zero fires (no accumulation).
+  for _ in 0..<5 {
+    assert_eq(start_agent_count(tick_and_fire(state, composer_empty=true)), 0)
+  }
+  // The user run's terminal is an idle boundary: the deferred fire dispatches
+  // in the very same update cycle, no Tick needed.
+  let boundary = update(
+    state,
+    AgentProgress(run_id=state.run_id, AgentFinished("done")),
+  )
+  scheduler_maybe_fire(state, composer_empty=true, boundary)
+  assert_eq(start_agent_count(boundary), 1)
+  assert_true(schedule.fired_run_id is Some(id) && id == state.run_id)
+}
+
+///|
+test "each busy source individually holds a due fire" {
+  // Draft text under the cursor.
+  let drafting = armed_state("30s do x")
+  guard drafting.schedule is Some(draft_schedule) else { fail("no schedule") }
+  draft_schedule.remaining_secs = 0
+  let held = update(drafting, Tick)
+  scheduler_maybe_fire(drafting, composer_empty=false, held)
+  assert_eq(start_agent_count(held), 0)
+  scheduler_maybe_fire(drafting, composer_empty=true, held)
+  assert_eq(start_agent_count(held), 1)
+
+  // A background `!` command whose context is still owed to the engine.
+  let waiting = armed_state("30s do x")
+  guard waiting.schedule is Some(wait_schedule) else { fail("no schedule") }
+  let _ = update(waiting, UiInput(Steer(Prompt("user work"))))
+  let _ = update(waiting, UiInput(Steer(Command("ls"))))
+  let _ = update(
+    waiting,
+    AgentProgress(run_id=waiting.run_id, AgentFinished("done")),
+  )
+  wait_schedule.remaining_secs = 0
+  // Run slot idle, but the background command is still out.
+  assert_eq(waiting.background_commands, 1)
+  let blocked = tick_and_fire(waiting, composer_empty=true)
+  assert_eq(start_agent_count(blocked), 0)
+  // Its completion is itself an idle boundary: the fire rides the same cycle,
+  // ordered after the command-context steer.
+  let after = update(
+    waiting,
+    CommandResult(command="ls", run_id=None, Err(Failure::Failure("x"))),
+  )
+  scheduler_maybe_fire(waiting, composer_empty=true, after)
+  assert_eq(start_agent_count(after), 1)
+  let steer_index = for index, cmd in after {
+    if cmd is SteerAgent(_) {
+      break index
+    }
+  } nobreak {
+    fail("expected the command-context steer")
+  }
+  let start_index = for index, cmd in after {
+    if cmd is StartAgent(_, ..) {
+      break index
+    }
+  } nobreak {
+    fail("expected the fire's StartAgent")
+  }
+  assert_true(steer_index < start_index)
+
+  // A paused loop never fires, even when due and idle.
+  let paused = armed_state("30s do x")
+  guard paused.schedule is Some(pause_schedule) else { fail("no schedule") }
+  pause_schedule.remaining_secs = 0
+  pause_schedule.paused = true
+  assert_eq(start_agent_count(tick_and_fire(paused, composer_empty=true)), 0)
+}
+
+///|
+test "a fired loop run steers like any other run" {
+  let state = armed_state("30s do x")
+  guard state.schedule is Some(schedule) else { fail("expected a schedule") }
+  schedule.remaining_secs = 0
+  let fired = tick_and_fire(state, composer_empty=true)
+  assert_eq(start_agent_count(fired), 1)
+  // The fired run is a normal engine turn: a typed prompt steers it rather
+  // than being rejected — the ownership discipline is shared, not special.
+  let steered = update(state, UiInput(Steer(Prompt("also check the docs"))))
+  assert_true(
+    [ for cmd in steered if cmd is SteerAgent(_) => cmd ].length() == 1,
+  )
+}
+
+///|
 test "loop command grammar: rejections name the problem" {
   guard parse_loop_command("") is Err(usage) else { fail("expected usage") }
   assert_true(usage.contains("usage:"))

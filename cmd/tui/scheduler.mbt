@@ -122,6 +122,53 @@ fn scheduler_on_run_end(
 }
 
 ///|
+/// The single dispatch choke point: invoked by the message loop after **every**
+/// `update` returns — after lifecycle changes have been applied and any queued
+/// user input has been drained — so every idle boundary (Tick, agent terminals,
+/// foreground `!` terminals, background-command completions) is covered with no
+/// per-site fire logic. `composer_empty` is the one gate `update` cannot see
+/// (the composer is private to the UI); the caller passes
+/// `ui.composer_is_empty()`.
+///
+/// A due schedule fires only at a fully idle moment: no run in flight, nothing
+/// queued, no unconfirmed steers, no background `!` command whose context is
+/// still owed to the engine, and no draft under the user's cursor. Anything
+/// less defers — the fire stays due and dispatches at the next idle boundary.
+fn scheduler_maybe_fire(
+  state : State,
+  composer_empty~ : Bool,
+  cmds : Array[Cmd],
+) -> Unit {
+  guard state.schedule is Some(schedule) else { return }
+  guard !schedule.paused &&
+    schedule.remaining_secs == 0 &&
+    schedule.fired_run_id is None else {
+    return
+  }
+  guard state.run is Idle &&
+    state.queued.is_empty() &&
+    state.pending_steers.is_empty() &&
+    state.background_commands == 0 &&
+    composer_empty else {
+    return
+  }
+  let run_id = state.start_run(@async.now())
+  schedule.fired_run_id = Some(run_id)
+  // Attribution lives in the notice; the prompt itself is echoed — and reaches
+  // the engine — verbatim, so the model sees exactly what the user stored and
+  // a resumed session replays a plain user message (documented trade-off).
+  cmds.push(
+    AppendItem(
+      command_notice(
+        "⟳ loop fire \{schedule.fires + 1} of \{schedule.max_fires}",
+      ),
+    ),
+  )
+  cmds.push(AppendItem(Input(Prompt(schedule.prompt))))
+  cmds.push(StartAgent(run_id~, schedule.prompt))
+}
+
+///|
 /// Render seconds in the interval grammar's own units — `45s`, `5m`, `2h` —
 /// composing where needed (`1m30s`, `2h5m`).
 fn format_loop_interval(seconds : Int) -> String {

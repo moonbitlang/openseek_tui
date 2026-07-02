@@ -782,7 +782,14 @@ async fn[G] run_message_loop(
   let mut running_task : @async.Task[Unit]? = None
   outer~: for ;; {
     let message = messages.get()
-    for cmd in update(state, message) {
+    let cmds = update(state, message)
+    // The `/loop` dispatch choke point: runs after every update, once lifecycle
+    // changes are applied and queued input has drained, with the one gate
+    // `update` cannot see — whether the user has draft text in the composer. A
+    // due fire appends its StartAgent here, after any command-context steer the
+    // update produced.
+    scheduler_maybe_fire(state, composer_empty=ui.composer_is_empty(), cmds)
+    for cmd in cmds {
       match cmd {
         AppendItem(item) => ui.append_item(item)
         StartAgent(run_id~, task) =>
