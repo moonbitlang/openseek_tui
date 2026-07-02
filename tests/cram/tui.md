@@ -23,7 +23,7 @@ OpenSeek terminal UI.
 
 Options:
   -h, --help                     Show help information.
-  --api-key <api-key>            API key for the selected chat provider. [env: OPENSEEK_API_KEY] [default: ]
+  --api-key <api-key>            API key for the selected chat provider. [default: ]
   --model <model>                Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, or kimi-k2.7-code-highspeed. [env: OPENSEEK_MODEL] [default: deepseek-v4-pro]
   --api-url <api-url>            DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
   --max-steps <max-steps>        Maximum number of agent loop steps before stopping. [env: OPENSEEK_MAX_STEPS] [default: 1000]
@@ -38,7 +38,7 @@ Options:
 
 ## API Key Is Required
 
-With no `--api-key` flag and no `OPENSEEK_API_KEY` in the environment, the UI reports the
+With no `--api-key` flag and no `DEEPSEEK` in the environment, the UI reports the
 missing key on stderr and exits non-zero — before the terminal UI ever starts.
 (The key is validated in the UI path rather than via argparse `required`, so the
 root command can stay key-optional for offline engine subcommands like
@@ -48,13 +48,13 @@ root command can stay key-optional for offline engine subcommands like
 $ sh <<'EOF'
 > stdout=$(mktemp)
 > stderr=$(mktemp)
-> if env -u OPENSEEK_API_KEY -u KIMI -u OPENSEEK_MODEL openseek.exe tui > "$stdout" 2> "$stderr"; then echo exit-zero; else echo exit-non-zero; fi
+> if env -u DEEPSEEK -u KIMI -u OPENSEEK_MODEL openseek.exe tui > "$stdout" 2> "$stderr"; then echo exit-zero; else echo exit-non-zero; fi
 > sed -n '1p' "$stderr"
 > if test -s "$stdout"; then echo stdout-not-empty; else echo stdout-empty; fi
 > rm -f "$stdout" "$stderr"
 > EOF
 exit-non-zero
-error: an API key is required: pass --api-key or set OPENSEEK_API_KEY
+error: an API key is required for DeepSeek models: pass --api-key or set DEEPSEEK
 stdout-empty
 ```
 
@@ -66,7 +66,7 @@ Option-looking tokens are validated by the parser before the UI starts.
 $ sh <<'EOF'
 > stdout=$(mktemp)
 > stderr=$(mktemp)
-> if env OPENSEEK_API_KEY=test-key openseek.exe tui --xxy he > "$stdout" 2> "$stderr"; then echo exit-zero; else echo exit-non-zero; fi
+> if env DEEPSEEK=test-key openseek.exe tui --xxy he > "$stdout" 2> "$stderr"; then echo exit-zero; else echo exit-non-zero; fi
 > sed -n '1p' "$stderr"
 > if test -s "$stdout"; then echo stdout-not-empty; else echo stdout-empty; fi
 > rm -f "$stdout" "$stderr"
@@ -83,7 +83,7 @@ mode; override with `--engine`/`OPENSEEK_ENGINE`) and probes it with `--help`
 first. A missing engine fails fast, before the UI takes over the terminal.
 
 ```mooncram
-$ env OPENSEEK_API_KEY=test-key openseek.exe tui --engine openseek-not-a-real-binary
+$ env DEEPSEEK=test-key openseek.exe tui --engine openseek-not-a-real-binary
 error: engine 'openseek-not-a-real-binary' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
 Pass --engine <path>, set OPENSEEK_ENGINE, or install the openseek binary.
 [1]
@@ -96,7 +96,7 @@ Pass --engine <path>, set OPENSEEK_ENGINE, or install the openseek binary.
 prompt path is wired — there is no free-form positional.
 
 ```mooncram
-$ env OPENSEEK_API_KEY=test-key openseek.exe tui --engine does-not-exist --prompt "inspect project"
+$ env DEEPSEEK=test-key openseek.exe tui --engine does-not-exist --prompt "inspect project"
 error: engine 'does-not-exist' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
 Pass --engine <path>, set OPENSEEK_ENGINE, or install the openseek binary.
 [1]

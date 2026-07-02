@@ -41,8 +41,8 @@ startup banner) stores the conversation under `--session-root` (default
 
 ## Configuration
 
-`--api-key` (env `OPENSEEK_API_KEY`) is required; for Kimi models, `KIMI` is
-also accepted as the provider-specific API key. `--model`, `--api-url`,
+`--api-key` or a provider-specific key env is required: `DEEPSEEK` for DeepSeek
+models and `KIMI` for Kimi models. `--model`, `--api-url`,
 `--max-steps`, and `--thinking` mirror the engine's flags and are forwarded to
 it through the environment, alongside the session settings.
 

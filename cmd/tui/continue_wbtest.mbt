@@ -9,7 +9,7 @@ async test "--continue resolves the most recently active session" {
       store.create(Session(SessionId("newer"), system_prompt="system"))
       let parsed = cli_command().parse(
         argv=["--continue", "--session-root", root],
-        env={ "OPENSEEK_API_KEY": "test-key" },
+        env={ "DEEPSEEK": "test-key" },
       )
       let config = with_latest_session(parse_config(parsed))
       assert_eq(config.session_id.value(), "newer")
@@ -17,7 +17,7 @@ async test "--continue resolves the most recently active session" {
       // so the TUI starts a new conversation instead of refusing to launch.
       let parsed = cli_command().parse(
         argv=["--continue", "--session-root", empty_root],
-        env={ "OPENSEEK_API_KEY": "test-key" },
+        env={ "DEEPSEEK": "test-key" },
       )
       let fresh = with_latest_session(parse_config(parsed))
       assert_true(fresh.session_id.value().has_prefix("tui-"))
