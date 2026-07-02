@@ -384,3 +384,32 @@ test "loop command grammar: rejections name the problem" {
   }
   assert_true(zero_count.contains("--max"))
 }
+
+///|
+test "loop status segment mirrors schedule state" {
+  // No loop: the segment is empty and leaves no dangling separator.
+  assert_eq(loop_segment_text(None), "")
+  // Counting: a compact countdown.
+  let schedule : Schedule = {
+    prompt: "do x",
+    interval_secs: 300,
+    max_fires: 20,
+    remaining_secs: 277,
+    fires: 0,
+    paused: false,
+    fired_run_id: None,
+  }
+  assert_eq(loop_segment_text(Some(schedule)), "⟳ 4m 37s")
+  schedule.remaining_secs = 45
+  assert_eq(loop_segment_text(Some(schedule)), "⟳ 45s")
+  schedule.remaining_secs = 3725
+  assert_eq(loop_segment_text(Some(schedule)), "⟳ 1h 02m 05s")
+  // Due but deferred, its own fire in flight, and paused.
+  schedule.remaining_secs = 0
+  assert_eq(loop_segment_text(Some(schedule)), "⟳ due")
+  schedule.fired_run_id = Some(7)
+  assert_eq(loop_segment_text(Some(schedule)), "⟳ running")
+  schedule.fired_run_id = None
+  schedule.paused = true
+  assert_eq(loop_segment_text(Some(schedule)), "⟳ paused")
+}

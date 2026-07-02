@@ -45,7 +45,32 @@ fn status_segments(state : State) -> Array[Segment] {
       text: watcher_segment_text(state.watcher_status),
       style: Style(foreground=Basic(Cyan)),
     },
+    {
+      text: loop_segment_text(state.schedule),
+      style: Style(foreground=Basic(Blue)),
+    },
   ]
+}
+
+///|
+/// The `/loop` slot on the status bar: a live countdown while armed, its
+/// state while it cannot count ("paused", "running" during its own fire,
+/// "due" while deferred behind other activity), and empty — vanishing like
+/// an absent usage segment — when no loop is armed.
+fn loop_segment_text(schedule : Schedule?) -> String {
+  match schedule {
+    None => ""
+    Some(schedule) =>
+      if schedule.fired_run_id is Some(_) {
+        "⟳ running"
+      } else if schedule.paused {
+        "⟳ paused"
+      } else if schedule.remaining_secs == 0 {
+        "⟳ due"
+      } else {
+        "⟳ \{format_elapsed_compact(schedule.remaining_secs.to_int64())}"
+      }
+  }
 }
 
 ///|
