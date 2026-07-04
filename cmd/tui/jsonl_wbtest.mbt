@@ -192,10 +192,10 @@ test "a runtime_update event surfaces as a ↻ tool-style notice" {
   // metadata preamble, then the captured watcher output.
   append_items(
     state,
-    Json::object({
+    {
       "event": "runtime_update",
       "content": "[moon_check update]\nevents=3\nid=moon-check-1\ncwd=.\ncommand=moon check --watch --diagnostic-limit 10\nstatus=running\nseq=3\nWarning: unused variable x\nFinished.",
-    }),
+    },
     items,
   )
   // The metadata preamble is stripped: the watcher status is lifted out and only
@@ -265,31 +265,19 @@ test "assistant_delta accumulates live text and commits only the final message" 
   let state = drain_test_state()
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
   let items : Array[@ui.TranscriptItem] = []
-  append_items(
-    state,
-    Json::object({ "event": "assistant_delta", "content": "Hel" }),
-    items,
-  )
-  append_items(
-    state,
-    Json::object({ "event": "assistant_delta", "content": "lo" }),
-    items,
-  )
+  append_items(state, { "event": "assistant_delta", "content": "Hel" }, items)
+  append_items(state, { "event": "assistant_delta", "content": "lo" }, items)
   assert_eq(items.length(), 0)
   assert_true(state.streaming_response is Some("Hello"))
   assert_true(state.step_response is None)
   append_items(
     state,
-    Json::object({ "event": "assistant_message", "content": "Hello" }),
+    { "event": "assistant_message", "content": "Hello" },
     items,
   )
   assert_true(state.streaming_response is None)
   assert_true(state.step_response is Some("Hello"))
-  append_items(
-    state,
-    Json::object({ "event": "agent_finished", "answer": "Hello" }),
-    items,
-  )
+  append_items(state, { "event": "agent_finished", "answer": "Hello" }, items)
   debug_inspect(items, content="[Response(\"Hello\")]")
 }
 
@@ -300,13 +288,13 @@ test "assistant_message clears live streaming text while tools continue" {
   let items : Array[@ui.TranscriptItem] = []
   append_items(
     state,
-    Json::object({ "event": "assistant_delta", "content": "Need tool" }),
+    { "event": "assistant_delta", "content": "Need tool" },
     items,
   )
   assert_true(state.streaming_response is Some("Need tool"))
   append_items(
     state,
-    Json::object({ "event": "assistant_message", "content": "Need tool" }),
+    { "event": "assistant_message", "content": "Need tool" },
     items,
   )
   assert_true(state.run is Running(_))
@@ -322,10 +310,10 @@ test "assistant_delta live preview keeps the newest tail within the cap" {
   let items : Array[@ui.TranscriptItem] = []
   append_items(
     state,
-    Json::object({
+    {
       "event": "assistant_delta",
       "content": String::make(StreamingPreviewMaxColumns * 4, 'x'),
-    }),
+    },
     items,
   )
   guard state.streaming_response is Some(first) else {
@@ -337,11 +325,7 @@ test "assistant_delta live preview keeps the newest tail within the cap" {
   assert_true(first.has_prefix("…"))
   // The preview is a tail window: new deltas keep showing up at its end
   // (instead of freezing once the cap is reached, as a head truncation would).
-  append_items(
-    state,
-    Json::object({ "event": "assistant_delta", "content": "more" }),
-    items,
-  )
+  append_items(state, { "event": "assistant_delta", "content": "more" }, items)
   guard state.streaming_response is Some(second) else {
     fail("expected streaming preview")
   }
@@ -359,12 +343,12 @@ test "streamed newlines collapse so the preview stays one line" {
   let items : Array[@ui.TranscriptItem] = []
   append_items(
     state,
-    Json::object({ "event": "assistant_delta", "content": "fn main {\n" }),
+    { "event": "assistant_delta", "content": "fn main {\n" },
     items,
   )
   append_items(
     state,
-    Json::object({ "event": "assistant_delta", "content": "  println(1)\n}" }),
+    { "event": "assistant_delta", "content": "  println(1)\n}" },
     items,
   )
   // The run of newline + indentation spanning the two deltas collapses to a
@@ -379,7 +363,7 @@ test "reasoning_message commits a thought item and clears the preview" {
   let items : Array[@ui.TranscriptItem] = []
   append_items(
     state,
-    Json::object({ "event": "reasoning_delta", "content": "Let me think" }),
+    { "event": "reasoning_delta", "content": "Let me think" },
     items,
   )
   assert_true(state.streaming_reasoning is Some("Let me think"))
@@ -387,20 +371,16 @@ test "reasoning_message commits a thought item and clears the preview" {
   // is finished with.
   append_items(
     state,
-    Json::object({
+    {
       "event": "reasoning_message",
       "content": "Let me think about names.\nThe user said Hongbo.",
-    }),
+    },
     items,
   )
   assert_true(state.streaming_reasoning is None)
   guard items is [Thought(_)] else { fail("expected a single Thought item") }
   // Blank reasoning never appends an empty aside.
-  append_items(
-    state,
-    Json::object({ "event": "reasoning_message", "content": "  " }),
-    items,
-  )
+  append_items(state, { "event": "reasoning_message", "content": "  " }, items)
   assert_eq(items.length(), 1)
 }
 
@@ -411,7 +391,7 @@ test "reasoning_delta drives the thinking preview until content arrives" {
   let items : Array[@ui.TranscriptItem] = []
   append_items(
     state,
-    Json::object({ "event": "reasoning_delta", "content": "Let me think" }),
+    { "event": "reasoning_delta", "content": "Let me think" },
     items,
   )
   assert_true(state.streaming_reasoning is Some("Let me think"))
@@ -421,7 +401,7 @@ test "reasoning_delta drives the thinking preview until content arrives" {
   // replaces the reasoning one.
   append_items(
     state,
-    Json::object({ "event": "assistant_delta", "content": "Answer" }),
+    { "event": "assistant_delta", "content": "Answer" },
     items,
   )
   assert_true(state.streaming_reasoning is None)
@@ -429,7 +409,7 @@ test "reasoning_delta drives the thinking preview until content arrives" {
   // The committed message clears both previews.
   append_items(
     state,
-    Json::object({ "event": "assistant_message", "content": "Answer" }),
+    { "event": "assistant_message", "content": "Answer" },
     items,
   )
   assert_true(state.streaming_response is None)
@@ -445,40 +425,37 @@ test "replaying a recorded engine session renders the transcript" {
 
   // A realistic one-step session: think, report usage, run a tool, finish.
   let items : Array[@ui.TranscriptItem] = []
-  append_items(state, Json::object({ "event": "agent_step", "step": 1 }), items)
+  append_items(state, { "event": "agent_step", "step": 1 }, items)
   append_items(
     state,
-    Json::object({
-      "event": "assistant_message",
-      "content": "Let me check the project.",
-    }),
+    { "event": "assistant_message", "content": "Let me check the project." },
     items,
   )
   append_items(
     state,
-    Json::object({
+    {
       "event": "usage",
       "prompt_tokens": 100,
       "completion_tokens": 20,
       "cache_hit_tokens": 0,
       "cache_miss_tokens": 100,
-    }),
+    },
     items,
   )
   append_items(
     state,
-    Json::object({
+    {
       "event": "tool_result",
       "tool_call_id": "c1",
       "tool_name": "bash",
       "is_error": false,
       "content": "ok",
-    }),
+    },
     items,
   )
   append_items(
     state,
-    Json::object({ "event": "agent_finished", "answer": "all done" }),
+    { "event": "agent_finished", "answer": "all done" },
     items,
   )
 

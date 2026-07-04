@@ -1,59 +1,50 @@
 ///|
 test "decode maps each engine event kind" {
   assert_true(
-    @event.decode_event(Json::object({ "event": "agent_step", "step": 3 }))
-    is Some(AgentStep),
+    @event.decode_event({ "event": "agent_step", "step": 3 }) is Some(AgentStep),
   )
   assert_true(
-    @event.decode_event(Json::object({ "event": "max_steps_exhausted" }))
+    @event.decode_event({ "event": "max_steps_exhausted" })
     is Some(MaxStepsExhausted),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "assistant_delta", "content": "tok" }),
-    )
+    @event.decode_event({ "event": "assistant_delta", "content": "tok" })
     is Some(AssistantDelta("tok")),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "reasoning_delta", "content": "hmm" }),
-    )
+    @event.decode_event({ "event": "reasoning_delta", "content": "hmm" })
     is Some(ReasoningDelta("hmm")),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "reasoning_message", "content": "full thought" }),
-    )
+    @event.decode_event({
+      "event": "reasoning_message",
+      "content": "full thought",
+    })
     is Some(ReasoningMessage("full thought")),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "agent_finished", "answer": "done" }),
-    )
+    @event.decode_event({ "event": "agent_finished", "answer": "done" })
     is Some(AgentFinished("done")),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "runtime_update", "content": "checked: 1 error" }),
-    )
+    @event.decode_event({
+      "event": "runtime_update",
+      "content": "checked: 1 error",
+    })
     is Some(RuntimeUpdate("checked: 1 error")),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "session_error", "error": "stale session" }),
-    )
+    @event.decode_event({ "event": "session_error", "error": "stale session" })
     is Some(SessionError("stale session")),
   )
   match
-    @event.decode_event(
-      Json::object({
-        "event": "tool_result",
-        "tool_call_id": "c1",
-        "tool_name": "bash",
-        "is_error": true,
-        "content": "boom",
-      }),
-    ) {
+    @event.decode_event({
+      "event": "tool_result",
+      "tool_call_id": "c1",
+      "tool_name": "bash",
+      "is_error": true,
+      "content": "boom",
+    }) {
     Some(ToolResult(result)) => {
       assert_eq(result.name, "bash")
       assert_eq(result.content, "boom")
@@ -66,35 +57,27 @@ test "decode maps each engine event kind" {
 ///|
 test "steer wire events decode to their applied and dropped forms" {
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "steer_applied", "content": "go left" }),
-    )
+    @event.decode_event({ "event": "steer_applied", "content": "go left" })
     is Some(SteerApplied(Prompt("go left"))),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({
-        "event": "steer_applied",
-        "kind": "prompt",
-        "content": "go right",
-      }),
-    )
+    @event.decode_event({
+      "event": "steer_applied",
+      "kind": "prompt",
+      "content": "go right",
+    })
     is Some(SteerApplied(Prompt("go right"))),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({
-        "event": "steer_applied",
-        "kind": "command",
-        "content": "<user_shell_command>",
-      }),
-    )
+    @event.decode_event({
+      "event": "steer_applied",
+      "kind": "command",
+      "content": "<user_shell_command>",
+    })
     is Some(SteerApplied(Command("<user_shell_command>"))),
   )
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "steer_dropped", "content": "too late" }),
-    )
+    @event.decode_event({ "event": "steer_dropped", "content": "too late" })
     is Some(SteerDropped("too late")),
   )
 }
@@ -102,9 +85,10 @@ test "steer wire events decode to their applied and dropped forms" {
 ///|
 test "a failed serve turn decodes to a terminal agent error" {
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "turn_failed", "error": "DeepSeek API error" }),
-    )
+    @event.decode_event({
+      "event": "turn_failed",
+      "error": "DeepSeek API error",
+    })
     is Some(AgentError("turn failed: DeepSeek API error")),
   )
 }
@@ -116,12 +100,10 @@ test "a rejected command decodes to a non-terminal CommandRejected" {
   // whether it ends a run (only `/compact` needs that), so it is not decoded as
   // a terminal `AgentError`.
   assert_true(
-    @event.decode_event(
-      Json::object({
-        "event": "command_error",
-        "error": "unknown command: compact",
-      }),
-    )
+    @event.decode_event({
+      "event": "command_error",
+      "error": "unknown command: compact",
+    })
     is Some(CommandRejected("unknown command: compact")),
   )
 }
@@ -130,27 +112,21 @@ test "a rejected command decodes to a non-terminal CommandRejected" {
 test "compaction wire events decode to their terminal forms" {
   // Success carries the summary so the controller can preview the new context.
   assert_true(
-    @event.decode_event(
-      Json::object({
-        "event": "compaction_finished",
-        "from_sequence": 1,
-        "to_sequence": 42,
-        "summary": "handoff",
-      }),
-    )
+    @event.decode_event({
+      "event": "compaction_finished",
+      "from_sequence": 1,
+      "to_sequence": 42,
+      "summary": "handoff",
+    })
     is Some(CompactionFinished("handoff")),
   )
   // Failure folds into the general agent-error category like a failed turn.
   assert_true(
-    @event.decode_event(
-      Json::object({ "event": "compaction_failed", "error": "cancelled" }),
-    )
+    @event.decode_event({ "event": "compaction_failed", "error": "cancelled" })
     is Some(AgentError("compaction failed: cancelled")),
   )
   // The start marker carries no controller state, so it drops like any unknown.
-  assert_true(
-    @event.decode_event(Json::object({ "event": "compaction_started" })) is None,
-  )
+  assert_true(@event.decode_event({ "event": "compaction_started" }) is None)
 }
 
 ///|
@@ -158,23 +134,19 @@ test "decode returns None for a non-object value or unknown event" {
   // `@jsonl` handles blank and malformed lines before decoding; the mapping only
   // has to tolerate a non-object value and a newer engine's unknown event kind.
   assert_true(@event.decode_event(Json::string("not an object")) is None)
-  assert_true(
-    @event.decode_event(Json::object({ "event": "future_event_kind" })) is None,
-  )
+  assert_true(@event.decode_event({ "event": "future_event_kind" }) is None)
 }
 
 ///|
 test "usage total is derived from prompt and completion tokens" {
   match
-    @event.decode_event(
-      Json::object({
-        "event": "usage",
-        "prompt_tokens": 100,
-        "completion_tokens": 23,
-        "cache_hit_tokens": 0,
-        "cache_miss_tokens": 100,
-      }),
-    ) {
+    @event.decode_event({
+      "event": "usage",
+      "prompt_tokens": 100,
+      "completion_tokens": 23,
+      "cache_hit_tokens": 0,
+      "cache_miss_tokens": 100,
+    }) {
     Some(Usage(usage)) => assert_eq(usage.total_tokens, 123)
     _ => fail("expected Usage")
   }
