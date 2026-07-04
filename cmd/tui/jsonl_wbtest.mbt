@@ -435,10 +435,13 @@ test "replaying a recorded engine session renders the transcript" {
     state,
     {
       "event": "usage",
-      "prompt_tokens": 100,
-      "completion_tokens": 20,
-      "cache_hit_tokens": 0,
-      "cache_miss_tokens": 100,
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 100,
+      },
     },
     items,
   )

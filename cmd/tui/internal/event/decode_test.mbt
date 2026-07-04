@@ -142,10 +142,13 @@ test "usage total is derived from prompt and completion tokens" {
   match
     @event.decode_event({
       "event": "usage",
-      "prompt_tokens": 100,
-      "completion_tokens": 23,
-      "cache_hit_tokens": 0,
-      "cache_miss_tokens": 100,
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 23,
+        "total_tokens": 123,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 100,
+      },
     }) {
     Some(Usage(usage)) => assert_eq(usage.total_tokens, 123)
     _ => fail("expected Usage")

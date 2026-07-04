@@ -28,9 +28,15 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     "runtime_update" => Some(RuntimeUpdate(@jsonx.string(object, "content")))
     "session_error" => Some(SessionError(@jsonx.string(object, "error")))
     "usage" => {
-      let prompt = @jsonx.int(object, "prompt_tokens")
-      let completion = @jsonx.int(object, "completion_tokens")
-      Some(Usage({ total_tokens: prompt + completion }))
+      let usage : @deepseek.Usage = @json.from_json(
+        @jsonx.field(object, "usage").unwrap_or(Json::null()),
+      ) catch {
+        // Unreachable with the lenient Usage impl; drop rather than crash.
+        _ => return None
+      }
+      Some(
+        Usage({ total_tokens: usage.prompt_tokens + usage.completion_tokens }),
+      )
     }
     "tool_result" =>
       Some(
