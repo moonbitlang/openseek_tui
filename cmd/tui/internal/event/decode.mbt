@@ -29,7 +29,7 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     "session_error" => Some(SessionError(@jsonx.string(object, "error")))
     "usage" => {
       let usage : @deepseek.Usage = @json.from_json(
-        @jsonx.field(object, "usage").unwrap_or(Json::null()),
+        @jsonx.field(object, "usage").unwrap_or_default(),
       ) catch {
         // Unreachable with the lenient Usage impl; drop rather than crash.
         _ => return None
