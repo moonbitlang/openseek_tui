@@ -142,8 +142,8 @@ async fn[G] EngineClient::start(
         ),
       )
     }
-    // The watchers this engine owned died with it: let the loop reset
-    // engine-scoped status, whatever the exit reason.
+    // The watchers this engine owned died with it: let the loop observe the
+    // engine boundary, whatever the exit reason.
     self.messages.put(EngineExited)
   }
   engine.reader = Some(reader_task)

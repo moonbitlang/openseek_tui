@@ -40,7 +40,6 @@ pub(all) enum AgentEvent {
   SteerApplied(@agent_runtime.SteerInput)
   SteerDropped(String)
   AssistantMessage(String)
-  RuntimeUpdate(String)
   SessionError(String)
   Usage(UsageInfo)
   ToolResult(ToolResultEvent)

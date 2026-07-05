@@ -27,13 +27,6 @@ test "decode maps each engine event kind" {
     is Some(AgentFinished("done")),
   )
   assert_true(
-    @event.decode_event({
-      "event": "runtime_update",
-      "content": "checked: 1 error",
-    })
-    is Some(RuntimeUpdate("checked: 1 error")),
-  )
-  assert_true(
     @event.decode_event({ "event": "session_error", "error": "stale session" })
     is Some(SessionError("stale session")),
   )

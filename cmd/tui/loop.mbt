@@ -431,21 +431,6 @@ fn handle_agent_event(
         cmds.push(AppendItem(Response(text)))
       }
     }
-    // Out-of-band runtime diagnostics (e.g. `moon check --watch`) the engine fed
-    // back to the model. The model reacts to them, so surface them to the user
-    // too rather than dropping them: lift the watcher status into the status bar
-    // and append the stripped diagnostics as a `↻` tool-style notice.
-    RuntimeUpdate(text) => {
-      let update = parse_runtime_update(text)
-      // A status-less update (e.g. the engine's compact "results unchanged"
-      // marker) must not blank a live watcher's segment.
-      if update.status != "" {
-        state.watcher_status = update.status
-      }
-      if update.status != "" || update.diagnostics.length() > 0 {
-        cmds.push(AppendItem(runtime_item(update)))
-      }
-    }
     SessionError(error) => cmds.push(AppendItem(Error(error)))
     Usage(usage) => state.usage = Some(usage)
     ToolResult(result) => cmds.push(AppendItem(tool_item(result)))
@@ -743,9 +728,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // fresh identical-text steer's entry from the next turn.
     EngineSteerDropped(text) => cmds.push(AppendItem(steer_dropped_item(text)))
     EngineSessionError(error) => cmds.push(AppendItem(Error(error)))
-    // The engine process is gone, and its watchers with it: an old
-    // `moon_check running` segment would be a lie on the status bar.
-    EngineExited => state.watcher_status = ""
+    EngineExited => ()
     // Tick is a 1s heartbeat: it keeps the message loop turning so the trailing
     // refresh_ui re-runs (the elapsed-time activity line keeps advancing during
     // quiet stretches) and steps the `/loop` countdown. Bookkeeping only — a

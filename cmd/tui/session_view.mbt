@@ -48,8 +48,7 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
         Some(Response(message.content()))
       }
     Tool(result) => Some(session_tool_item(result))
-    Runtime(notice) =>
-      Some(runtime_item(parse_runtime_update(notice.content())))
+    Runtime(notice) => Some(runtime_notice_item(notice.content()))
     Summary(summary) => Some(summary_item(summary))
     Terminal(terminal) => terminal_item(terminal)
   }

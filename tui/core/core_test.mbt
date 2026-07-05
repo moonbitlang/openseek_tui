@@ -36,9 +36,9 @@ test "transcript notice renders a ↻ marker with tool-style detail lines" {
   inspect(
     @doc.ToDoc::to_doc(
       @core.TranscriptItem::Notice(
-        ToolCall(@doc.Text::plain("moon_check · running"), details=[
-          @doc.Text::plain("Warning: unused variable"),
-          @doc.Text::plain("ok"),
+        ToolCall(@doc.Text::plain("runtime notice"), details=[
+          @doc.Text::plain("plan reminder"),
+          @doc.Text::plain("run tests"),
         ]),
       ),
     )
@@ -46,7 +46,7 @@ test "transcript notice renders a ↻ marker with tool-style detail lines" {
     .map(line => line.text())
     .join("|"),
     content=(
-      #|↻ moon_check · running|  └ Warning: unused variable|    ok
+      #|↻ runtime notice|  └ plan reminder|    run tests
     ),
   )
 }

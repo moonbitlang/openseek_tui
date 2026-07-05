@@ -39,11 +39,10 @@ pub fn ToolCall::ToolCall(
 
 ///|
 /// One committed entry in the transcript: a submitted `Input`, an agent
-/// `Response`, a `ToolCall`, an out-of-band runtime `Notice` (e.g. background
-/// `moon check --watch` diagnostics the agent was fed — a titled, detail-bearing
-/// block like a tool call but flagged with a `↻` marker), a `Thought` (the
-/// model's completed thinking for a turn, same titled block under a `✻`
-/// marker), or an `Error`.
+/// `Response`, a `ToolCall`, an out-of-band runtime `Notice` (a titled,
+/// detail-bearing block like a tool call but flagged with a `↻` marker), a
+/// `Thought` (the model's completed thinking for a turn, same titled block
+/// under a `✻` marker), or an `Error`.
 pub(all) enum TranscriptItem {
   Input(Input)
   Response(String)
@@ -81,7 +80,7 @@ let square : @displaytext.DisplayText = DisplayText("■ ")
 
 ///|
 /// Marker for an out-of-band runtime notice (`Notice`): a `↻` so a background
-/// watcher update reads as a refresh, distinct from a `⏺` agent/tool line.
+/// context update reads as a refresh, distinct from a `⏺` agent/tool line.
 let notice : @displaytext.DisplayText = DisplayText("↻ ")
 
 ///|

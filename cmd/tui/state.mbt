@@ -87,10 +87,6 @@ priv struct State {
   // gap reads as "my keystroke was eaten".
   pending_steers : Array[String]
   mut usage : @event.UsageInfo?
-  // Latest background `moon_check` watcher status ("running"/"stopped"), lifted
-  // from the most recent `runtime_update` for the status bar. Empty until the
-  // first watcher update arrives.
-  mut watcher_status : String
   // The `/loop` schedule, when one is armed. Bookkeeping (countdown, re-arm,
   // pause) lives in `update`; dispatch happens only at the post-update choke
   // point `scheduler_maybe_fire`, which also needs the composer state that
@@ -117,7 +113,6 @@ fn State::new(config : AppConfig) -> State {
     streaming_response: None,
     streaming_reasoning: None,
     usage: None,
-    watcher_status: "",
     schedule: None,
     background_commands: 0,
   }
@@ -146,12 +141,7 @@ fn State::owns_run(self : State, id : Int) -> Bool {
 
 ///|
 /// Reset run tracking after the agent stops (finished, aborted, cancelled, or
-/// failed): no task running, no pending final or streaming response. In serve
-/// mode the watcher status survives a turn ending — the persistent engine
-/// keeps its `moon_check --watch` processes alive between prompts, so the
-/// segment only clears when the engine itself exits (`EngineExited`) or a
-/// runtime update reports the watcher stopped. A oneshot engine dies with its
-/// turn, and its watchers with it, so there the status clears here as before.
+/// failed): no task running, no pending final or streaming response.
 fn State::finish_run(self : State) -> Unit {
   self.run = Idle
   self.run_is_command = false
@@ -163,9 +153,6 @@ fn State::finish_run(self : State) -> Unit {
   self.step_response = None
   self.streaming_response = None
   self.streaming_reasoning = None
-  if self.config.engine_mode is OneShot {
-    self.watcher_status = ""
-  }
 }
 
 ///|
@@ -209,7 +196,7 @@ priv enum Msg {
   // run id and never affect run lifecycle.
   EngineSessionError(String)
   // The persistent engine process exited (for any reason): its background
-  // watchers died with it, so engine-scoped status must reset.
+  // watchers died with it, so the loop can observe the engine boundary.
   EngineExited
   Tick
 }

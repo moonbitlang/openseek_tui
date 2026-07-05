@@ -25,7 +25,6 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     "steer_dropped" => Some(SteerDropped(@jsonx.string(object, "content")))
     "assistant_message" =>
       Some(AssistantMessage(@jsonx.string(object, "content")))
-    "runtime_update" => Some(RuntimeUpdate(@jsonx.string(object, "content")))
     "session_error" => Some(SessionError(@jsonx.string(object, "error")))
     "usage" => {
       let usage : @deepseek.Usage = @json.from_json(

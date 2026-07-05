@@ -481,7 +481,7 @@ test "a background shell command result sends command context" {
 }
 
 ///|
-test "oneshot engines reject steering with the legacy notice" {
+test "oneshot engines reject steering" {
   let state = drain_oneshot_test_state()
   let _ = update(state, UiInput(Steer(Prompt("a"))))
   assert_true(state.run is Running(_))
@@ -490,14 +490,10 @@ test "oneshot engines reject steering with the legacy notice" {
   let cmds = update(state, UiInput(Steer(Prompt("b"))))
   assert_eq(error_item_count(cmds), 1)
   assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
-  // A oneshot engine dies with its turn — its watcher status must not
-  // outlive the run the way serve mode's deliberately does.
-  state.watcher_status = "running"
   let _ = update(
     state,
     AgentProgress(run_id=state.run_id, AgentFinished("done")),
   )
-  assert_eq(state.watcher_status, "")
 }
 
 ///|

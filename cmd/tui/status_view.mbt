@@ -48,10 +48,6 @@ fn status_segments(state : State) -> Array[Segment] {
       text: format_usage_segment(state.usage),
       style: Style(foreground=Basic(Magenta)),
     },
-    {
-      text: watcher_segment_text(state.watcher_status),
-      style: Style(foreground=Basic(Cyan)),
-    },
   ]
 }
 
