@@ -10,6 +10,7 @@ fn drain_test_state() -> State {
     session_id: SessionId("test"),
     session_root: ".openseek",
     engine: "openseek",
+    engine_args_prefix: [],
     engine_mode: Serve,
   })
 }
@@ -19,6 +20,7 @@ fn drain_oneshot_test_state() -> State {
   State::new({
     ..drain_test_state().config,
     engine: "./replayer",
+    engine_args_prefix: [],
     engine_mode: OneShot,
   })
 }

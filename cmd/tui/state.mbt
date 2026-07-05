@@ -19,7 +19,32 @@ priv struct AppConfig {
   // override (e.g. to a recorded-stream replayer) with `--engine` or
   // `OPENSEEK_ENGINE`.
   engine : String
+  // Extra arguments inserted before the engine subcommand. Usually empty; when
+  // the TUI itself was launched through Moon's debug native `tcc -run` path, the
+  // engine is `tcc @<generated-response-file> <subcommand>`.
+  engine_args_prefix : Array[String]
   engine_mode : EngineMode
+}
+
+///|
+fn AppConfig::engine_args(
+  self : AppConfig,
+  args : ArrayView[String],
+) -> Array[String] {
+  let all = self.engine_args_prefix.copy()
+  all.append(args)
+  all
+}
+
+///|
+fn AppConfig::engine_display(self : AppConfig) -> String {
+  if self.engine_args_prefix.length() == 0 {
+    self.engine
+  } else {
+    let parts = [self.engine]
+    parts.append(self.engine_args_prefix)
+    parts.join(" ")
+  }
 }
 
 ///|

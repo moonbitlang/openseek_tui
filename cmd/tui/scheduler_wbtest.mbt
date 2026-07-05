@@ -72,6 +72,7 @@ fn scheduler_test_state() -> State {
     session_id: SessionId("loop-test"),
     session_root: ".openseek",
     engine: "openseek",
+    engine_args_prefix: [],
     engine_mode: Serve,
   })
 }

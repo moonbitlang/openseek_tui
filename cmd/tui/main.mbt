@@ -201,10 +201,10 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
       root
     }
   }
-  // An explicit --engine / OPENSEEK_ENGINE wins; otherwise re-launch this binary
-  // as the engine (see `default_engine`). Presence of a non-blank value, not a
-  // magic default string, decides — which also gates oneshot below. A blank
-  // `--engine ""` counts as unset rather than an empty command.
+  // An explicit --engine / OPENSEEK_ENGINE wins; otherwise re-launch this
+  // command as the engine (see `default_engine`). Presence of a non-blank value,
+  // not a magic default string, decides — which also gates oneshot below. A
+  // blank `--engine ""` counts as unset rather than an empty command.
   let explicit_engine : String? = match @cli.values(matches, "engine") {
     [engine, ..] if !engine.trim().is_empty() => Some(engine)
     _ => None
@@ -228,6 +228,10 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   // Enforced here rather than via argparse `required`: see `tui_shared_options`.
   let model = @deepseek.Model::parse(@cli.value(matches, "model"))
   let api_key = @agentcli.api_key(matches, model)
+  let (engine, engine_args_prefix) = match explicit_engine {
+    Some(engine) => (engine, [])
+    None => default_engine(@sys.get_cli_args())
+  }
   {
     api_key,
     api_url: @agentcli.api_url(matches),
@@ -245,26 +249,40 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
       None => generated_session_id(@env.now().reinterpret_as_int64())
     },
     session_root: session_root_value,
-    engine: match explicit_engine {
-      Some(engine) => engine
-      None => default_engine(@sys.get_cli_args())
-    },
+    engine,
+    engine_args_prefix,
     engine_mode,
   }
 }
 
 ///|
-/// The engine command when `--engine`/`OPENSEEK_ENGINE` is unset: re-launch *this*
-/// executable so `openseek tui` never spawns a separately-installed, stale engine.
-/// `args[0]` (argv0) with a path separator (`/` or, on Windows, `\`) is used
-/// directly — spawn resolves it against the launch cwd (which the UI never
-/// changes) — so `./openseek` or an absolute path re-execs the same file; a bare
-/// name is left as `openseek` for a PATH lookup, which for a single binary is the
-/// same file. Split out so it is unit-testable without a real argv0.
-fn default_engine(args : ArrayView[String]) -> String {
+/// The engine command when `--engine`/`OPENSEEK_ENGINE` is unset. A normal
+/// binary argv0 is re-execed directly; a bare argv0 falls back to PATH lookup.
+/// Moon's debug native `tcc -run` path is different: argv0 is the generated C
+/// source and no sibling `.exe` is produced, so re-enter through the generated
+/// TCC response file; it carries the include paths, defines, linked dylibs, and
+/// `-run <source.c>`.
+fn default_engine(args : ArrayView[String]) -> (String, Array[String]) {
   match args {
-    [argv0, ..] if argv0.contains("/") || argv0.contains("\\") => argv0
-    _ => "openseek"
+    [argv0, ..] if argv0.contains("/") || argv0.contains("\\") =>
+      match moon_native_tcc_run_args(argv0) {
+        Some(args_prefix) => ("tcc", args_prefix)
+        None => (argv0, [])
+      }
+    _ => ("openseek", [])
+  }
+}
+
+///|
+fn moon_native_tcc_run_args(argv0 : String) -> Array[String]? {
+  if argv0.has_suffix(".c") &&
+    (argv0.contains("/_build/native/") || argv0.contains("\\_build\\native\\")) {
+    match argv0.strip_suffix(".c") {
+      Some(stem) => Some(["@\{stem}.rspfile"])
+      None => None
+    }
+  } else {
+    None
   }
 }
 
@@ -325,18 +343,24 @@ async fn run_app(config : AppConfig, initial : String?, ui : @ui.Ui) -> Unit {
 /// Whether the engine is usable enough to launch. The agent engine is spawned
 /// fresh per task (and only once the user submits one), so a missing, non-
 /// executable, or non-`openseek`-like engine would otherwise surface deep inside
-/// the running UI. We probe it once at startup with `<engine> --help`, which is
-/// part of the engine contract: like `openseek`, any `--engine` replacement must
-/// accept `--help` as a side-effect-free no-op that exits 0 — it makes no API
-/// call, and its output is captured so it never reaches the terminal. The engine
-/// is usable only if that probe spawns and exits 0; `ENOENT`/`EACCES` (not found
-/// / not executable) or a non-zero exit both mean it is not. Any other failure
-/// is unexpected and re-raised rather than mislabeled as a bad engine.
-async fn engine_launchable(engine : String) -> Bool {
+/// the running UI. We probe it once at startup with the configured engine command
+/// plus `--help`, which is part of the engine contract: like `openseek`, any
+/// `--engine` replacement must accept `--help` as a side-effect-free no-op that
+/// exits 0 — it makes no API call, and its output is captured so it never reaches
+/// the terminal. The engine is usable only if that probe spawns and exits 0;
+/// `ENOENT`/`EACCES` (not found / not executable) or a non-zero exit both mean it
+/// is not. Any other failure is unexpected and re-raised rather than mislabeled
+/// as a bad engine.
+async fn engine_command_launchable(
+  engine : String,
+  args_prefix : Array[String],
+) -> Bool {
   try {
+    let args = args_prefix.copy()
+    args.push("--help")
     let (code, _) = @process.collect_output_merged(
       engine,
-      ["--help"],
+      args,
       inherit_env=true,
     )
     code == 0
@@ -344,6 +368,11 @@ async fn engine_launchable(engine : String) -> Bool {
     @os_error.OSError(_) as err if err.is_ENOENT() || err.is_EACCES() => false
     err => raise err
   }
+}
+
+///|
+async fn engine_launchable(config : AppConfig) -> Bool {
+  engine_command_launchable(config.engine, config.engine_args_prefix)
 }
 
 ///|
@@ -357,9 +386,9 @@ pub async fn run(matches : @argparse.Matches) -> Unit {
   }
   // Fail before the terminal UI takes over the screen if the engine is unusable,
   // rather than dropping the user into a UI that dies on the first task.
-  if !engine_launchable(config.engine) {
+  if !engine_launchable(config) {
     println(
-      "error: engine '\{config.engine}' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.",
+      "error: engine '\{config.engine_display()}' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.",
     )
     println(
       "Pass --engine <path>, set OPENSEEK_ENGINE, or install the openseek binary.",
@@ -400,9 +429,11 @@ test "cli accepts no initial task" {
   assert_eq(config.api_key, "test-key")
   assert_true(config.api_url is None)
   assert_eq(config.max_steps, 1000)
-  // With no --engine, the engine falls through to re-launching this binary
+  // With no --engine, the engine falls through to re-launching this command
   // (`default_engine` of the process args), not a hardcoded string.
-  assert_eq(config.engine, default_engine(@sys.get_cli_args()))
+  let (expected_engine, expected_prefix) = default_engine(@sys.get_cli_args())
+  assert_eq(config.engine, expected_engine)
+  assert_string_array_eq(config.engine_args_prefix, expected_prefix)
   // No --session still converses in a session: a generated per-launch id, so
   // consecutive prompts share context instead of running amnesiac one-shots.
   assert_true(config.session_id.value().has_prefix("tui-"))
@@ -545,22 +576,66 @@ test "cli accepts --continue and rejects combining it with --session" {
 }
 
 ///|
+fn assert_string_array_eq(
+  actual : Array[String],
+  expected : Array[String],
+) -> Unit raise {
+  assert_eq(actual.length(), expected.length())
+  for i in 0..<actual.length() {
+    assert_eq(actual[i], expected[i])
+  }
+}
+
+///|
+fn assert_default_engine(
+  actual : (String, Array[String]),
+  engine : String,
+  args_prefix : Array[String],
+) -> Unit raise {
+  let (actual_engine, actual_prefix) = actual
+  assert_eq(actual_engine, engine)
+  assert_string_array_eq(actual_prefix, args_prefix)
+}
+
+///|
 test "default_engine re-launches a path argv0 and falls back to PATH otherwise" {
-  assert_eq(
+  assert_default_engine(
     default_engine(["/usr/local/bin/openseek"]),
     "/usr/local/bin/openseek",
+    [],
   )
-  assert_eq(default_engine(["./openseek"]), "./openseek")
-  assert_eq(
+  assert_default_engine(default_engine(["./openseek"]), "./openseek", [])
+  assert_default_engine(default_engine(["src/openseek.c"]), "src/openseek.c", [])
+  assert_default_engine(
     default_engine(["target/native/openseek"]),
     "target/native/openseek",
+    [],
   )
-  assert_eq(
+  assert_default_engine(
     default_engine(["target\\native\\openseek.exe"]),
     "target\\native\\openseek.exe",
+    [],
   )
-  assert_eq(default_engine(["openseek"]), "openseek")
-  assert_eq(default_engine([]), "openseek")
+  assert_default_engine(
+    default_engine([
+      "/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.c",
+    ]),
+    "tcc",
+    [
+      "@/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.rspfile",
+    ],
+  )
+  assert_default_engine(
+    default_engine([
+      "C:\\repo\\_build\\native\\debug\\build\\bobzhang\\openseek\\cmd\\openseek\\openseek.c",
+    ]),
+    "tcc",
+    [
+      "@C:\\repo\\_build\\native\\debug\\build\\bobzhang\\openseek\\cmd\\openseek\\openseek.rspfile",
+    ],
+  )
+  assert_default_engine(default_engine(["openseek"]), "openseek", [])
+  assert_default_engine(default_engine([]), "openseek", [])
 }
 
 ///|
@@ -569,7 +644,9 @@ async test "engine defaults to this binary; --engine/OPENSEEK_ENGINE override it
   let default_cfg = parse_config(
     cli_command().parse(argv=[], env={ "DEEPSEEK": "k" }),
   )
-  assert_eq(default_cfg.engine, default_engine(@sys.get_cli_args()))
+  let (expected_engine, expected_prefix) = default_engine(@sys.get_cli_args())
+  assert_eq(default_cfg.engine, expected_engine)
+  assert_string_array_eq(default_cfg.engine_args_prefix, expected_prefix)
   // OPENSEEK_ENGINE is treated as an explicit engine.
   let env_cfg = parse_config(
     cli_command().parse(argv=[], env={
@@ -578,6 +655,7 @@ async test "engine defaults to this binary; --engine/OPENSEEK_ENGINE override it
     }),
   )
   assert_eq(env_cfg.engine, "./fake-engine")
+  assert_string_array_eq(env_cfg.engine_args_prefix, [])
 }
 
 ///|
@@ -605,6 +683,7 @@ async test "oneshot with an explicit engine (flag or env) is accepted" {
   )
   assert_true(flag_cfg.engine_mode is OneShot)
   assert_eq(flag_cfg.engine, "./fake-engine")
+  assert_string_array_eq(flag_cfg.engine_args_prefix, [])
   let env_cfg = parse_config(
     cli_command().parse(argv=[], env={
       "DEEPSEEK": "k",
@@ -620,12 +699,14 @@ test "cli overrides the engine binary" {
   let parsed = cli_command().parse(argv=["--engine", "./fake-engine"], env={
     "DEEPSEEK": "test-key",
   })
-  assert_eq(parse_config(parsed).engine, "./fake-engine")
+  let config = parse_config(parsed)
+  assert_eq(config.engine, "./fake-engine")
+  assert_string_array_eq(config.engine_args_prefix, [])
 }
 
 ///|
 async test "engine_launchable rejects a binary that cannot be exec'd" {
-  assert_false(engine_launchable("openseek-not-a-real-binary-xyz"))
+  assert_false(engine_command_launchable("openseek-not-a-real-binary-xyz", []))
 }
 
 ///|
@@ -634,5 +715,5 @@ async test "engine_launchable accepts an engine whose --help exits 0" {
   // requires: `moon --help` exits 0 and, unlike `true`, `moon` is on PATH on
   // every platform the tests run on (including Windows native), so this stays
   // cross-platform.
-  assert_true(engine_launchable("moon"))
+  assert_true(engine_command_launchable("moon", []))
 }

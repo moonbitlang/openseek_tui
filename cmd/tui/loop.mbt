@@ -173,10 +173,10 @@ fn engine_env(
 }
 
 ///|
-/// One-shot engine invocation: `<engine> run -- <task>`. The `run` subcommand is
-/// the headless one-shot mode; `--` stops option parsing so a task starting with
-/// `-` is taken literally.
-fn engine_args(task : String) -> Array[String] {
+/// One-shot engine invocation: `<engine> ... run -- <task>`. The `run`
+/// subcommand is the headless one-shot mode; `--` stops option parsing so a task
+/// starting with `-` is taken literally.
+fn oneshot_engine_args(task : String) -> Array[String] {
   ["run", "--", task]
 }
 
@@ -184,8 +184,9 @@ fn engine_args(task : String) -> Array[String] {
 /// Spawn the agent engine for one input and stream its JSONL stdout into the
 /// message loop.
 ///
-/// The engine is a separate process (`config.engine`, default `openseek`): it
-/// runs the task and writes one JSON event per line to stdout. `@jsonl.each`
+/// The engine is a separate process (`config.engine`, default `openseek` or
+/// `tcc @<generated-response-file>` under Moon's debug native runner): it runs
+/// the task and writes one JSON event per line to stdout. `@jsonl.each`
 /// reads those lines, skips blanks, and parses each as JSON; we map the value to
 /// an `AgentEvent` and forward it as `AgentProgress`. If the engine closes its
 /// stream without a terminal event (it crashed, or exited before answering), we
@@ -211,7 +212,7 @@ async fn run_agent_task(
       // settings go through a fully materialized environment so custom replay
       // engines do not need to accept OpenSeek-specific flags, and inherited
       // session vars cannot shadow explicit TUI config.
-      engine_args(task),
+      config.engine_args(oneshot_engine_args(task)),
       inherit_env=false,
       extra_env=child_env,
       stdout=child_stdout,
