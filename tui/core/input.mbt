@@ -6,6 +6,7 @@
 pub(all) enum Input {
   Prompt(String)
   Command(String)
+  Notice(String)
 } derive(Eq, Debug)
 
 ///|
@@ -17,12 +18,17 @@ pub let prompt_prefix : @displaytext.DisplayText = DisplayText("❯ ")
 let command_prefix : @displaytext.DisplayText = DisplayText("$ ")
 
 ///|
+/// The marker shown before a system notice (e.g. a background job finishing).
+let notice_prefix : @displaytext.DisplayText = DisplayText("⚙ ")
+
+///|
 /// The prefix marker shown before this input (`❯ ` for prompts, `$ ` for shell
-/// commands).
+/// commands, `⚙ ` for system notices).
 pub fn Input::prefix(self : Input) -> @displaytext.DisplayText {
   match self {
     Prompt(_) => prompt_prefix
     Command(_) => command_prefix
+    Notice(_) => notice_prefix
   }
 }
 
@@ -32,6 +38,7 @@ pub fn Input::text(self : Input) -> String {
   match self {
     Prompt(text) => text
     Command(command) => command
+    Notice(text) => text
   }
 }
 

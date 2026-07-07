@@ -94,6 +94,11 @@ async fn[G] EngineClient::start(
           // always reaches the user.
           SteerDropped(text) =>
             self.messages.try_put(EngineSteerDropped(text)) |> ignore
+          // A background job finished between turns: the engine already emitted
+          // this untagged, so post it untagged too — a run-tagged message would
+          // be swept by the stale-run guard once the turn closed.
+          BackgroundNotice(text) =>
+            self.messages.try_put(EngineBackgroundNotice(text)) |> ignore
           // A command context's delivery ack. The output is already rendered as
           // a local card and the engine appended it synchronously, so there is
           // nothing to do — in particular, do not echo it like a prompt steer.
@@ -214,7 +219,9 @@ async fn[G] EngineClient::steer(
   input : @agent_runtime.SteerInput,
 ) -> Unit {
   match input {
-    Prompt(text) =>
+    // A `Notice` is engine-internal (a tool pushing a completion notice); it is
+    // not something the TUI sends, but route it like a prompt for completeness.
+    Prompt(text) | Notice(text) =>
       match self.live {
         Some(live) if live.run_open =>
           self.send(live.latest_run, {

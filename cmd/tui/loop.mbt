@@ -416,6 +416,12 @@ fn handle_agent_event(
     // Command context is already rendered as a local shell result; its applied
     // event is only a delivery acknowledgment.
     SteerApplied(Command(_)) => ()
+    // A notice (e.g. a background job finishing) originates in the engine, not
+    // from a pending local steer, so just render it in the transcript.
+    SteerApplied(Notice(text)) => cmds.push(AppendItem(Input(Notice(text))))
+    // Idle background notices arrive untagged (as EngineBackgroundNotice); this
+    // tagged path is unreachable, but render it the same way for completeness.
+    BackgroundNotice(text) => cmds.push(AppendItem(Input(Notice(text))))
     // Normally unreachable from the wire: the engine client routes
     // steer_dropped events to the untagged message (they always trail the
     // racing turn's terminal, so a run-tagged copy would be stale-filtered).
@@ -645,6 +651,8 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
                 state.background_commands += 1
                 cmds.push(RunCommand(run_id=None, command))
               }
+              // A notice is engine-internal, never user-submitted steering.
+              Notice(_) => ()
             }
           }
         Queue(input) => state.queued.push(input)
@@ -729,6 +737,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // fresh identical-text steer's entry from the next turn.
     EngineSteerDropped(text) => cmds.push(AppendItem(steer_dropped_item(text)))
     EngineSessionError(error) => cmds.push(AppendItem(Error(error)))
+    EngineBackgroundNotice(text) => cmds.push(AppendItem(Input(Notice(text))))
     EngineExited => ()
     // Tick is a 1s heartbeat: it keeps the message loop turning so the trailing
     // refresh_ui re-runs (the elapsed-time activity line keeps advancing during
@@ -756,6 +765,8 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
         state.run_is_command = true
         cmds.push(RunCommand(run_id=Some(run_id), command))
       }
+      // A notice is engine-internal, never a user-submitted queued input.
+      Notice(_) => ()
     }
   }
   cmds

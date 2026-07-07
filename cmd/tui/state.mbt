@@ -220,6 +220,10 @@ priv enum Msg {
   // Session errors are not tied to a model turn, so they are reported without a
   // run id and never affect run lifecycle.
   EngineSessionError(String)
+  // A background job finished while the engine was idle. Reported without a run
+  // id (like a session error) so it is never swept by the stale-run guard, and
+  // rendered as a notice line in the transcript.
+  EngineBackgroundNotice(String)
   // The persistent engine process exited (for any reason): its background
   // watchers died with it, so the loop can observe the engine boundary.
   EngineExited
@@ -240,6 +244,7 @@ fn Msg::run_id(self : Msg) -> Int? {
     | SteerDropped(_)
     | EngineSteerDropped(_)
     | EngineSessionError(_)
+    | EngineBackgroundNotice(_)
     | EngineExited
     | Tick => None
   }

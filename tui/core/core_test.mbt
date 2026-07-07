@@ -16,6 +16,13 @@ test "input doc renders prompt prefixes" {
     .join("|"),
     content="$ pwd",
   )
+  inspect(
+    @doc.ToDoc::to_doc(@core.TranscriptItem::Input(Notice("job bg-1 finished")))
+    .layout(width=20)
+    .map(line => line.text())
+    .join("|"),
+    content="⚙ job bg-1 finished",
+  )
 }
 
 ///|

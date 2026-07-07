@@ -19,10 +19,13 @@ pub fn decode_event(object : Json) -> AgentEvent? {
       let content = @jsonx.string(object, "content")
       match @jsonx.string(object, "kind") {
         "command" => Some(SteerApplied(Command(content)))
+        "notice" => Some(SteerApplied(Notice(content)))
         _ => Some(SteerApplied(Prompt(content)))
       }
     }
     "steer_dropped" => Some(SteerDropped(@jsonx.string(object, "content")))
+    "background_notice" =>
+      Some(BackgroundNotice(@jsonx.string(object, "content")))
     "assistant_message" =>
       Some(AssistantMessage(@jsonx.string(object, "content")))
     "session_error" => Some(SessionError(@jsonx.string(object, "error")))

@@ -70,8 +70,27 @@ test "steer wire events decode to their applied and dropped forms" {
     is Some(SteerApplied(Command("<user_shell_command>"))),
   )
   assert_true(
+    @event.decode_event({
+      "event": "steer_applied",
+      "kind": "notice",
+      "content": "background job bg-1 finished",
+    })
+    is Some(SteerApplied(Notice("background job bg-1 finished"))),
+  )
+  assert_true(
     @event.decode_event({ "event": "steer_dropped", "content": "too late" })
     is Some(SteerDropped("too late")),
+  )
+}
+
+///|
+test "an idle background-job completion decodes to an untagged notice" {
+  assert_true(
+    @event.decode_event({
+      "event": "background_notice",
+      "content": "background job bg-2 finished (exit=0)",
+    })
+    is Some(BackgroundNotice("background job bg-2 finished (exit=0)")),
   )
 }
 

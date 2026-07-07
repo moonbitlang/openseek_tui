@@ -39,6 +39,9 @@ pub(all) enum AgentEvent {
   ReasoningMessage(String)
   SteerApplied(@agent_runtime.SteerInput)
   SteerDropped(String)
+  // A background job finished while the engine was idle. Emitted untagged (no
+  // run id) so it survives the TUI's stale-run guard between turns.
+  BackgroundNotice(String)
   AssistantMessage(String)
   SessionError(String)
   Usage(UsageInfo)
