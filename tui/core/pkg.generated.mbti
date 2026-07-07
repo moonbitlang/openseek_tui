@@ -24,6 +24,7 @@ pub(all) enum Event {
 pub(all) enum Input {
   Prompt(String)
   Command(String)
+  Notice(String)
 } derive(Eq, @debug.Debug)
 pub fn Input::prefix(Self) -> @displaytext.DisplayText
 pub fn Input::text(Self) -> String

@@ -18,6 +18,7 @@ pub(all) enum AgentEvent {
   ReasoningMessage(String)
   SteerApplied(@agent_runtime.SteerInput)
   SteerDropped(String)
+  BackgroundNotice(String)
   AssistantMessage(String)
   SessionError(String)
   Usage(UsageInfo)
