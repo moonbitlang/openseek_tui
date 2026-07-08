@@ -61,25 +61,8 @@ test "loop command grammar: subcommands" {
 }
 
 ///|
-fn scheduler_test_state() -> State {
-  State::new({
-    api_key: "k",
-    api_url: Some("https://proxy.example/v1/chat/completions"),
-    model: Deepseek(V4Pro),
-    cwd: ".",
-    max_steps: 10,
-    thinking: Max,
-    session_id: SessionId("loop-test"),
-    session_root: ".openseek",
-    engine: "openseek",
-    engine_args_prefix: [],
-    engine_mode: Serve,
-  })
-}
-
-///|
 fn armed_state(arguments : String) -> State {
-  let state = scheduler_test_state()
+  let state = drain_test_state()
   let _ = update(state, UiInput(SlashCommand(name="loop", arguments~)))
   state
 }
@@ -90,13 +73,8 @@ fn notice_count(cmds : Array[Cmd]) -> Int {
 }
 
 ///|
-fn error_count(cmds : Array[Cmd]) -> Int {
-  [ for cmd in cmds if cmd is AppendItem(Error(_)) => cmd ].length()
-}
-
-///|
 test "loop arm/off/status/pause/resume lifecycle" {
-  let state = scheduler_test_state()
+  let state = drain_test_state()
   // Arm: schedule set, notice appended, full countdown.
   let armed = update(
     state,
@@ -133,7 +111,7 @@ test "loop arm/off/status/pause/resume lifecycle" {
   let _ = update(state, UiInput(SlashCommand(name="loop", arguments="off")))
   assert_true(state.schedule is None)
   let again = update(state, UiInput(SlashCommand(name="loop", arguments="off")))
-  assert_eq(error_count(again), 1)
+  assert_eq(error_item_count(again), 1)
 }
 
 ///|
@@ -213,14 +191,11 @@ test "user runs never touch the schedule" {
 
 ///|
 test "background command counter tracks spawn and completion" {
-  let state = scheduler_test_state()
+  let state = drain_test_state()
   // Start a user run, then a background `!` alongside it.
   let _ = update(state, UiInput(Steer(Prompt("task"))))
   let cmds = update(state, UiInput(Steer(Command("ls"))))
-  assert_true(
-    [ for cmd in cmds if cmd is RunCommand(run_id=None, _) => cmd ].length() ==
-    1,
-  )
+  assert_eq(run_background_command_count(cmds), 1)
   assert_eq(state.background_commands, 1)
   let _ = update(
     state,
