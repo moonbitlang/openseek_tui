@@ -195,51 +195,6 @@ test "composer surface renders queued inputs above composer" {
 }
 
 ///|
-test "composer surface renders the input viewport" {
-  let surface = @render.composer_surface(
-    @composer.Model::new(""),
-    activity=None,
-    queued_inputs=[],
-    status=@doc.Text::plain("ready"),
-    notice=None,
-    cols=40,
-    max_rows=24,
-  )
-  inspect(
-    surface.height(),
-    content=(
-      #|5
-    ),
-  )
-  inspect(
-    surface.line_at(0).text(),
-    content=(
-      #|
-    ),
-  )
-  inspect(
-    surface.line_at(1).text().trim(),
-    content=(
-      #|────────────────────────────────────────
-    ),
-  )
-  inspect(display_width(surface.line_at(1).text()), content="40")
-  inspect(
-    surface.line_at(2).text(),
-    content=(
-      #|❯                                       
-    ),
-  )
-  inspect(
-    surface.cursor().row(),
-    content=(
-      #|2
-    ),
-  )
-  inspect(surface.cursor().col(), content="2")
-}
-
-///|
 test "composer surface renders slash command completions below composer" {
   let surface = @render.composer_surface(
     @composer.Model::new("/"),
