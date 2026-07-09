@@ -171,7 +171,7 @@ test "a prompt during compaction is rejected locally, not steered" {
   // compaction); it is rejected locally so the text is not lost.
   let steered = update(state, UiInput(Steer(Prompt("hello"))))
   assert_eq(error_item_count(steered), 1)
-  assert_true(steered.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(steered.all(cmd => !(cmd is SteerAgent(_))))
   assert_eq(state.pending_steers.length(), 0)
 
   // Tab queues it instead, to run once compaction lands.
@@ -364,13 +364,13 @@ test "Ctrl+C quits when idle and interrupts when a task is running" {
   assert_true(state.run is Running(_))
   let cmds = update(state, UiInput(Interrupt))
   assert_eq(quit_count(cmds), 0)
-  assert_true(cmds.iter().any(cmd => cmd is CancelAgent))
+  assert_true(cmds.any(cmd => cmd is CancelAgent))
   assert_true(state.run is Interrupting(_))
 
   // A second interrupt escalates from the polite cancel command to killing
   // the engine process.
   let cmds = update(state, UiInput(Interrupt))
-  assert_true(cmds.iter().any(cmd => cmd is KillEngine))
+  assert_true(cmds.any(cmd => cmd is KillEngine))
   assert_eq(quit_count(cmds), 0)
 
   // Steering a turn that is being cancelled is refused: the text could
@@ -378,7 +378,7 @@ test "Ctrl+C quits when idle and interrupts when a task is running" {
   // prompt.
   let cmds = update(state, UiInput(Steer(Prompt("late idea"))))
   assert_eq(error_item_count(cmds), 1)
-  assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
 }
 
 ///|
@@ -417,7 +417,7 @@ test "steering a running agent sends a steer command" {
   assert_eq(error_item_count(cmds), 0)
   assert_eq(run_background_command_count(cmds), 1)
   assert_eq(run_command_count(cmds), 0)
-  assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
   assert_true(state.run is Running(_))
 
   // Queue while running still queues without error.
@@ -455,7 +455,7 @@ test "oneshot engines reject steering" {
   // emitting a steer command.
   let cmds = update(state, UiInput(Steer(Prompt("b"))))
   assert_eq(error_item_count(cmds), 1)
-  assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
   let _ = update(
     state,
     AgentProgress(run_id=state.run_id, AgentFinished("done")),
@@ -472,15 +472,15 @@ test "a running shell command is never steered and never kills the engine" {
   // Steering a local command run errors instead of poking the idle engine.
   let cmds = update(state, UiInput(Steer(Prompt("change of plan"))))
   assert_eq(error_item_count(cmds), 1)
-  assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
 
   // Interrupt escalation stays on the local task: a second Ctrl-C cancels
   // again rather than killing the bystander engine process.
   let _ = update(state, UiInput(Interrupt))
   assert_true(state.run is Interrupting(_))
   let cmds = update(state, UiInput(Interrupt))
-  assert_true(cmds.iter().any(cmd => cmd is CancelAgent))
-  assert_true(cmds.iter().all(cmd => !(cmd is KillEngine)))
+  assert_true(cmds.any(cmd => cmd is CancelAgent))
+  assert_true(cmds.all(cmd => !(cmd is KillEngine)))
 
   // Finishing the command clears the flag.
   let _ = update(
@@ -515,7 +515,7 @@ test "a cancelled foreground shell command survives as a card, not a lost line" 
   guard cmds is [AppendItem(ToolCall(_))] else {
     fail("expected exactly one cancelled command card, not a lost line")
   }
-  assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
   assert_true(state.run is Idle)
   assert_false(state.run_is_command)
 }
@@ -543,7 +543,7 @@ test "a completed shell command is persisted as an idle user message" {
   assert_true(text.contains("<command>\nls\n</command>"))
   assert_true(text.contains("error running shell:"))
   assert_true(state.run is Idle)
-  assert_true(cmds.iter().all(cmd => !(cmd is StartAgent(_, ..))))
+  assert_true(cmds.all(cmd => !(cmd is StartAgent(_, ..))))
   assert_false(state.run_is_command)
 
   let cmds = update(state, UiInput(Steer(Prompt("what changed?"))))
@@ -602,7 +602,7 @@ test "oneshot shell commands run locally but hand nothing to the model" {
   guard cmds is [AppendItem(_)] else {
     fail("expected only the command transcript item")
   }
-  assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
   assert_true(state.run is Idle)
 
   let cmds = update(state, UiInput(Steer(Prompt("summarize"))))
@@ -683,7 +683,7 @@ test "blank steers are neither sent nor acknowledged" {
   // The engine would filter it without any settling event, so the TUI must
   // not create an acknowledgment that can never clear.
   assert_eq(state.pending_steers.length(), 0)
-  assert_true(cmds.iter().all(cmd => !(cmd is SteerAgent(_))))
+  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
 }
 
 ///|
