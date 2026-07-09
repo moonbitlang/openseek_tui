@@ -148,11 +148,15 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
   let env = {
     "OPENSEEK_API_URL": config.api_url.unwrap_or(""),
     "OPENSEEK_MODEL": config.model.to_string(),
-    "OPENSEEK_MAX_STEPS": config.max_steps.to_string(),
     "OPENSEEK_THINKING": config.thinking.to_string(),
     "OPENSEEK_SESSION": config.session_id.value(),
     "OPENSEEK_SESSION_ROOT": config.session_root,
     "OPENSEEK_DIR": config.cwd,
+  }
+  // Absent means context-bounded turns: the variable must be OMITTED, not
+  // set to "" — the engine treats an empty value as a parse error.
+  if config.max_steps is Some(max_steps) {
+    env["OPENSEEK_MAX_STEPS"] = max_steps.to_string()
   }
   env[@agentcli.api_key_env_for_model(config.model)] = config.api_key
   env

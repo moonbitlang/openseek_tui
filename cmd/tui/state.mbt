@@ -4,7 +4,7 @@ priv struct AppConfig {
   api_url : String?
   model : @deepseek.Model
   cwd : String
-  max_steps : Int
+  max_steps : Int?
   thinking : @deepseek.ThinkingMode
   // The durable session every prompt of this TUI run converses in. The engine
   // is spawned fresh per prompt, so context only carries between prompts

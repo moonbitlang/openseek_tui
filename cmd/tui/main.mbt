@@ -53,9 +53,8 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
       "max-steps",
       long="max-steps",
       env="OPENSEEK_MAX_STEPS",
-      default_values=["1000"],
       global~,
-      about="Maximum number of agent loop steps before stopping.",
+      about="Maximum agent steps per turn; omit to bound turns by the model's context window instead (a checkpoint summary carries each turn into the next).",
     ),
     OptionArg(
       "thinking",
@@ -237,9 +236,8 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     api_url: @agentcli.api_url(matches),
     model,
     cwd,
-    max_steps: @cli.parse_positive_int(
-      @cli.value(matches, "max-steps"),
-      "--max-steps",
+    max_steps: @cli.parse_optional_positive_int(
+      matches, "max-steps", "--max-steps",
     ),
     // Parsed eagerly so a typo fails at launch with a CLI error instead of
     // inside the first turn's engine run.
@@ -420,7 +418,7 @@ test "cli accepts no initial task" {
   let config = parse_config(parsed)
   assert_eq(config.api_key, "test-key")
   assert_true(config.api_url is None)
-  assert_eq(config.max_steps, 1000)
+  assert_true(config.max_steps is None)
   // With no --engine, the engine falls through to re-launching this command
   // (`default_engine` of the process args), not a hardcoded string.
   let (expected_engine, expected_prefix) = default_engine(@sys.get_cli_args())
@@ -500,7 +498,7 @@ test "cli accepts an initial prompt and max steps" {
     env={ "DEEPSEEK": "test-key" },
   )
   assert_true(initial_task(parsed) == Some("inspect project"))
-  assert_eq(parse_config(parsed).max_steps, 5)
+  assert_true(parse_config(parsed).max_steps is Some(5))
 }
 
 ///|

@@ -5,7 +5,7 @@ fn drain_test_state() -> State {
     api_url: Some("https://proxy.example/v1/chat/completions"),
     model: Deepseek(V4Pro),
     cwd: ".",
-    max_steps: 10,
+    max_steps: Some(10),
     thinking: Max,
     session_id: SessionId("test"),
     session_root: ".openseek",

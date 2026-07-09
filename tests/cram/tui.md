@@ -26,7 +26,7 @@ Options:
   --api-key <api-key>            API key for the selected chat provider. [default: ]
   --model <model>                Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, or kimi-k2.7-code-highspeed. [env: OPENSEEK_MODEL] [default: deepseek-v4-pro]
   --api-url <api-url>            DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
-  --max-steps <max-steps>        Maximum number of agent loop steps before stopping. [env: OPENSEEK_MAX_STEPS] [default: 1000]
+  --max-steps <max-steps>        Maximum agent steps per turn; omit to bound turns by the model's context window instead (a checkpoint summary carries each turn into the next). [env: OPENSEEK_MAX_STEPS]
   --thinking <thinking>          DeepSeek thinking mode: no, high, or max. [env: OPENSEEK_THINKING] [default: max]
   --session <session>            Create or resume this durable session id. [env: OPENSEEK_SESSION]
   --session-root <session-root>  Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
