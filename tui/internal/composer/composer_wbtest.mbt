@@ -12,14 +12,9 @@ fn cursor_column(model : Model) -> Int {
 }
 
 ///|
-fn display_text_string(line : @displaytext.DisplayText) -> String {
-  line.text()
-}
-
-///|
 fn visible_row_text(model : Model, row : Int) -> String {
   if model.visible_line(row) is Some(line) {
-    display_text_string(line)
+    line.text()
   } else {
     ""
   }

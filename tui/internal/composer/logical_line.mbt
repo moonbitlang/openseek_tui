@@ -91,15 +91,5 @@ fn splice_logical_lines(
   let start = start.clamp(min=0, max=lines.length())
   let delete_count = delete_count.max(0)
   let tail_start = (start + delete_count).clamp(min=start, max=lines.length())
-  let result : Array[LogicLine] = []
-  for index in 0..<start {
-    result.push(lines[index])
-  }
-  for line in inserted {
-    result.push(line)
-  }
-  for index in tail_start..<lines.length() {
-    result.push(lines[index])
-  }
-  result
+  [..lines[:start], ..inserted, ..lines[tail_start:]]
 }

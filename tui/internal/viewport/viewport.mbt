@@ -479,13 +479,10 @@ async fn Viewport::redraw_placed_surface_rows(
   old_frame : PlacedSurface,
   new_frame : PlacedSurface,
 ) -> Unit {
-  let draw_top = @cmp.maximum(@cmp.minimum(old_frame.top, new_frame.top), 1)
+  let draw_top = old_frame.top.min(new_frame.top).max(1)
   let old_bottom = old_frame.top + old_frame.surface.height() - 1
   let new_bottom = new_frame.top + new_frame.surface.height() - 1
-  let draw_bottom = @cmp.minimum(
-    @cmp.maximum(old_bottom, new_bottom),
-    self.size.rows(),
-  )
+  let draw_bottom = old_bottom.max(new_bottom).min(self.size.rows())
   guard draw_top <= draw_bottom else { return }
   let mut rows_changed = false
   without_auto_wrap(tty, () => {
@@ -521,7 +518,7 @@ async fn Viewport::redraw_uncached_placed_surface_rows(
   old : @geometry.Geometry,
   new_frame : PlacedSurface,
 ) -> Unit {
-  let draw_top = @cmp.maximum(@cmp.minimum(old.top(), new_frame.top), 1)
+  let draw_top = old.top().min(new_frame.top).max(1)
   let draw_bottom = self.size.rows()
   guard draw_top <= draw_bottom else { return }
   tty.hide_cursor()
@@ -695,8 +692,8 @@ async fn Viewport::shift_down_for_insert(
 ) -> Int {
   let top = self.top()
   let space = self.size.rows() - self.bottom()
-  let available = @cmp.maximum(space, 0)
-  let shift = @cmp.minimum(lines, available)
+  let available = space.max(0)
+  let shift = lines.min(available)
   if shift > 0 {
     with_scroll_region(tty, top, self.size.rows(), () => {
       tty.set_cursor_position(top, 1)

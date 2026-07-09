@@ -210,9 +210,7 @@ pub fn Text::first_line(self : Text, width~ : Int) -> @surface.Line {
 pub fn Doc::layout(self : Doc, width~ : Int) -> Array[@surface.Line] {
   let rows : Array[@surface.Line] = []
   for text in self.texts {
-    for row in text.wrap(width~) {
-      rows.push(row)
-    }
+    rows.append(text.wrap(width~))
   }
   rows
 }

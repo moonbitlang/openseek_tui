@@ -55,9 +55,7 @@ fn item_rows(doc : @doc.Doc, cols~ : Int) -> Array[@surface.Line] {
 fn Ui::transcript_rows(self : Self, cols~ : Int) -> Array[@surface.Line] {
   let rows : Array[@surface.Line] = []
   for doc in self.transcript {
-    for row in item_rows(doc, cols~) {
-      rows.push(row)
-    }
+    rows.append(item_rows(doc, cols~))
   }
   rows
 }

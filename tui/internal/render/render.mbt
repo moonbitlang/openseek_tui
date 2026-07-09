@@ -256,24 +256,20 @@ pub fn composer_surface(
   if show_activity && has_queue {
     rows.push(@surface.Line::new([]))
   }
-  for row in queued {
-    rows.push(row)
-  }
+  rows.append(queued)
   // Set the live-status group off from the composer border with a blank.
   if show_activity || has_queue {
     rows.push(@surface.Line::new([]))
   }
   let composer_top = rows.length()
   rows.push(separator_line(cols~))
-  for row in 0..<composer.visible_text_rows() {
+  for row in 0..<composer_rows {
     if composer.visible_line(row) is Some(line) {
       rows.push(prompt_line(prefix=composer.input_prefix(row), line~, cols~))
     }
   }
   rows.push(separator_line(cols~))
-  for row in completion_rows {
-    rows.push(row)
-  }
+  rows.append(completion_rows)
   rows.push(
     indent_line(status_line(status, notice, cols=cols - indent), indent~),
   )

@@ -1,5 +1,4 @@
 import {
-  "moonbitlang/core/cmp",
   "bobzhang/openseek/tui/internal/geometry",
   "bobzhang/openseek/tui/internal/terminal_size",
   "bobzhang/openseek/tui/internal/surface",

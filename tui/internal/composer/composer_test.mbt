@@ -1,12 +1,7 @@
 ///|
-fn display_text_string(line : @displaytext.DisplayText) -> String {
-  line.text()
-}
-
-///|
 fn visible_row_text(model : @composer.Model, row : Int) -> String {
   if model.visible_line(row) is Some(line) {
-    display_text_string(line)
+    line.text()
   } else {
     ""
   }

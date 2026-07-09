@@ -68,16 +68,13 @@ fn queued_input_rows(
     indented_dim_line(DisplayText("Queued follow-up inputs:"), cols~, indent~),
   )
   let item_budget = max_rows - 1
-  if count <= item_budget {
-    for index, input in inputs {
-      rows.push(queued_input_line(input, index~, cols~, indent~))
-    }
-  } else {
-    // Reserve the last row for the summary of everything that did not fit.
-    let shown = item_budget - 1
-    for index, input in inputs[:shown] {
-      rows.push(queued_input_line(input, index~, cols~, indent~))
-    }
+  // When the inputs overflow the budget, reserve the last row for the summary
+  // of everything that did not fit.
+  let shown = if count <= item_budget { count } else { item_budget - 1 }
+  for index, input in inputs[:shown] {
+    rows.push(queued_input_line(input, index~, cols~, indent~))
+  }
+  if shown < count {
     rows.push(
       indented_dim_line(
         DisplayText("… \{count - shown} more"),

@@ -83,12 +83,7 @@ pub fn calculate_max_top(
   size : @terminal_size.TerminalSize,
   height : Int,
 ) -> Int {
-  let top = size.rows() - height + 1
-  if top < 1 {
-    1
-  } else {
-    top
-  }
+  (size.rows() - height + 1).max(1)
 }
 
 ///|
