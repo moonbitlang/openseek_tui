@@ -113,11 +113,8 @@ fn steer_dropped_item(text : String) -> @ui.TranscriptItem {
 /// fresh steer it has nothing to do with. No match (the old turn's list
 /// was already swept) is a no-op.
 fn confirm_pending_steer(state : State, text : String) -> Unit {
-  for index, pending in state.pending_steers {
-    if pending == text {
-      let _ = state.pending_steers.remove(index)
-      return
-    }
+  if state.pending_steers.search(text) is Some(index) {
+    state.pending_steers.remove(index) |> ignore
   }
 }
 
@@ -174,14 +171,6 @@ fn engine_env(
 }
 
 ///|
-/// One-shot engine invocation: `<engine> ... run -- <task>`. The `run`
-/// subcommand is the headless one-shot mode; `--` stops option parsing so a task
-/// starting with `-` is taken literally.
-fn oneshot_engine_args(task : String) -> Array[String] {
-  ["run", "--", task]
-}
-
-///|
 /// Spawn the agent engine for one input and stream its JSONL stdout into the
 /// message loop.
 ///
@@ -206,14 +195,15 @@ async fn run_agent_task(
     let proc = @process.spawn(
       group,
       config.engine,
-      // The queued task is already prompt text here. Forward it after a `--`
-      // delimiter so the engine's argparse treats any leading `-`/`--` as the
-      // task positional rather than parsing it as one of its own options (which
+      // The queued task is already prompt text here; `run` is the engine's
+      // headless one-shot subcommand. Forward the task after a `--` delimiter
+      // so the engine's argparse treats any leading `-`/`--` as the task
+      // positional rather than parsing it as one of its own options (which
       // would exit/print help and never emit a terminal JSONL event). Session
       // settings go through a fully materialized environment so custom replay
       // engines do not need to accept OpenSeek-specific flags, and inherited
       // session vars cannot shadow explicit TUI config.
-      config.engine_args(oneshot_engine_args(task)),
+      config.engine_args(["run", "--", task]),
       inherit_env=false,
       extra_env=child_env,
       stdout=child_stdout,
@@ -418,11 +408,12 @@ fn handle_agent_event(
     // event is only a delivery acknowledgment.
     SteerApplied(Command(_)) => ()
     // A notice (e.g. a background job finishing) originates in the engine, not
-    // from a pending local steer, so just render it in the transcript.
-    SteerApplied(Notice(text)) => cmds.push(AppendItem(Input(Notice(text))))
-    // Idle background notices arrive untagged (as EngineBackgroundNotice); this
-    // tagged path is unreachable, but render it the same way for completeness.
-    BackgroundNotice(text) => cmds.push(AppendItem(Input(Notice(text))))
+    // from a pending local steer, so just render it in the transcript. Idle
+    // background notices arrive untagged (as EngineBackgroundNotice), making
+    // the tagged BackgroundNotice path unreachable — but render it the same
+    // way for completeness.
+    SteerApplied(Notice(text)) | BackgroundNotice(text) =>
+      cmds.push(AppendItem(Input(Notice(text))))
     // Normally unreachable from the wire: the engine client routes
     // steer_dropped events to the untagged message (they always trail the
     // racing turn's terminal, so a run-tagged copy would be stale-filtered).
@@ -560,8 +551,6 @@ fn handle_compact_command(
   state.run_is_compaction = true
   cmds.push(CompactSession(run_id~))
 }
-
-///|
 
 ///|
 fn handle_slash_command(
@@ -815,12 +804,11 @@ async fn[G] run_message_loop(
     // new can arrive mid-drain — so after the drain the queue is provably
     // empty and the composer check cannot contradict pending input.
     let cmds : Array[Cmd] = []
-    let mut message = messages.get()
-    drain_updates~: for ;; {
+    for message = messages.get() {
       cmds.append(update(state, message))
       match messages.try_get() {
-        Some(next) => message = next
-        None => break drain_updates~
+        Some(next) => continue next
+        None => break
       }
     }
     // The `/loop` dispatch choke point: runs once per drained batch, after
@@ -904,13 +892,9 @@ async fn[G] run_message_loop(
           // never had its card rendered (shell output is carded on completion,
           // not streamed), so dropping it is consistent with resume and a
           // deliberate quit has no next turn that needs the output.
-          drain~: for ;; {
-            if messages.try_get() is Some(pending) {
-              if pending is EngineSessionError(error) {
-                ui.append_item(Error(error))
-              }
-            } else {
-              break drain~
+          while messages.try_get() is Some(pending) {
+            if pending is EngineSessionError(error) {
+              ui.append_item(Error(error))
             }
           }
           break outer~

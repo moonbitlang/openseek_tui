@@ -7,14 +7,11 @@ fn append_items(
   value : Json,
   items : Array[@ui.TranscriptItem],
 ) -> Unit {
-  match @event.decode_event(value) {
-    Some(event) =>
-      for cmd in update(state, AgentProgress(run_id=state.run_id, event)) {
-        if cmd is AppendItem(item) {
-          items.push(item)
-        }
-      }
-    None => ()
+  guard @event.decode_event(value) is Some(event) else { return }
+  for cmd in update(state, AgentProgress(run_id=state.run_id, event)) {
+    if cmd is AppendItem(item) {
+      items.push(item)
+    }
   }
 }
 

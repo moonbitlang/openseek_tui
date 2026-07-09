@@ -69,7 +69,7 @@ fn armed_state(arguments : String) -> State {
 
 ///|
 fn notice_count(cmds : Array[Cmd]) -> Int {
-  [ for cmd in cmds if cmd is AppendItem(Notice(_)) => cmd ].length()
+  cmds.count_if(cmd => cmd is AppendItem(Notice(_)))
 }
 
 ///|
@@ -302,18 +302,10 @@ test "each busy source individually holds a due fire" {
   )
   scheduler_maybe_fire(waiting, input_idle=true, after)
   assert_eq(start_agent_count(after), 1)
-  let steer_index = for index, cmd in after {
-    if cmd is SteerAgent(_) {
-      break index
-    }
-  } nobreak {
+  guard after.search_by(cmd => cmd is SteerAgent(_)) is Some(steer_index) else {
     fail("expected the command-context steer")
   }
-  let start_index = for index, cmd in after {
-    if cmd is StartAgent(_, ..) {
-      break index
-    }
-  } nobreak {
+  guard after.search_by(cmd => cmd is StartAgent(_, ..)) is Some(start_index) else {
     fail("expected the fire's StartAgent")
   }
   assert_true(steer_index < start_index)
@@ -402,18 +394,12 @@ test "loop segment precedes the clippable variable-length fields" {
   // countdown must sit ahead of a long cwd so it cannot be pushed off-screen.
   let state = armed_state("5m do x")
   let segments = status_segments(state)
-  let loop_index = for index, segment in segments {
-    if segment.text.has_prefix("⟳") {
-      break index
-    }
-  } nobreak {
+  guard segments.search_by(segment => segment.text.has_prefix("⟳"))
+    is Some(loop_index) else {
     fail("expected the loop segment")
   }
-  let cwd_index = for index, segment in segments {
-    if segment.text == state.config.cwd {
-      break index
-    }
-  } nobreak {
+  guard segments.search_by(segment => segment.text == state.config.cwd)
+    is Some(cwd_index) else {
     fail("expected the cwd segment")
   }
   assert_true(loop_index < cwd_index)

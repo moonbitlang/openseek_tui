@@ -157,14 +157,11 @@ fn command_text_item(content : String) -> @ui.TranscriptItem? {
   if parsed.output_limit_reached {
     output.push("… output truncated")
   }
-  let title = if exit == "failed" {
-    "$ \{parsed.command} (failed)"
-  } else if exit == "cancelled" {
-    "$ \{parsed.command} (cancelled)"
-  } else if exit == "0" {
-    "$ \{parsed.command}"
-  } else {
-    "$ \{parsed.command} (exit \{exit})"
+  let title = match exit {
+    "failed" => "$ \{parsed.command} (failed)"
+    "cancelled" => "$ \{parsed.command} (cancelled)"
+    "0" => "$ \{parsed.command}"
+    code => "$ \{parsed.command} (exit \{code})"
   }
   Some(
     ToolCall(

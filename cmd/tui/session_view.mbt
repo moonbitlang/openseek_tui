@@ -58,13 +58,11 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
 fn session_transcript_items(
   session : @agent_session.Session,
 ) -> Array[@ui.TranscriptItem] {
-  let items : Array[@ui.TranscriptItem] = []
-  for event in session.events() {
-    if session_item(event.item()) is Some(item) {
-      items.push(item)
-    }
-  }
-  items
+  session
+  .events()
+  .iter()
+  .filter_map(event => session_item(event.item()))
+  .collect()
 }
 
 ///|

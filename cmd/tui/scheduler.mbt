@@ -319,7 +319,7 @@ fn parse_loop_number(digits : StringView) -> Int? {
   guard !digits.is_empty() else { return None }
   let mut value = 0
   for ch in digits {
-    guard ch >= '0' && ch <= '9' else { return None }
+    guard ch is ('0'..='9') else { return None }
     value = value * 10 + (ch.to_int() - '0'.to_int())
     if value > MaxLoopIntervalSecs {
       return None
@@ -338,14 +338,11 @@ fn parse_loop_number(digits : StringView) -> Int? {
 /// `MaxLoopIntervalSecs`. The `MinLoopIntervalSecs` floor is enforced by the
 /// caller so it can name the limit in its error message.
 fn parse_loop_interval(text : StringView) -> Int? {
-  let (digits, unit) = if text.strip_suffix("s") is Some(digits) {
-    (digits, 1)
-  } else if text.strip_suffix("m") is Some(digits) {
-    (digits, 60)
-  } else if text.strip_suffix("h") is Some(digits) {
-    (digits, 3600)
-  } else {
-    (text, 1)
+  let (digits, unit) = match text {
+    [.. digits, 's'] => (digits, 1)
+    [.. digits, 'm'] => (digits, 60)
+    [.. digits, 'h'] => (digits, 3600)
+    _ => (text, 1)
   }
   guard parse_loop_number(digits) is Some(value) else { return None }
   // Bound before multiplying: `604800h * 3600` would overflow Int and wrap

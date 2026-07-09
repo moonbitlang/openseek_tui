@@ -27,59 +27,29 @@ fn drain_oneshot_test_state() -> State {
 
 ///|
 fn start_agent_count(cmds : Array[Cmd]) -> Int {
-  for cmd in cmds; count = 0 {
-    if cmd is StartAgent(_, ..) {
-      continue count + 1
-    }
-  } nobreak {
-    count
-  }
+  cmds.count_if(cmd => cmd is StartAgent(_, ..))
 }
 
 ///|
 fn error_item_count(cmds : Array[Cmd]) -> Int {
-  for cmd in cmds; count = 0 {
-    if cmd is AppendItem(Error(_)) {
-      continue count + 1
-    }
-  } nobreak {
-    count
-  }
+  cmds.count_if(cmd => cmd is AppendItem(Error(_)))
 }
 
 ///|
 /// Foreground `!` commands: those that own a run slot (run_id present).
 fn run_command_count(cmds : Array[Cmd]) -> Int {
-  for cmd in cmds; count = 0 {
-    if cmd is RunCommand(run_id=Some(_), _) {
-      continue count + 1
-    }
-  } nobreak {
-    count
-  }
+  cmds.count_if(cmd => cmd is RunCommand(run_id=Some(_), _))
 }
 
 ///|
 /// Background `!` commands launched alongside a live turn (run_id absent).
 fn run_background_command_count(cmds : Array[Cmd]) -> Int {
-  for cmd in cmds; count = 0 {
-    if cmd is RunCommand(run_id=None, _) {
-      continue count + 1
-    }
-  } nobreak {
-    count
-  }
+  cmds.count_if(cmd => cmd is RunCommand(run_id=None, _))
 }
 
 ///|
 fn compact_session_count(cmds : Array[Cmd]) -> Int {
-  for cmd in cmds; count = 0 {
-    if cmd is CompactSession(_) {
-      continue count + 1
-    }
-  } nobreak {
-    count
-  }
+  cmds.count_if(cmd => cmd is CompactSession(_))
 }
 
 ///|
@@ -376,13 +346,7 @@ test "a stale terminal event from a superseded run is ignored" {
 
 ///|
 fn quit_count(cmds : Array[Cmd]) -> Int {
-  for cmd in cmds; count = 0 {
-    if cmd is Quit {
-      continue count + 1
-    }
-  } nobreak {
-    count
-  }
+  cmds.count_if(cmd => cmd is Quit)
 }
 
 ///|

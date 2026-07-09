@@ -73,11 +73,6 @@ fn loop_segment_text(schedule : Schedule?) -> String {
 }
 
 ///|
-fn format_status_bar_text(state : State) -> @doc.Text {
-  format_status_segments(status_segments(state))
-}
-
-///|
 fn format_two_digits(value : Int64) -> String {
   if value < 10L {
     "0\{value}"
@@ -137,10 +132,7 @@ fn pending_steer_segment(steers : Array[String]) -> Array[@doc.Span] {
   let budget = SteerSegmentMaxColumns - @displaytext.DisplayText(label).width()
   [
     Span(DisplayText(label), style=@style.dim),
-    Span(
-      DisplayText(tail_columns(latest, if budget < 8 { 8 } else { budget })),
-      style=@style.dim,
-    ),
+    Span(DisplayText(tail_columns(latest, budget.max(8))), style=@style.dim),
   ]
 }
 
@@ -161,7 +153,7 @@ fn streaming_activity_spans(
     ActivityChromeColumns -
     reserved -
     @displaytext.DisplayText(label).width()
-  let preview = tail_columns(text, if budget < 16 { 16 } else { budget })
+  let preview = tail_columns(text, budget.max(16))
   [
     Span(DisplayText(label), style=@style.dim),
     if dim_preview {
@@ -224,7 +216,7 @@ fn format_activity_text(state : State, cols~ : Int) -> @doc.Text? {
 ///|
 async fn refresh_ui(ui : @ui.Ui, state : State) -> Unit {
   ui.set_live_view(
-    status=format_status_bar_text(state),
+    status=format_status_segments(status_segments(state)),
     activity=format_activity_text(state, cols=ui.columns()),
     queued_inputs=state.queued,
   )

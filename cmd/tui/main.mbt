@@ -275,12 +275,9 @@ fn default_engine(args : ArrayView[String]) -> (String, Array[String]) {
 
 ///|
 fn moon_native_tcc_run_args(argv0 : String) -> Array[String]? {
-  if argv0.has_suffix(".c") &&
+  if argv0.strip_suffix(".c") is Some(stem) &&
     (argv0.contains("/_build/native/") || argv0.contains("\\_build\\native\\")) {
-    match argv0.strip_suffix(".c") {
-      Some(stem) => Some(["@\{stem}.rspfile"])
-      None => None
-    }
+    Some(["@\{stem}.rspfile"])
   } else {
     None
   }
@@ -371,11 +368,6 @@ async fn engine_command_launchable(
 }
 
 ///|
-async fn engine_launchable(config : AppConfig) -> Bool {
-  engine_command_launchable(config.engine, config.engine_args_prefix)
-}
-
-///|
 /// Run the interactive UI from already-parsed argparse `matches` — the top-level
 /// `openseek` command (in `cmd/openseek`) owns parsing and dispatches here for
 /// both the default (no subcommand) and the explicit `tui` subcommand.
@@ -386,7 +378,7 @@ pub async fn run(matches : @argparse.Matches) -> Unit {
   }
   // Fail before the terminal UI takes over the screen if the engine is unusable,
   // rather than dropping the user into a UI that dies on the first task.
-  if !engine_launchable(config) {
+  if !engine_command_launchable(config.engine, config.engine_args_prefix) {
     println(
       "error: engine '\{config.engine_display()}' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.",
     )
@@ -433,7 +425,7 @@ test "cli accepts no initial task" {
   // (`default_engine` of the process args), not a hardcoded string.
   let (expected_engine, expected_prefix) = default_engine(@sys.get_cli_args())
   assert_eq(config.engine, expected_engine)
-  assert_string_array_eq(config.engine_args_prefix, expected_prefix)
+  @debug.assert_eq(config.engine_args_prefix, expected_prefix)
   // No --session still converses in a session: a generated per-launch id, so
   // consecutive prompts share context instead of running amnesiac one-shots.
   assert_true(config.session_id.value().has_prefix("tui-"))
@@ -576,66 +568,45 @@ test "cli accepts --continue and rejects combining it with --session" {
 }
 
 ///|
-fn assert_string_array_eq(
-  actual : Array[String],
-  expected : Array[String],
-) -> Unit raise {
-  assert_eq(actual.length(), expected.length())
-  for i in 0..<actual.length() {
-    assert_eq(actual[i], expected[i])
-  }
-}
-
-///|
-fn assert_default_engine(
-  actual : (String, Array[String]),
-  engine : String,
-  args_prefix : Array[String],
-) -> Unit raise {
-  let (actual_engine, actual_prefix) = actual
-  assert_eq(actual_engine, engine)
-  assert_string_array_eq(actual_prefix, args_prefix)
-}
-
-///|
 test "default_engine re-launches a path argv0 and falls back to PATH otherwise" {
-  assert_default_engine(
+  @debug.assert_eq(
     default_engine(["/usr/local/bin/openseek"]),
-    "/usr/local/bin/openseek",
-    [],
+    ("/usr/local/bin/openseek", []),
   )
-  assert_default_engine(default_engine(["./openseek"]), "./openseek", [])
-  assert_default_engine(default_engine(["src/openseek.c"]), "src/openseek.c", [])
-  assert_default_engine(
+  @debug.assert_eq(default_engine(["./openseek"]), ("./openseek", []))
+  @debug.assert_eq(default_engine(["src/openseek.c"]), ("src/openseek.c", []))
+  @debug.assert_eq(
     default_engine(["target/native/openseek"]),
-    "target/native/openseek",
-    [],
+    ("target/native/openseek", []),
   )
-  assert_default_engine(
+  @debug.assert_eq(
     default_engine(["target\\native\\openseek.exe"]),
-    "target\\native\\openseek.exe",
-    [],
+    ("target\\native\\openseek.exe", []),
   )
-  assert_default_engine(
+  @debug.assert_eq(
     default_engine([
       "/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.c",
     ]),
-    "tcc",
-    [
-      "@/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.rspfile",
-    ],
+    (
+      "tcc",
+      [
+        "@/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.rspfile",
+      ],
+    ),
   )
-  assert_default_engine(
+  @debug.assert_eq(
     default_engine([
       "C:\\repo\\_build\\native\\debug\\build\\bobzhang\\openseek\\cmd\\openseek\\openseek.c",
     ]),
-    "tcc",
-    [
-      "@C:\\repo\\_build\\native\\debug\\build\\bobzhang\\openseek\\cmd\\openseek\\openseek.rspfile",
-    ],
+    (
+      "tcc",
+      [
+        "@C:\\repo\\_build\\native\\debug\\build\\bobzhang\\openseek\\cmd\\openseek\\openseek.rspfile",
+      ],
+    ),
   )
-  assert_default_engine(default_engine(["openseek"]), "openseek", [])
-  assert_default_engine(default_engine([]), "openseek", [])
+  @debug.assert_eq(default_engine(["openseek"]), ("openseek", []))
+  @debug.assert_eq(default_engine([]), ("openseek", []))
 }
 
 ///|
@@ -646,7 +617,7 @@ async test "engine defaults to this binary; --engine/OPENSEEK_ENGINE override it
   )
   let (expected_engine, expected_prefix) = default_engine(@sys.get_cli_args())
   assert_eq(default_cfg.engine, expected_engine)
-  assert_string_array_eq(default_cfg.engine_args_prefix, expected_prefix)
+  @debug.assert_eq(default_cfg.engine_args_prefix, expected_prefix)
   // OPENSEEK_ENGINE is treated as an explicit engine.
   let env_cfg = parse_config(
     cli_command().parse(argv=[], env={
@@ -655,7 +626,7 @@ async test "engine defaults to this binary; --engine/OPENSEEK_ENGINE override it
     }),
   )
   assert_eq(env_cfg.engine, "./fake-engine")
-  assert_string_array_eq(env_cfg.engine_args_prefix, [])
+  @debug.assert_eq(env_cfg.engine_args_prefix, [])
 }
 
 ///|
@@ -683,7 +654,7 @@ async test "oneshot with an explicit engine (flag or env) is accepted" {
   )
   assert_true(flag_cfg.engine_mode is OneShot)
   assert_eq(flag_cfg.engine, "./fake-engine")
-  assert_string_array_eq(flag_cfg.engine_args_prefix, [])
+  @debug.assert_eq(flag_cfg.engine_args_prefix, [])
   let env_cfg = parse_config(
     cli_command().parse(argv=[], env={
       "DEEPSEEK": "k",
@@ -701,7 +672,7 @@ test "cli overrides the engine binary" {
   })
   let config = parse_config(parsed)
   assert_eq(config.engine, "./fake-engine")
-  assert_string_array_eq(config.engine_args_prefix, [])
+  @debug.assert_eq(config.engine_args_prefix, [])
 }
 
 ///|

@@ -182,6 +182,27 @@ async fn EngineClient::send(
 }
 
 ///|
+/// Open `run_id` on the live engine and write its opening `command` — the
+/// shared tail of `prompt` and `compact`. Stamps the run bookkeeping the
+/// stdout reader relies on to attribute events and an EOF-without-terminal
+/// failure to the right run.
+async fn EngineClient::open_run(
+  self : EngineClient,
+  run_id : Int,
+  command : Json,
+) -> Unit {
+  guard self.live is Some(live) else {
+    self.messages.put(
+      AgentFailed(run_id~, Failure::Failure("engine is not running")),
+    )
+    return
+  }
+  live.latest_run = run_id
+  live.run_open = true
+  self.send(run_id, command)
+}
+
+///|
 async fn[G] EngineClient::prompt(
   self : EngineClient,
   group : @async.TaskGroup[G],
@@ -198,15 +219,7 @@ async fn[G] EngineClient::prompt(
       }
     }
   }
-  guard self.live is Some(live) else {
-    self.messages.put(
-      AgentFailed(run_id~, Failure::Failure("engine is not running")),
-    )
-    return
-  }
-  live.latest_run = run_id
-  live.run_open = true
-  self.send(run_id, { "command": "prompt", "text": text })
+  self.open_run(run_id, { "command": "prompt", "text": text })
 }
 
 ///|
@@ -312,15 +325,7 @@ async fn[G] EngineClient::compact(
       }
     }
   }
-  guard self.live is Some(live) else {
-    self.messages.put(
-      AgentFailed(run_id~, Failure::Failure("engine is not running")),
-    )
-    return
-  }
-  live.latest_run = run_id
-  live.run_open = true
-  self.send(run_id, { "command": "compact" })
+  self.open_run(run_id, { "command": "compact" })
 }
 
 ///|
