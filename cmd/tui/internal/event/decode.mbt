@@ -80,6 +80,8 @@ pub fn decode_event(object : Json) -> AgentEvent? {
       Some(CompactionFinished(@jsonx.string(object, "summary")))
     "compaction_failed" =>
       Some(AgentError("compaction failed: \{@jsonx.string(object, "error")}"))
+    // A turn that ended at the context ceiling: run-terminal, not success.
+    "context_yield" => Some(ContextYield(@jsonx.string(object, "answer")))
     _ => None
   }
 }

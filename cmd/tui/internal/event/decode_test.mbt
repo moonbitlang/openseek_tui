@@ -166,3 +166,15 @@ test "usage total is derived from prompt and completion tokens" {
     _ => fail("expected Usage")
   }
 }
+
+///|
+test "a context yield decodes as its own run terminal" {
+  assert_true(
+    @event.decode_event({
+      "event": "context_yield",
+      "to_sequence": 41,
+      "answer": "[context ceiling] checkpointed",
+    })
+    is Some(ContextYield("[context ceiling] checkpointed")),
+  )
+}

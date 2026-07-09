@@ -29,6 +29,7 @@ pub(all) enum AgentEvent {
   AgentError(String)
   CommandRejected(String)
   CompactionFinished(String)
+  ContextYield(String)
 }
 
 pub(all) struct ToolResultEvent {

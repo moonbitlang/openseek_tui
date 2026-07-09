@@ -60,4 +60,8 @@ pub(all) enum AgentEvent {
   // the durable session — now the conversation's context — so the controller can
   // preview it.
   CompactionFinished(String)
+  // The turn ended at the model's context ceiling: checkpointed and
+  // terminal for the run, but NOT task success — the work continues in a
+  // new turn the user (or a controller) starts.
+  ContextYield(String)
 }

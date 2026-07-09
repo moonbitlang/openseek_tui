@@ -128,7 +128,8 @@ fn is_terminal_event(event : @event.AgentEvent) -> Bool {
     | AgentAborted(_)
     | MaxStepsExhausted
     | AgentError(_)
-    | CompactionFinished(_) => true
+    | CompactionFinished(_)
+    | ContextYield(_) => true
     _ => false
   }
 }
@@ -485,6 +486,26 @@ fn handle_agent_event(
     // now standing in for the prior turns, and close the run.
     CompactionFinished(summary) => {
       cmds.push(AppendItem(compaction_item(summary)))
+      state.finish_run()
+    }
+    // Terminal for the run but not task success: surface the continuation
+    // guidance the yield answer carries. For a scheduled /loop run the next
+    // fire IS the continuation, so a ceiling yield settles the schedule as
+    // a completed fire rather than wedging it (codex review).
+    ContextYield(answer) => {
+      scheduler_on_run_end(state, LoopRunFinished, cmds)
+      cmds.push(AppendItem(Response(answer)))
+      cmds.push(
+        AppendItem(
+          Notice(
+            ToolCall(
+              @doc.Text::plain(
+                "context ceiling reached — send a prompt to continue in a new turn",
+              ),
+            ),
+          ),
+        ),
+      )
       state.finish_run()
     }
   }
