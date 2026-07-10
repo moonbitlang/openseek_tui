@@ -168,6 +168,35 @@ test "usage total is derived from prompt and completion tokens" {
 }
 
 ///|
+test "goal updates decode null-aware" {
+  assert_true(
+    @event.decode_event({ "event": "goal_updated", "goal": "ship it" })
+    is Some(GoalUpdated(Some("ship it"))),
+  )
+  // A cleared goal is {"goal": null}: it must decode to None, not collapse
+  // into an empty-string set.
+  assert_true(
+    @event.decode_event({ "event": "goal_updated", "goal": Json::null() })
+    is Some(GoalUpdated(None)),
+  )
+  assert_true(
+    @event.decode_event({ "event": "goal_updated" }) is Some(GoalUpdated(None)),
+  )
+}
+
+///|
+test "goal auto-continue lifecycle decodes" {
+  assert_true(
+    @event.decode_event({ "event": "goal_continue", "remaining": 19 })
+    is Some(GoalContinue(19)),
+  )
+  assert_true(
+    @event.decode_event({ "event": "goal_budget_exhausted", "turns": 20 })
+    is Some(GoalBudgetExhausted),
+  )
+}
+
+///|
 test "a context yield decodes as its own run terminal" {
   assert_true(
     @event.decode_event({

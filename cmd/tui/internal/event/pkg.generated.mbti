@@ -29,6 +29,9 @@ pub(all) enum AgentEvent {
   AgentError(String)
   CommandRejected(String)
   CompactionFinished(String)
+  GoalUpdated(String?)
+  GoalContinue(Int)
+  GoalBudgetExhausted
   ContextYield(String)
 }
 

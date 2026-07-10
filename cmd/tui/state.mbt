@@ -117,6 +117,10 @@ priv struct State {
   // point `scheduler_maybe_fire`, which also needs the composer state that
   // `update` cannot see.
   mut schedule : Schedule?
+  /// The standing goal mirrored from the engine: seeded from the loaded
+  /// session at startup and updated only by `goal_updated` events, so it
+  /// only ever reflects durably persisted state.
+  mut goal : String?
   // Outstanding fire-and-forget background `!` commands (run alongside a live
   // turn, `run_id=None`). Their completion hands command context to the engine,
   // so a scheduled fire must wait for them or that context would leak into the
@@ -139,6 +143,7 @@ fn State::new(config : AppConfig) -> State {
     streaming_reasoning: None,
     usage: None,
     schedule: None,
+    goal: None,
     background_commands: 0,
   }
 }
@@ -224,6 +229,9 @@ priv enum Msg {
   // id (like a session error) so it is never swept by the stale-run guard, and
   // rendered as a notice line in the transcript.
   EngineBackgroundNotice(String)
+  // The engine durably recorded a goal update. Untagged like a background
+  // notice, so an idle confirmation is never swept by the stale-run guard.
+  EngineGoalUpdated(String?)
   // The persistent engine process exited (for any reason): its background
   // watchers died with it, so the loop can observe the engine boundary.
   EngineExited
@@ -242,6 +250,7 @@ fn Msg::run_id(self : Msg) -> Int? {
     CommandCancelled(run_id~, ..) => Some(run_id)
     UiInput(_)
     | SteerDropped(_)
+    | EngineGoalUpdated(_)
     | EngineSteerDropped(_)
     | EngineSessionError(_)
     | EngineBackgroundNotice(_)
@@ -269,6 +278,9 @@ priv enum Cmd {
   // run id so the compaction's wire events are tagged to the run that requested
   // it, exactly like a prompt.
   CompactSession(run_id~ : Int)
+  // Set (Some) or clear (None) the standing goal on the serve engine. The
+  // engine's goal_updated event — not this command — mutates local state.
+  UpdateGoal(String?)
   CancelAgent
   // Second Ctrl-C while already interrupting: the cancel command was not
   // enough, so kill the engine process outright.

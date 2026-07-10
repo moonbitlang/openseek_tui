@@ -48,7 +48,15 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
         Some(Response(message.content()))
       }
     Tool(result) => Some(session_tool_item(result))
-    Runtime(notice) => Some(runtime_notice_item(notice.content()))
+    // Goal markers are transport, not display — the resume path seeds a
+    // single "goal: ..." notice from current_goal(), matching the live
+    // path where markers are filtered and goal_updated is what renders.
+    Runtime(notice) =>
+      if @agent_session.goal_marker(notice.content()) is Some(_) {
+        None
+      } else {
+        Some(runtime_notice_item(notice.content()))
+      }
     Summary(summary) => Some(summary_item(summary))
     Terminal(terminal) => terminal_item(terminal)
   }
@@ -66,7 +74,8 @@ fn session_transcript_items(
 }
 
 ///|
-async fn append_session_history(config : AppConfig, ui : @ui.Ui) -> Unit {
+async fn append_session_history(state : State, ui : @ui.Ui) -> Unit {
+  let config = state.config
   let session_id = config.session_id
   let store = @store.SessionStore(config.session_root)
   let exists = store.exists(session_id) catch {
@@ -84,5 +93,11 @@ async fn append_session_history(config : AppConfig, ui : @ui.Ui) -> Unit {
   }
   for item in session_transcript_items(session) {
     ui.append_item(item)
+  }
+  // Seed the mirrored goal from the durable log so `/goal` shows a resumed
+  // session's standing goal before any engine is spawned or event arrives.
+  if session.current_goal() is Some(goal) {
+    state.goal = Some(goal.text())
+    ui.append_item(Notice(ToolCall(@doc.Text::plain("goal: \{goal.text()}"))))
   }
 }

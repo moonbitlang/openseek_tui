@@ -306,6 +306,10 @@ async fn run_tui(config : AppConfig, initial : String?) -> Unit {
         name="loop",
         description="recurring prompt: /loop [--max <n>] <interval> <prompt> | off | status | pause | resume",
       ),
+      @ui.SlashCommandSpec::new(
+        name="goal",
+        description="standing goal: /goal | /goal set <text> | /goal clear",
+      ),
     ]),
     ui => run_app(config, initial, ui),
   )
@@ -315,7 +319,7 @@ async fn run_tui(config : AppConfig, initial : String?) -> Unit {
 async fn run_app(config : AppConfig, initial : String?, ui : @ui.Ui) -> Unit {
   let state = State::new(config)
   let messages = @async.Queue(kind=Unbounded)
-  append_session_history(state.config, ui)
+  append_session_history(state, ui)
   // Name the session so the conversation is resumable later with
   // `--session <id>` — for generated ids this line is the only place the user
   // ever sees one.

@@ -80,6 +80,15 @@ pub fn decode_event(object : Json) -> AgentEvent? {
       Some(CompactionFinished(@jsonx.string(object, "summary")))
     "compaction_failed" =>
       Some(AgentError("compaction failed: \{@jsonx.string(object, "error")}"))
+    // A durably recorded goal update. Decoded null-aware — a cleared goal is
+    // {"goal": null}, which must not collapse into an empty-string set.
+    "goal_updated" =>
+      match object {
+        { "goal": String(goal), .. } => Some(GoalUpdated(Some(goal)))
+        _ => Some(GoalUpdated(None))
+      }
+    "goal_continue" => Some(GoalContinue(@jsonx.int(object, "remaining")))
+    "goal_budget_exhausted" => Some(GoalBudgetExhausted)
     // A turn that ended at the context ceiling: run-terminal, not success.
     "context_yield" => Some(ContextYield(@jsonx.string(object, "answer")))
     _ => None

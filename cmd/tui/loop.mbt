@@ -412,12 +412,16 @@ fn handle_agent_event(
     // event is only a delivery acknowledgment.
     SteerApplied(Command(_)) => ()
     // A notice (e.g. a background job finishing) originates in the engine, not
-    // from a pending local steer, so just render it in the transcript. Idle
-    // background notices arrive untagged (as EngineBackgroundNotice), making
-    // the tagged BackgroundNotice path unreachable — but render it the same
-    // way for completeness.
+    // from a pending local steer, so just render it in the transcript — except
+    // goal markers, whose steer path is transport: the user-facing
+    // confirmation is the goal_updated event that follows the durable append.
+    // Idle background notices arrive untagged (as EngineBackgroundNotice),
+    // making the tagged BackgroundNotice path unreachable — but render it
+    // the same way for completeness.
     SteerApplied(Notice(text)) | BackgroundNotice(text) =>
-      cmds.push(AppendItem(Input(Notice(text))))
+      if @agent_session.goal_marker(text) is None {
+        cmds.push(AppendItem(Input(Notice(text))))
+      }
     // Normally unreachable from the wire: the engine client routes
     // steer_dropped events to the untagged message (they always trail the
     // racing turn's terminal, so a run-tagged copy would be stale-filtered).
@@ -483,6 +487,21 @@ fn handle_agent_event(
       cmds.push(AppendItem(compaction_item(summary)))
       state.finish_run()
     }
+    // The serve client posts goal updates untagged (EngineGoalUpdated) so
+    // idle confirmations survive the stale-run guard — but ONESHOT mode
+    // forwards engine events run-tagged, so this path is live there: the
+    // mirror must follow (a goal(met) mid-run would otherwise leave /goal
+    // reporting a cleared goal until restart).
+    GoalUpdated(goal) => {
+      state.goal = goal
+      let title = match goal {
+        Some(text) => "goal set: \{text}"
+        None => "goal cleared"
+      }
+      cmds.push(AppendItem(Input(Notice(title))))
+    }
+    // Likewise routed untagged by the client (as background notices).
+    GoalContinue(_) | GoalBudgetExhausted => ()
     // Terminal for the run but not task success: surface the continuation
     // guidance the yield answer carries. For a scheduled /loop run the next
     // fire IS the continuation, so a ceiling yield settles the schedule as
@@ -572,6 +591,7 @@ fn handle_slash_command(
       }
     "compact" => handle_compact_command(state, arguments, cmds)
     "loop" => handle_loop_command(state, arguments, cmds)
+    "goal" => handle_goal_command(state, arguments, cmds)
     other => cmds.push(AppendItem(Error("Unknown slash command: /\{other}")))
   }
 }
@@ -751,7 +771,23 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // fresh identical-text steer's entry from the next turn.
     EngineSteerDropped(text) => cmds.push(AppendItem(steer_dropped_item(text)))
     EngineSessionError(error) => cmds.push(AppendItem(Error(error)))
-    EngineBackgroundNotice(text) => cmds.push(AppendItem(Input(Notice(text))))
+    // Goal markers are filtered for the same reason as on the steer path:
+    // their notice leg is transport, and goal_updated carries the
+    // confirmation (defense in depth against engine version skew).
+    EngineBackgroundNotice(text) =>
+      if @agent_session.goal_marker(text) is None {
+        cmds.push(AppendItem(Input(Notice(text))))
+      }
+    // The engine's durable-append confirmation is the only writer of the
+    // mirrored goal state.
+    EngineGoalUpdated(goal) => {
+      state.goal = goal
+      let title = match goal {
+        Some(text) => "goal set: \{text}"
+        None => "goal cleared"
+      }
+      cmds.push(AppendItem(Input(Notice(title))))
+    }
     EngineExited => ()
     // Tick is a 1s heartbeat: it keeps the message loop turning so the trailing
     // refresh_ui re-runs (the elapsed-time activity line keeps advancing during
@@ -861,6 +897,7 @@ async fn[G] run_message_loop(
             }
           }
         SteerAgent(input) => engine.steer(group, input)
+        UpdateGoal(goal) => engine.goal(group, goal)
         // Compaction is an engine operation with no local task. Clear any stale
         // command handle (as a queued prompt would) so a Ctrl-C cancels this
         // compaction turn rather than a finished command task.

@@ -60,6 +60,18 @@ pub(all) enum AgentEvent {
   // the durable session — now the conversation's context — so the controller can
   // preview it.
   CompactionFinished(String)
+  // The engine durably recorded a standing-goal update: `Some(text)` for a
+  // set, `None` for a clear. Non-terminal, and posted untagged by the client —
+  // an idle set/clear (or one landing after its turn closed) must survive the
+  // stale-run guard.
+  GoalUpdated(String?)
+  // The engine is starting an auto-continuation turn toward the standing
+  // goal (headless auto mode); carries the remaining turn budget. Posted
+  // untagged: it always lands between runs.
+  GoalContinue(Int)
+  // The auto-continue budget ran out with the goal still standing; the
+  // engine paused for input. Posted untagged for the same reason.
+  GoalBudgetExhausted
   // The turn ended at the model's context ceiling: checkpointed and
   // terminal for the run, but NOT task success — the work continues in a
   // new turn the user (or a controller) starts.

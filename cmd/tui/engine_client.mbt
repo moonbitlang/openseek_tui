@@ -12,6 +12,12 @@ priv struct EngineProcess {
   // The stdout reader task for this engine, so a graceful shutdown can wait for
   // the engine to drain its stdin and exit before teardown kills it.
   mut reader : @async.Task[Unit]?
+  // Goal set/clear lines written to THIS engine but not yet answered by a
+  // matching durable goal_updated (Some(text)=set, None=clear; unrelated
+  // updates must not consume an ack). Owned by the process like run
+  // bookkeeping: a replaced engine's EOF must not clear — or falsely warn
+  // about — a successor's outstanding ack.
+  pending_goal_acks : Array[String?]
 }
 
 ///|
@@ -78,6 +84,7 @@ async fn[G] EngineClient::start(
     latest_run: 0,
     run_open: false,
     reader: None,
+    pending_goal_acks: [],
   }
   self.live = Some(engine)
   let reader_task = group.spawn(no_wait=true) <| () => {
@@ -94,19 +101,74 @@ async fn[G] EngineClient::start(
           // always reaches the user.
           SteerDropped(text) =>
             self.messages.try_put(EngineSteerDropped(text)) |> ignore
+          // A rejection can answer an idle command (e.g. /goal sent to an
+          // engine that does not implement it), where no run owns it and a
+          // tagged message would be eaten by the stale-run guard. Rejections
+          // are never run-terminal, so untagged is safe in-run too.
+          CommandRejected(message) => {
+            // A rejection cannot be correlated to a specific pending goal
+            // ack; settle them all — the rejection itself is surfaced, and
+            // stale entries would otherwise mis-warn at EOF or consume a
+            // later matching ack.
+            engine.pending_goal_acks.clear()
+            self.messages.try_put(
+              EngineBackgroundNotice("engine rejected command: \{message}"),
+            )
+            |> ignore
+          }
           // A background job finished between turns: the engine already emitted
           // this untagged, so post it untagged too — a run-tagged message would
           // be swept by the stale-run guard once the turn closed.
           BackgroundNotice(text) =>
             self.messages.try_put(EngineBackgroundNotice(text)) |> ignore
+          // A durable goal update. Posted untagged: an idle set/clear (or one
+          // landing after its turn closed) must survive the stale-run guard.
+          GoalUpdated(goal) => {
+            match engine.pending_goal_acks.search(goal) {
+              Some(index) => engine.pending_goal_acks.remove(index) |> ignore
+              None => ()
+            }
+            self.messages.try_put(EngineGoalUpdated(goal)) |> ignore
+          }
+          // Auto-continue lifecycle from a headless-armed goal: surfaced as
+          // plain notices — the TUI never arms auto itself, and engine-
+          // initiated turns are invisible to run tracking by design.
+          GoalContinue(remaining) =>
+            self.messages.try_put(
+              EngineBackgroundNotice(
+                "goal: engine continuing (\{remaining} auto turns left)",
+              ),
+            )
+            |> ignore
+          GoalBudgetExhausted =>
+            self.messages.try_put(
+              EngineBackgroundNotice(
+                "goal: auto-continue budget exhausted; goal still standing",
+              ),
+            )
+            |> ignore
           // A command context's delivery ack. The output is already rendered as
           // a local card and the engine appended it synchronously, so there is
           // nothing to do — in particular, do not echo it like a prompt steer.
           SteerApplied(Command(_)) => ()
           // The engine reports this when a command-context append failed; surface
           // it so the lost output is not silent.
-          SessionError(error) =>
+          AgentError(_) as failure => {
+            // A failed turn can swallow a goal notice drained into it (its
+            // store append died with the turn): settle pending acks so a
+            // retry is not mis-correlated and EOF does not mis-warn.
+            engine.pending_goal_acks.clear()
+            self.messages.try_put(
+              AgentProgress(run_id=engine.latest_run, failure),
+            )
+            |> ignore
+          }
+          SessionError(error) => {
+            // Persistence failed: any pending goal ack may never be
+            // answered — settle rather than mis-warn or mis-consume later.
+            engine.pending_goal_acks.clear()
             self.messages.try_put(EngineSessionError(error)) |> ignore
+          }
           _ => {
             if is_terminal_event(event) {
               engine.run_open = false
@@ -146,6 +208,20 @@ async fn[G] EngineClient::start(
           engine_exit_without_result(code, diagnostics),
         ),
       )
+    }
+    // An idle goal update the engine never confirmed died with it: say so —
+    // silence here reads as success.
+    if engine.pending_goal_acks.length() > 0 {
+      engine.pending_goal_acks.clear()
+      // EngineSessionError, not a background notice: the quit path's
+      // post-shutdown drain renders only errors, and quit-before-confirm
+      // is exactly the case this warning exists for.
+      self.messages.try_put(
+        EngineSessionError(
+          "goal update may not have been recorded: the engine exited before confirming it — check /goal and resend if needed",
+        ),
+      )
+      |> ignore
     }
     // The watchers this engine owned died with it: let the loop observe the
     // engine boundary, whatever the exit reason.
@@ -303,6 +379,61 @@ async fn[G] EngineClient::steer(
           )
         }
       }
+    }
+  }
+}
+
+///|
+/// Send a standing-goal update to the serve engine: `Some(text)` sets or
+/// replaces the goal, `None` clears it. Like command context, this is an
+/// explicit user operation on the durable session, so it may start the
+/// long-lived engine to record the goal without opening a model turn. The
+/// engine answers every persisted update with `goal_updated`, which is the
+/// only signal that mutates the TUI's mirrored goal state.
+async fn[G] EngineClient::goal(
+  self : EngineClient,
+  group : @async.TaskGroup[G],
+  goal : String?,
+) -> Unit {
+  if self.live is None {
+    self.start(group) catch {
+      error if @async.is_being_cancelled() ||
+        @async.is_cancellation_error(error) => raise error
+      error => {
+        self.messages.put(
+          EngineSessionError("failed to start engine for goal update: \{error}"),
+        )
+        return
+      }
+    }
+  }
+  guard self.live is Some(live) else {
+    self.messages.put(
+      EngineSessionError("failed to send goal update: engine is not running"),
+    )
+    return
+  }
+  let command : Json = match goal {
+    Some(text) => { "command": "goal", "action": "set", "text": text }
+    None => { "command": "goal", "action": "clear" }
+  }
+  // Registered BEFORE the write: a fast engine can append the marker and
+  // emit goal_updated while the write call is still yielding, and the
+  // reader must find the expected ack already present. Rolled back if the
+  // write itself fails.
+  live.pending_goal_acks.push(goal)
+  live.writer.write("\{command.stringify()}\n") catch {
+    error if @async.is_being_cancelled() || @async.is_cancellation_error(error) =>
+      raise error
+    error => {
+      match live.pending_goal_acks.search(goal) {
+        Some(index) => live.pending_goal_acks.remove(index) |> ignore
+        None => ()
+      }
+      self.live = None
+      self.messages.put(
+        EngineSessionError("failed to send goal update: \{error}"),
+      )
     }
   }
 }
