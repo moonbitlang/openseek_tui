@@ -13,15 +13,11 @@ fn handle_goal_command(
 ) -> Unit {
   let trimmed = arguments.trim().to_owned()
   if trimmed.is_empty() {
-    match state.goal {
-      Some(goal) => cmds.push(AppendItem(command_notice("goal: \{goal}")))
-      None =>
-        cmds.push(
-          AppendItem(
-            command_notice("no standing goal — set one with /goal set <text>"),
-          ),
-        )
+    let text = match state.goal {
+      Some(goal) => "goal: \{goal}"
+      None => "no standing goal — set one with /goal set <text>"
     }
+    cmds.push(AppendItem(command_notice(text)))
     return
   }
   // The goal is durable session state on the persistent serve engine; a
@@ -52,4 +48,18 @@ fn handle_goal_command(
     return
   }
   cmds.push(AppendItem(Error("usage: /goal | /goal set <text> | /goal clear")))
+}
+
+///|
+/// Mirror an engine-confirmed goal update into local state and the
+/// transcript. The engine's durable-append confirmation is the only writer
+/// of the mirror — both the serve path (`EngineGoalUpdated`) and the
+/// oneshot path (`GoalUpdated`) land here.
+fn apply_goal_update(state : State, goal : String?, cmds : Array[Cmd]) -> Unit {
+  state.goal = goal
+  let title = match goal {
+    Some(text) => "goal set: \{text}"
+    None => "goal cleared"
+  }
+  cmds.push(AppendItem(Input(Notice(title))))
 }

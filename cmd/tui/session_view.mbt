@@ -51,12 +51,9 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
     // Goal markers are transport, not display — the resume path seeds a
     // single "goal: ..." notice from current_goal(), matching the live
     // path where markers are filtered and goal_updated is what renders.
-    Runtime(notice) =>
-      if @agent_session.goal_marker(notice.content()) is Some(_) {
-        None
-      } else {
-        Some(runtime_notice_item(notice.content()))
-      }
+    Runtime(notice) if @agent_session.goal_marker(notice.content()) is Some(_) =>
+      None
+    Runtime(notice) => Some(runtime_notice_item(notice.content()))
     Summary(summary) => Some(summary_item(summary))
     Terminal(terminal) => terminal_item(terminal)
   }

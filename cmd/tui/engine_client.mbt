@@ -124,9 +124,8 @@ async fn[G] EngineClient::start(
           // A durable goal update. Posted untagged: an idle set/clear (or one
           // landing after its turn closed) must survive the stale-run guard.
           GoalUpdated(goal) => {
-            match engine.pending_goal_acks.search(goal) {
-              Some(index) => engine.pending_goal_acks.remove(index) |> ignore
-              None => ()
+            if engine.pending_goal_acks.search(goal) is Some(index) {
+              engine.pending_goal_acks.remove(index) |> ignore
             }
             self.messages.try_put(EngineGoalUpdated(goal)) |> ignore
           }
@@ -299,6 +298,39 @@ async fn[G] EngineClient::prompt(
 }
 
 ///|
+/// Ensure the long-lived engine is running for an explicit user operation
+/// on the durable session (command context, goal update), starting it if
+/// idle. Returns the live process, or None after posting an
+/// EngineSessionError naming `what`.
+async fn[G] EngineClient::live_for(
+  self : EngineClient,
+  group : @async.TaskGroup[G],
+  what : String,
+) -> EngineProcess? {
+  if self.live is None {
+    self.start(group) catch {
+      error if @async.is_being_cancelled() ||
+        @async.is_cancellation_error(error) => raise error
+      error => {
+        self.messages.put(
+          EngineSessionError("failed to start engine for \{what}: \{error}"),
+        )
+        return None
+      }
+    }
+  }
+  match self.live {
+    Some(live) => Some(live)
+    None => {
+      self.messages.put(
+        EngineSessionError("failed to send \{what}: engine is not running"),
+      )
+      None
+    }
+  }
+}
+
+///|
 /// Send typed model-visible input to the serve engine. Prompt steering is only
 /// deliverable to an open run; command context may start the long-lived engine
 /// so an idle session can append it without opening a model turn.
@@ -321,26 +353,7 @@ async fn[G] EngineClient::steer(
         _ => self.messages.put(SteerDropped(text))
       }
     Command(text) => {
-      if self.live is None {
-        self.start(group) catch {
-          error if @async.is_being_cancelled() ||
-            @async.is_cancellation_error(error) => raise error
-          error => {
-            self.messages.put(
-              EngineSessionError(
-                "failed to start engine for command context: \{error}",
-              ),
-            )
-            return
-          }
-        }
-      }
-      guard self.live is Some(live) else {
-        self.messages.put(
-          EngineSessionError(
-            "failed to send command context: engine is not running",
-          ),
-        )
+      guard self.live_for(group, "command context") is Some(live) else {
         return
       }
       let command : Json = {
@@ -395,24 +408,7 @@ async fn[G] EngineClient::goal(
   group : @async.TaskGroup[G],
   goal : String?,
 ) -> Unit {
-  if self.live is None {
-    self.start(group) catch {
-      error if @async.is_being_cancelled() ||
-        @async.is_cancellation_error(error) => raise error
-      error => {
-        self.messages.put(
-          EngineSessionError("failed to start engine for goal update: \{error}"),
-        )
-        return
-      }
-    }
-  }
-  guard self.live is Some(live) else {
-    self.messages.put(
-      EngineSessionError("failed to send goal update: engine is not running"),
-    )
-    return
-  }
+  guard self.live_for(group, "goal update") is Some(live) else { return }
   let command : Json = match goal {
     Some(text) => { "command": "goal", "action": "set", "text": text }
     None => { "command": "goal", "action": "clear" }
@@ -426,9 +422,8 @@ async fn[G] EngineClient::goal(
     error if @async.is_being_cancelled() || @async.is_cancellation_error(error) =>
       raise error
     error => {
-      match live.pending_goal_acks.search(goal) {
-        Some(index) => live.pending_goal_acks.remove(index) |> ignore
-        None => ()
+      if live.pending_goal_acks.search(goal) is Some(index) {
+        live.pending_goal_acks.remove(index) |> ignore
       }
       self.live = None
       self.messages.put(

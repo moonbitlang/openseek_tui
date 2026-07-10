@@ -492,14 +492,7 @@ fn handle_agent_event(
     // forwards engine events run-tagged, so this path is live there: the
     // mirror must follow (a goal(met) mid-run would otherwise leave /goal
     // reporting a cleared goal until restart).
-    GoalUpdated(goal) => {
-      state.goal = goal
-      let title = match goal {
-        Some(text) => "goal set: \{text}"
-        None => "goal cleared"
-      }
-      cmds.push(AppendItem(Input(Notice(title))))
-    }
+    GoalUpdated(goal) => apply_goal_update(state, goal, cmds)
     // Likewise routed untagged by the client (as background notices).
     GoalContinue(_) | GoalBudgetExhausted => ()
     // Terminal for the run but not task success: surface the continuation
@@ -780,14 +773,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       }
     // The engine's durable-append confirmation is the only writer of the
     // mirrored goal state.
-    EngineGoalUpdated(goal) => {
-      state.goal = goal
-      let title = match goal {
-        Some(text) => "goal set: \{text}"
-        None => "goal cleared"
-      }
-      cmds.push(AppendItem(Input(Notice(title))))
-    }
+    EngineGoalUpdated(goal) => apply_goal_update(state, goal, cmds)
     EngineExited => ()
     // Tick is a 1s heartbeat: it keeps the message loop turning so the trailing
     // refresh_ui re-runs (the elapsed-time activity line keeps advancing during
