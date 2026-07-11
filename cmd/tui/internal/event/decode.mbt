@@ -33,7 +33,7 @@ pub fn decode_event(object : Json) -> AgentEvent? {
       let usage : @deepseek.Usage = @json.from_json(
         @jsonx.field(object, "usage").unwrap_or_default(),
       ) catch {
-        // Unreachable with the lenient Usage impl; drop rather than crash.
+        // Drop malformed usage events rather than crashing the UI.
         _ => return None
       }
       Some(
