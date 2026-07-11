@@ -194,6 +194,8 @@ fn generated_session_id(now_ms : Int64) -> @agent_session.SessionId {
 ///|
 fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   let (
+    api_url_input,
+    session_input,
     session_root_input,
     engine_input,
     engine_mode_input,
@@ -202,6 +204,10 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   ) = match matches {
     {
       values: {
+        "api-url": [api_url, ..],
+        "session"? : Some([session, ..])
+        | (Some([])
+        | None) with session = "",
         "session-root": [session_root, ..],
         "engine"? : Some([engine, ..])
         | (Some([])
@@ -214,14 +220,17 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
         ..
       },
       ..,
-    } => (session_root, engine, engine_mode, model, thinking)
+    } => (api_url, session, session_root, engine, engine_mode, model, thinking)
     _ => fail("missing parsed TUI defaults")
   }
   let cwd = match @env.current_dir() {
     Some(cwd) => cwd
     None => "."
   }
-  let explicit_session = @agentcli.session_id(matches)
+  let explicit_session = match session_input.trim() {
+    "" => None
+    session => Some(@agent_session.SessionId("\{session}"))
+  }
   let session_root_value = if explicit_session is Some(_) {
     let root = session_root_input.trim()
     guard !root.is_empty() else {
@@ -265,7 +274,10 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   }
   {
     api_key,
-    api_url: @agentcli.api_url(matches),
+    api_url: match api_url_input.trim() {
+      "" => None
+      url => Some("\{url}")
+    },
     model,
     cwd,
     max_steps: match matches {

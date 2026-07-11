@@ -158,7 +158,11 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
   if config.max_steps is Some(max_steps) {
     env["OPENSEEK_MAX_STEPS"] = max_steps.to_string()
   }
-  env[@agentcli.api_key_env_for_model(config.model)] = config.api_key
+  let api_key_env = match config.model {
+    Kimi(_) => "KIMI"
+    Deepseek(_) => "DEEPSEEK"
+  }
+  env[api_key_env] = config.api_key
   env
 }
 
