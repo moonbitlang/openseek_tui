@@ -143,8 +143,23 @@ pub fn cli_command() -> @argparse.Command {
 /// answers to "which conversation", and silently preferring either would
 /// surprise whoever typed the other.
 fn continue_requested(matches : @argparse.Matches) -> Bool raise {
-  let continue_flag = @cli.flag(matches, "continue")
-  if continue_flag && @agentcli.session_id(matches) is Some(_) {
+  let (continue_flag, session) = match matches {
+    {
+      flags: {
+        "continue"? : Some(continue_flag)
+        | None with continue_flag = false,
+        ..
+      },
+      values: {
+        "session"? : Some([session, ..])
+        | (Some([])
+        | None) with session = "",
+        ..
+      },
+      ..,
+    } => (continue_flag, session.trim())
+  }
+  if continue_flag && !session.is_empty() {
     fail(
       "--continue resumes the latest session; it cannot be combined with --session",
     )
@@ -164,13 +179,6 @@ async fn with_latest_session(config : AppConfig) -> AppConfig {
 }
 
 ///|
-fn session_root(matches : @argparse.Matches) -> String raise {
-  @cli.require_non_empty(
-    matches, "session-root", "--session-root or OPENSEEK_SESSION_ROOT must not be empty",
-  )
-}
-
-///|
 /// Session id for a TUI launch that did not pick one.
 ///
 /// Conversation continuity is the TUI's default. The engine runs once per
@@ -185,15 +193,43 @@ fn generated_session_id(now_ms : Int64) -> @agent_session.SessionId {
 
 ///|
 fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
+  let (
+    session_root_input,
+    engine_input,
+    engine_mode_input,
+    model_input,
+    thinking_input,
+  ) = match matches {
+    {
+      values: {
+        "session-root": [session_root, ..],
+        "engine"? : Some([engine, ..])
+        | (Some([])
+        | None) with engine = "",
+        "engine-mode"? : Some([engine_mode, ..])
+        | (Some([])
+        | None) with engine_mode = "serve",
+        "model": [model, ..],
+        "thinking": [thinking, ..],
+        ..
+      },
+      ..,
+    } => (session_root, engine, engine_mode, model, thinking)
+    _ => fail("missing parsed TUI defaults")
+  }
   let cwd = match @env.current_dir() {
     Some(cwd) => cwd
     None => "."
   }
   let explicit_session = @agentcli.session_id(matches)
   let session_root_value = if explicit_session is Some(_) {
-    session_root(matches)
+    let root = session_root_input.trim()
+    guard !root.is_empty() else {
+      fail("--session-root or OPENSEEK_SESSION_ROOT must not be empty")
+    }
+    "\{root}"
   } else {
-    let root = @cli.value(matches, "session-root").trim().to_owned()
+    let root = session_root_input.trim().to_owned()
     if root.is_empty() {
       ".openseek"
     } else {
@@ -204,18 +240,14 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   // command as the engine (see `default_engine`). Presence of a non-blank value,
   // not a magic default string, decides — which also gates oneshot below. A
   // blank `--engine ""` counts as unset rather than an empty command.
-  let explicit_engine : String? = match @cli.values(matches, "engine") {
-    [engine, ..] if !engine.trim().is_empty() => Some(engine)
-    _ => None
+  let explicit_engine : String? = if engine_input.trim().is_empty() {
+    None
+  } else {
+    Some(engine_input)
   }
   // `--engine-mode` is a UI-only option on the `tui` subcommand; a bare
   // `openseek` (no subcommand) never has it, so read it gracefully.
-  let engine_mode = EngineMode::parse(
-    match @cli.values(matches, "engine-mode") {
-      [mode, ..] => mode
-      [] => "serve"
-    },
-  )
+  let engine_mode = EngineMode::parse(engine_mode_input)
   // `oneshot` only makes sense for a custom/replay engine that cannot speak the
   // persistent `serve` protocol; re-launching ourselves in oneshot buys nothing
   // and loses steering/compaction, so require an explicit engine.
@@ -225,7 +257,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     )
   }
   // Enforced here rather than via argparse `required`: see `tui_shared_options`.
-  let model = @deepseek.Model::parse(@cli.value(matches, "model"))
+  let model = @deepseek.Model::parse(model_input)
   let api_key = @agentcli.api_key(matches, model)
   let (engine, engine_args_prefix) = match explicit_engine {
     Some(engine) => (engine, [])
@@ -236,12 +268,14 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
     api_url: @agentcli.api_url(matches),
     model,
     cwd,
-    max_steps: @cli.parse_optional_positive_int(
-      matches, "max-steps", "--max-steps",
-    ),
+    max_steps: match matches {
+      { values: { "max-steps": [input, ..], .. }, .. } =>
+        Some(@cli.parse_positive_int(input, "--max-steps"))
+      _ => None
+    },
     // Parsed eagerly so a typo fails at launch with a CLI error instead of
     // inside the first turn's engine run.
-    thinking: @deepseek.ThinkingMode::parse(@cli.value(matches, "thinking")),
+    thinking: @deepseek.ThinkingMode::parse(thinking_input),
     session_id: match explicit_session {
       Some(id) => id
       None => generated_session_id(@env.now().reinterpret_as_int64())
@@ -286,9 +320,20 @@ fn moon_native_tcc_run_args(argv0 : String) -> Array[String]? {
 /// There is no free-form positional: a bare non-subcommand token is a typo the
 /// top-level dispatcher rejects rather than silently treats as a prompt.
 fn initial_task(matches : @argparse.Matches) -> String? {
-  match @cli.values(matches, "prompt") {
-    [prompt, ..] if !prompt.trim().is_empty() => Some(prompt.trim().to_owned())
-    _ => None
+  match matches {
+    {
+      values: {
+        "prompt"? : Some([prompt, ..])
+        | (Some([])
+        | None) with prompt = "",
+        ..
+      },
+      ..,
+    } =>
+      match prompt.trim() {
+        "" => None
+        prompt => Some("\{prompt}")
+      }
   }
 }
 
