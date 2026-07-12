@@ -38,8 +38,9 @@ fn handle_goal_command(
     cmds.push(UpdateGoal(None))
     return
   }
-  if trimmed == "set" || trimmed.has_prefix("set ") {
-    let text = trimmed["set".length():].trim().to_owned()
+  if trimmed.strip_prefix("set") is Some(text) &&
+    (text.is_empty() || text.has_prefix(" ")) {
+    let text = text.trim().to_owned()
     if text.is_empty() {
       cmds.push(AppendItem(Error("usage: /goal set <text>")))
     } else {
