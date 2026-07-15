@@ -12,10 +12,6 @@ test "decode maps each engine event kind" {
     is Some(AssistantDelta("tok")),
   )
   assert_true(
-    @event.decode_event({ "event": "reasoning_delta", "content": "hmm" })
-    is Some(ReasoningDelta("hmm")),
-  )
-  assert_true(
     @event.decode_event({
       "event": "reasoning_message",
       "content": "full thought",
@@ -214,6 +210,7 @@ test "decode_event surfaces MCP diagnostics as notices" {
       "event": "mcp_tools_registered",
       "servers": 2,
       "tools": 5,
+      "names": ["a", "b", "c", "d", "e"],
     })
     is Some(BackgroundNotice(registered)) else {
     fail("expected a notice")

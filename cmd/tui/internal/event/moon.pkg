@@ -1,7 +1,6 @@
 import {
   "bobzhang/openseek/agent_runtime",
-  "bobzhang/openseek/cmd/tui/internal/jsonx",
-  "bobzhang/openseek/deepseek",
+  "bobzhang/openseek_protocol" @protocol,
   "moonbitlang/core/json",
 }
 
