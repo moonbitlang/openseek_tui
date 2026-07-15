@@ -294,7 +294,7 @@ async fn[G] EngineClient::prompt(
       }
     }
   }
-  self.open_run(run_id, { "command": "prompt", "text": text })
+  self.open_run(run_id, (Prompt(text~) : @protocol.Command).to_json())
 }
 
 ///|
@@ -345,22 +345,17 @@ async fn[G] EngineClient::steer(
     Prompt(text) | Notice(text) =>
       match self.live {
         Some(live) if live.run_open =>
-          self.send(live.latest_run, {
-            "command": "steer",
-            "kind": "prompt",
-            "text": text,
-          })
+          self.send(
+            live.latest_run,
+            (Steer(kind=Prompt, text~) : @protocol.Command).to_json(),
+          )
         _ => self.messages.put(SteerDropped(text))
       }
     Command(text) => {
       guard self.live_for(group, "command context") is Some(live) else {
         return
       }
-      let command : Json = {
-        "command": "steer",
-        "kind": "command",
-        "text": text,
-      }
+      let command : Json = (Steer(kind=Command, text~) : @protocol.Command).to_json()
       // Delivery here is fire-and-forget by design. The serve protocol's
       // contract is that every accepted command context is answered with
       // exactly one terminal ack — `steer_applied` (persisted) or
@@ -410,8 +405,10 @@ async fn[G] EngineClient::goal(
 ) -> Unit {
   guard self.live_for(group, "goal update") is Some(live) else { return }
   let command : Json = match goal {
-    Some(text) => { "command": "goal", "action": "set", "text": text }
-    None => { "command": "goal", "action": "clear" }
+    // The TUI only ever sets a manual goal; `auto` is the serve protocol's
+    // affordance for a headless controller.
+    Some(text) => (GoalSet(text~, auto=false) : @protocol.Command).to_json()
+    None => (GoalClear : @protocol.Command).to_json()
   }
   // Registered BEFORE the write: a fast engine can append the marker and
   // emit goal_updated while the write call is still yielding, and the
@@ -451,7 +448,7 @@ async fn[G] EngineClient::compact(
       }
     }
   }
-  self.open_run(run_id, { "command": "compact" })
+  self.open_run(run_id, (Compact : @protocol.Command).to_json())
 }
 
 ///|
@@ -459,7 +456,7 @@ async fn[G] EngineClient::compact(
 /// silent no-op — the turn the user wanted dead is already gone.
 async fn EngineClient::cancel_turn(self : EngineClient) -> Unit {
   if self.live is Some(live) && live.run_open {
-    self.send(live.latest_run, { "command": "cancel" })
+    self.send(live.latest_run, (Cancel : @protocol.Command).to_json())
   }
 }
 
