@@ -147,13 +147,12 @@ fn continue_requested(matches : @argparse.Matches) -> Bool raise {
     {
       flags: {
         "continue"? : Some(continue_flag)
-        | None with continue_flag = false,
+        | (None with continue_flag = false),
         ..
       },
       values: {
         "session"? : Some([session, ..])
-        | (Some([])
-        | None) with session = "",
+        | (Some([]) | None with session = ""),
         ..
       },
       ..,
@@ -206,15 +205,12 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
       values: {
         "api-url": [api_url, ..],
         "session"? : Some([session, ..])
-        | (Some([])
-        | None) with session = "",
+        | (Some([]) | None with session = ""),
         "session-root": [session_root, ..],
         "engine"? : Some([engine, ..])
-        | (Some([])
-        | None) with engine = "",
+        | (Some([]) | None with engine = ""),
         "engine-mode"? : Some([engine_mode, ..])
-        | (Some([])
-        | None) with engine_mode = "serve",
+        | (Some([]) | None with engine_mode = "serve"),
         "model": [model, ..],
         "thinking": [thinking, ..],
         ..
@@ -336,8 +332,7 @@ fn initial_task(matches : @argparse.Matches) -> String? {
     {
       values: {
         "prompt"? : Some([prompt, ..])
-        | (Some([])
-        | None) with prompt = "",
+        | (Some([]) | None with prompt = ""),
         ..
       },
       ..,

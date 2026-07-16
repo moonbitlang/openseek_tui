@@ -43,6 +43,12 @@ pub fn Input::text(self : Input) -> String {
 }
 
 ///|
+/// Make `ToDoc::to_doc` callable as a plain method on `Input` (used by
+/// `TranscriptItem::to_doc`). Explicit, because implicit promotion of a
+/// trait method to a regular method is deprecated.
+extend Input with @doc.ToDoc::{to_doc}
+
+///|
 /// Project the input into a renderable `@doc.Doc`: the first line carries the
 /// input's `prefix` and continuation lines are indented two columns, all in the
 /// prompt style.
