@@ -122,13 +122,13 @@ const SteerSegmentMaxColumns : Int = 44
 /// and the transcript echo — which during a long tool call can be many
 /// seconds — so without it a steer reads as an eaten keystroke.
 fn pending_steer_segment(steers : Array[String]) -> Array[@doc.Span] {
-  guard steers.length() > 0 else { return [] }
+  guard steers is [.., latest_steer] else { return [] }
   let label = if steers.length() > 1 {
     " · steering ×\{steers.length()}: "
   } else {
     " · steering: "
   }
-  let latest = collapse_preview_whitespace(steers[steers.length() - 1])
+  let latest = collapse_preview_whitespace(latest_steer)
   let budget = SteerSegmentMaxColumns - @displaytext.DisplayText(label).width()
   [
     Span(DisplayText(label), style=@style.dim),
