@@ -128,7 +128,7 @@ pub fn tui_ui_flags() -> Array[@argparse.FlagArg] {
 /// (non-global), for unit tests that parse the UI in isolation. Production wires
 /// the shared options onto the root as globals and gives the `tui` subcommand only
 /// the UI-only ones (see `cmd/openseek`).
-pub fn cli_command() -> @argparse.Command {
+fn cli_command() -> @argparse.Command {
   Command(
     "tui",
     about="OpenSeek terminal UI.",
