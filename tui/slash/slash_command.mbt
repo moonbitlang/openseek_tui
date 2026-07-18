@@ -19,18 +19,6 @@ pub fn SlashCommandSpec::new(
 }
 
 ///|
-/// Command name without the leading slash.
-pub fn SlashCommandSpec::name(self : SlashCommandSpec) -> String {
-  self.name
-}
-
-///|
-/// User-visible command description shown in the completion menu.
-pub fn SlashCommandSpec::description(self : SlashCommandSpec) -> String {
-  self.description
-}
-
-///|
 /// An ordered set of slash commands the UI can offer and dispatch.
 pub(all) struct SlashCommands(Array[SlashCommandSpec])
 
@@ -38,20 +26,6 @@ pub(all) struct SlashCommands(Array[SlashCommandSpec])
 /// Whether there are no commands.
 pub fn SlashCommands::is_empty(self : SlashCommands) -> Bool {
   self.0.is_empty()
-}
-
-///|
-/// Command whose name equals `name`, case-insensitively, if any.
-pub fn SlashCommands::get(
-  self : SlashCommands,
-  name : String,
-) -> SlashCommandSpec? {
-  for command in self.0 {
-    if command.name().equal_ignore_ascii_case(name) {
-      return Some(command)
-    }
-  }
-  None
 }
 
 ///|
