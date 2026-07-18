@@ -13,7 +13,7 @@ pub fn parse(String) -> ShellCommand?
 // Errors
 
 // Types and methods
-pub(all) struct ShellCommand {
+pub struct ShellCommand {
   command : String
   exit : String
   output : Array[String]

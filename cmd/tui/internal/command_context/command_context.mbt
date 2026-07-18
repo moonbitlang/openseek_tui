@@ -29,7 +29,7 @@
 /// The caller decides how each renders. `output` is the captured lines with the
 /// metadata preamble already stripped; `output_limit_reached` flags that the
 /// shell collector hit its character cap.
-pub(all) struct ShellCommand {
+pub struct ShellCommand {
   command : String
   exit : String
   output : Array[String]

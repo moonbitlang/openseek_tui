@@ -8,7 +8,7 @@
 ///
 /// The engine reports prompt/completion/cache counts; only the derived total
 /// (`prompt + completion`) is shown in the status line, so that is all we keep.
-pub(all) struct UsageInfo {
+pub struct UsageInfo {
   total_tokens : Int
 }
 
