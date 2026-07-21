@@ -53,6 +53,10 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
     // path where markers are filtered and goal_updated is what renders.
     Runtime(notice) if @agent_session.goal_marker(notice.content()) is Some(_) =>
       None
+    // The baseline pairing record is transport too: filtered on the live
+    // path, so resume must not resurrect it as a notice card.
+    Runtime(notice) if @agent_session.parse_goal_baseline(notice.content())
+      is Some(_) => None
     Runtime(notice) => Some(runtime_notice_item(notice.content()))
     Summary(summary) => Some(summary_item(summary))
     Terminal(terminal) => terminal_item(terminal)
