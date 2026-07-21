@@ -32,6 +32,8 @@ pub(all) enum AgentEvent {
   GoalContinue(Int)
   GoalBudgetExhausted
   ContextYield(String)
+  SubrunStarted(kind~ : String, label~ : String)
+  SubrunFinished(status~ : String, steps~ : Int)
 }
 
 pub(all) struct ToolResultEvent {

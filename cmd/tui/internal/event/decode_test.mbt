@@ -239,3 +239,32 @@ test "decode_event surfaces MCP diagnostics as notices" {
   }
   assert_eq(timeout, "MCP: server `slow` did not list its tools")
 }
+
+///|
+test "subrun lifecycle brackets decode to their display forms" {
+  assert_true(
+    @event.decode_event({
+      "event": "subrun_started",
+      "id": "sr-1",
+      "kind": "review",
+      "label": "goal review",
+    })
+    is Some(SubrunStarted(kind="review", label="goal review")),
+  )
+  // The id and token counts are wire-only: the UI shows status and steps.
+  assert_true(
+    @event.decode_event({
+      "event": "subrun_finished",
+      "id": "sr-1",
+      "status": "captured",
+      "steps": 12,
+      "prompt_tokens": 34000,
+      "completion_tokens": 5600,
+    })
+    is Some(SubrunFinished(status="captured", steps=12)),
+  )
+  // A finish missing its required fields drops rather than misrendering.
+  assert_true(
+    @event.decode_event({ "event": "subrun_finished", "id": "sr-1" }) is None,
+  )
+}

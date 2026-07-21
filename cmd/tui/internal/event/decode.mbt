@@ -75,6 +75,11 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     GoalBudgetExhausted(_) => Some(GoalBudgetExhausted)
     // A turn that ended at the context ceiling: run-terminal, not success.
     ContextYield(answer~, ..) => Some(ContextYield(answer))
+    // A sub-run's lifecycle brackets. The id pairs starts with finishes on
+    // the wire; the UI shows them as ordered transcript notices, so only
+    // the display fields survive decoding.
+    SubrunStarted(kind~, label~, ..) => Some(SubrunStarted(kind~, label~))
+    SubrunFinished(status~, steps~, ..) => Some(SubrunFinished(status~, steps~))
     // MCP lifecycle diagnostics, surfaced as notices so a typo'd config or a
     // dead server is visible in the UI instead of silently yielding no tools.
     // `servers` counts the configuration's entries, not successful contributors

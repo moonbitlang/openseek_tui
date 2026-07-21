@@ -75,4 +75,11 @@ pub(all) enum AgentEvent {
   // terminal for the run, but NOT task success — the work continues in a
   // new turn the user (or a controller) starts.
   ContextYield(String)
+  // A nested sub-run (a review, an explore) began inside the active run.
+  // `label` is a short display string, never the raw query.
+  SubrunStarted(kind~ : String, label~ : String)
+  // The paired completion: the child's terminal status ("captured",
+  // "failed", …) and how many model steps it spent. Non-terminal for the
+  // outer run — the parent turn continues.
+  SubrunFinished(status~ : String, steps~ : Int)
 }

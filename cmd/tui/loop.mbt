@@ -434,6 +434,17 @@ fn handle_agent_event(
     SessionError(error) => cmds.push(AppendItem(Error(error)))
     Usage(usage) => state.usage = Some(usage)
     ToolResult(result) => cmds.push(AppendItem(tool_item(result)))
+    // Sub-run lifecycle brackets, shown as transcript notices so the child's
+    // interleaved tool calls read as belonging to the sub-run. Non-terminal:
+    // the outer run stays busy throughout.
+    SubrunStarted(kind~, label~) =>
+      cmds.push(AppendItem(Input(Notice("\{kind} subrun started: \{label}"))))
+    SubrunFinished(status~, steps~) =>
+      cmds.push(
+        AppendItem(
+          Input(Notice("subrun finished: \{status} (\{steps} step(s))")),
+        ),
+      )
     AgentFinished(answer) => {
       let already_appended = state.step_response is Some(response) &&
         response == answer
