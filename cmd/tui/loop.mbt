@@ -413,7 +413,8 @@ fn handle_agent_event(
     // making the tagged BackgroundNotice path unreachable — but render it
     // the same way for completeness.
     SteerApplied(Notice(text)) | BackgroundNotice(text) =>
-      if @agent_session.goal_marker(text) is None {
+      if @agent_session.goal_marker(text) is None &&
+        @agent_session.parse_goal_baseline(text) is None {
         cmds.push(AppendItem(Input(Notice(text))))
       }
     // Normally unreachable from the wire: the engine client routes
@@ -772,7 +773,8 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // their notice leg is transport, and goal_updated carries the
     // confirmation (defense in depth against engine version skew).
     EngineBackgroundNotice(text) =>
-      if @agent_session.goal_marker(text) is None {
+      if @agent_session.goal_marker(text) is None &&
+        @agent_session.parse_goal_baseline(text) is None {
         cmds.push(AppendItem(Input(Notice(text))))
       }
     // The engine's durable-append confirmation is the only writer of the
