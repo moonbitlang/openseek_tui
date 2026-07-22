@@ -21,8 +21,7 @@ Placing an area for a desired height against a terminal size:
 
 ```mbt
 let height = @geometry.clamp_height(size, height=4)          // into 1 ..= rows
-let max_top = @geometry.calculate_max_top(size, height)      // lowest fully-on-screen start
-let top = @geometry.clamp_top(size, height~, top=cursor_row) // into 1 ..= max_top
+let top = @geometry.clamp_top(size, height~, top=cursor_row) // into 1 ..= the lowest fully-on-screen start
 ```
 
 Internal to `tui/` — only importable within the module.
