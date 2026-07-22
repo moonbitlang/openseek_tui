@@ -80,16 +80,6 @@ pub fn Line::spans(self : Line) -> Array[Span] {
 }
 
 ///|
-/// The line's text content with styling stripped.
-pub fn Line::text(self : Line) -> String {
-  let builder = StringBuilder()
-  for span in self.spans {
-    builder <+ "\{span.text.text()}"
-  }
-  builder.to_string()
-}
-
-///|
 /// Build a cursor at a 0-based (row, col) cell offset.
 pub fn Cursor::new(row~ : Int, col~ : Int) -> Cursor {
   { row, col }

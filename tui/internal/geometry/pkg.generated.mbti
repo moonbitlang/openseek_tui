@@ -6,8 +6,6 @@ import {
 }
 
 // Values
-pub fn calculate_max_top(@terminal_size.TerminalSize, Int) -> Int
-
 pub fn clamp_height(@terminal_size.TerminalSize, height~ : Int) -> Int
 
 pub fn clamp_top(@terminal_size.TerminalSize, height~ : Int, top~ : Int) -> Int

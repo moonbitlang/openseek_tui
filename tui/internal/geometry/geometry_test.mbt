@@ -7,15 +7,6 @@ test "@geometry.clamp_height clamps into 1..=rows" {
 }
 
 ///|
-test "@geometry.calculate_max_top leaves room for height and floors at row 1" {
-  let size = @terminal_size.TerminalSize(rows=10, cols=80)
-  inspect(@geometry.calculate_max_top(size, 4), content="7")
-  inspect(@geometry.calculate_max_top(size, 10), content="1")
-  // Live area taller than the screen still starts at row 1.
-  inspect(@geometry.calculate_max_top(size, 20), content="1")
-}
-
-///|
 test "@geometry.clamp_top clamps into 1..=@geometry.calculate_max_top" {
   let size = @terminal_size.TerminalSize(rows=10, cols=80)
   inspect(@geometry.clamp_top(size, height=4, top=0), content="1")

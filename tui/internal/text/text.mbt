@@ -49,7 +49,7 @@ pub fn sanitize(text : String) -> String {
 /// applying the same policy as `sanitize` (drop C0 controls and `DEL`, expand
 /// tabs, keep `\n` as the line split). Callers that need segmented lines should
 /// use this directly instead of re-splitting `sanitize`'s joined output.
-pub fn sanitize_lines(text : String) -> Array[@displaytext.DisplayText] {
+fn sanitize_lines(text : String) -> Array[@displaytext.DisplayText] {
   @displaytext.split_lines(text).map(line => DisplayText(sanitize_line(line)))
 }
 

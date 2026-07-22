@@ -79,10 +79,7 @@ pub fn clamp_height(size : @terminal_size.TerminalSize, height~ : Int) -> Int {
 /// - 1 = 24` sits exactly on the screen bottom. `height` is pre-clamped to
 /// `<= rows` by `clamp_height`, so the bound is always `>= 1` and the clamp
 /// range stays non-empty.
-pub fn calculate_max_top(
-  size : @terminal_size.TerminalSize,
-  height : Int,
-) -> Int {
+fn calculate_max_top(size : @terminal_size.TerminalSize, height : Int) -> Int {
   (size.rows() - height + 1).max(1)
 }
 
@@ -98,4 +95,13 @@ pub fn clamp_top(
   top~ : Int,
 ) -> Int {
   top.clamp(min=1, max=calculate_max_top(size, height))
+}
+
+///|
+test "calculate_max_top leaves room for height and floors at row 1" {
+  let size = @terminal_size.TerminalSize(rows=10, cols=80)
+  inspect(calculate_max_top(size, 4), content="7")
+  inspect(calculate_max_top(size, 10), content="1")
+  // Live area taller than the screen still starts at row 1.
+  inspect(calculate_max_top(size, 20), content="1")
 }
