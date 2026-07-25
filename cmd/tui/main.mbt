@@ -263,7 +263,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   }
   // Enforced here rather than via argparse `required`: see `tui_shared_options`.
   let model = @deepseek.Model::parse(model_input)
-  let api_key = @agentcli.api_key(matches, model)
+  let api_key = model.api_key(matches)
   let (engine, engine_args_prefix) = match explicit_engine {
     Some(engine) => (engine, [])
     None => default_engine(@sys.get_cli_args())
