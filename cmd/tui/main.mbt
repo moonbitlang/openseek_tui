@@ -263,7 +263,9 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   }
   // Enforced here rather than via argparse `required`: see `tui_shared_options`.
   let model = @deepseek.Model::parse(model_input)
-  let api_key = model.api_key(matches)
+  guard model.api_key(matches) is Some(api_key) else {
+    fail("an API key is required for \{model}: pass --api-key")
+  }
   let (engine, engine_args_prefix) = match explicit_engine {
     Some(engine) => (engine, [])
     None => default_engine(@sys.get_cli_args())
@@ -507,10 +509,12 @@ test "cli uses KIMI only for Kimi models" {
   let kimi_config = parse_config(kimi)
   assert_eq(kimi_config.api_key, "kimi-key")
   assert_true(kimi_config.model is Kimi(K27CodeHighSpeed))
+  // KIMI is not a fallback for a DeepSeek model: `Model::api_key` returns
+  // `None` and this main is the one that turns that into a failure.
   let deepseek = cli_command().parse(argv=[], env={ "KIMI": "kimi-key" })
   let _ = parse_config(deepseek) catch {
     error => {
-      assert_true("\{error}".contains("DEEPSEEK"))
+      assert_true("\{error}".contains("an API key is required"))
       return
     }
   }
