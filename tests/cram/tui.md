@@ -42,7 +42,8 @@ With no `--api-key` flag and no `DEEPSEEK` in the environment, the UI reports th
 missing key on stderr and exits non-zero — before the terminal UI ever starts.
 (The key is validated in the UI path rather than via argparse `required`, so the
 root command can stay key-optional for offline engine subcommands like
-`sessions list`.)
+`sessions list`.) The message names the model that wanted a key, not the variable
+that would have supplied one; see [`cli.md`](cli.md) for which variable that is.
 
 ```mooncram
 $ sh <<'EOF'
@@ -54,7 +55,7 @@ $ sh <<'EOF'
 > rm -f "$stdout" "$stderr"
 > EOF
 exit-non-zero
-error: an API key is required for DeepSeek models: pass --api-key or set DEEPSEEK
+error: an API key is required for deepseek-v4-pro: pass --api-key
 stdout-empty
 ```
 
