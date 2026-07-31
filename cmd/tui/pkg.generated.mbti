@@ -21,4 +21,3 @@ pub fn tui_ui_options() -> Array[@argparse.OptionArg]
 // Type aliases
 
 // Traits
-

@@ -23,4 +23,3 @@ pub struct ShellCommand {
 // Type aliases
 
 // Traits
-
