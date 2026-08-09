@@ -263,7 +263,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   }
   // Enforced here rather than via argparse `required`: see `tui_shared_options`.
   let model = @deepseek.Model::parse(model_input)
-  guard model.api_key(matches) is Some(api_key) else {
+  guard model.api_key(matches.values) is Some(api_key) else {
     fail("an API key is required for \{model}: pass --api-key")
   }
   let (engine, engine_args_prefix) = match explicit_engine {
