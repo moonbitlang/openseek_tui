@@ -199,9 +199,9 @@ fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
 ///|
 /// The first wrapped row of this block for `width` columns, or an empty line.
 pub fn Text::first_line(self : Text, width~ : Int) -> @surface.Line {
-  match self.wrap(width~).get(0) {
-    Some(line) => line
-    None => @surface.Line::new([])
+  match self.wrap(width~) {
+    [line, ..] => line
+    [] => @surface.Line::new([])
   }
 }
 
