@@ -25,7 +25,7 @@ fn summary_item(summary : @agent_session.SessionSummary) -> @ui.TranscriptItem {
 ///|
 fn terminal_item(terminal : @agent_session.TurnTerminal) -> @ui.TranscriptItem? {
   match terminal {
-    Finished(answer) if !answer.trim().is_empty() => Some(Response(answer))
+    Finished(answer) if !answer.is_blank() => Some(Response(answer))
     Finished(_) => None
     Aborted(reason) => Some(Error("aborted: \{reason}"))
     Interrupted(reason) => Some(Error("interrupted: \{reason}"))
@@ -42,7 +42,7 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
         None => Some(Input(Prompt(message.content())))
       }
     Assistant(message) =>
-      if message.content().trim().is_empty() {
+      if message.content().is_blank() {
         None
       } else {
         Some(Response(message.content()))

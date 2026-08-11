@@ -392,7 +392,7 @@ fn handle_agent_event(
     // The turn's full reasoning, emitted once streaming ends and before the
     // assistant message commits — so the transcript reads thought → answer.
     ReasoningMessage(text) =>
-      if !text.trim().is_empty() {
+      if !text.is_blank() {
         cmds.push(AppendItem(reasoning_item(text)))
       }
     // Prompt steering took effect at the engine's step boundary: echo the input
@@ -428,7 +428,7 @@ fn handle_agent_event(
     AssistantMessage(text) => {
       state.step_response = Some(text)
       state.streaming_response = None
-      if !text.trim().is_empty() {
+      if !text.is_blank() {
         cmds.push(AppendItem(Response(text)))
       }
     }
@@ -451,7 +451,7 @@ fn handle_agent_event(
         response == answer
       // `AgentFinished` follows `AssistantMessage` for normal chat responses,
       // but tool-controlled finish results may arrive without one.
-      if !already_appended && !answer.trim().is_empty() {
+      if !already_appended && !answer.is_blank() {
         cmds.push(AppendItem(Response(answer)))
       }
       scheduler_on_run_end(state, LoopRunFinished, cmds)
@@ -534,7 +534,7 @@ fn handle_compact_command(
   arguments : String,
   cmds : Array[Cmd],
 ) -> Unit {
-  if !arguments.trim().is_empty() {
+  if !arguments.is_blank() {
     cmds.push(AppendItem(Error("/compact does not accept arguments")))
     return
   }
@@ -582,7 +582,7 @@ fn handle_slash_command(
 ) -> Unit {
   match name.to_lower() {
     "exit" =>
-      if arguments.trim().is_empty() {
+      if arguments.is_blank() {
         cmds.push(Quit)
       } else {
         cmds.push(AppendItem(Error("/exit does not accept arguments")))
@@ -665,7 +665,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
                 // A blank steer would be filtered engine-side without any
                 // settling event, leaving a phantom acknowledgment; there is
                 // nothing to say to the model anyway, so drop it here.
-                if !text.trim().is_empty() {
+                if !text.is_blank() {
                   // Acknowledge immediately: the transcript echo only comes
                   // at the step boundary, but the user pressed Enter *now*.
                   state.pending_steers.push(text)

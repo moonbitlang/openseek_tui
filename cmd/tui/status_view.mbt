@@ -179,7 +179,7 @@ fn format_activity_text(state : State, cols~ : Int) -> @doc.Text? {
   } else {
     0
   }
-  if state.streaming_response is Some(response) && !response.trim().is_empty() {
+  if state.streaming_response is Some(response) && !response.is_blank() {
     let spans = streaming_activity_spans(
       "Streaming ",
       response,
