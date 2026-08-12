@@ -50,4 +50,3 @@ pub impl @doc.ToDoc for TranscriptItem
 // Type aliases
 
 // Traits
-

@@ -27,4 +27,3 @@ pub fn Viewport::rows(Self) -> Int
 // Type aliases
 
 // Traits
-

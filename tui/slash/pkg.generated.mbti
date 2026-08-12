@@ -30,4 +30,3 @@ pub fn SlashCommands::is_empty(Self) -> Bool
 // Type aliases
 
 // Traits
-

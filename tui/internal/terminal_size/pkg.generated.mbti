@@ -15,4 +15,3 @@ pub fn TerminalSize::rows(Self) -> Int
 // Type aliases
 
 // Traits
-

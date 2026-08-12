@@ -21,4 +21,3 @@ pub fn composer_surface(@composer.Model, activity~ : @doc.Text?, queued_inputs~ 
 // Type aliases
 
 // Traits
-

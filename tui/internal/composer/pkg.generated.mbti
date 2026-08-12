@@ -46,4 +46,3 @@ pub fn Model::visible_text_rows(Self) -> Int
 // Type aliases
 
 // Traits
-

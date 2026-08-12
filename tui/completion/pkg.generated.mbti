@@ -27,4 +27,3 @@ pub fn Model::selected(Self) -> Int
 // Type aliases
 
 // Traits
-

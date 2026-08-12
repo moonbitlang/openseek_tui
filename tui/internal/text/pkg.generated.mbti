@@ -23,4 +23,3 @@ pub fn unit_width(@displaytext.DisplayText, start~ : @displaytext.TextualPositio
 // Type aliases
 
 // Traits
-
