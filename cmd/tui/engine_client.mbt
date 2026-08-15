@@ -294,7 +294,11 @@ async fn[G] EngineClient::prompt(
       }
     }
   }
-  self.open_run(run_id, (Prompt(text~) : @protocol.Command).to_json())
+  self.open_run(
+    run_id,
+    // The TUI never reconciles a delivery by id, so its prompts are untagged.
+    (Prompt(text~, submission_id=None) : @protocol.Command).to_json(),
+  )
 }
 
 ///|
