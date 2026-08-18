@@ -189,18 +189,6 @@ fn format_activity_text(state : State, cols~ : Int) -> @doc.Text? {
     )
     return Some(Text(spans + steer_segment))
   }
-  // Thinking-mode turns can spend a long first phase emitting only reasoning.
-  // Show its newest tail dimmed until visible answer content takes over.
-  if state.streaming_reasoning is Some(reasoning) && !reasoning.is_blank() {
-    let spans = streaming_activity_spans(
-      "Thinking ",
-      reasoning,
-      cols~,
-      dim_preview=true,
-      reserved~,
-    )
-    return Some(Text(spans + steer_segment))
-  }
   let elapsed = format_elapsed_compact(
     elapsed_seconds(started_ms, @env.now().reinterpret_as_int64()),
   )

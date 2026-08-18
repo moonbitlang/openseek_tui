@@ -380,7 +380,6 @@ fn handle_agent_event(
     AgentStep => {
       state.step_response = None
       state.streaming_response = None
-      state.streaming_reasoning = None
     }
     AssistantDelta(text) =>
       if text != "" {
@@ -389,22 +388,13 @@ fn handle_agent_event(
         )
         // Content starting means the thinking phase is over; the content
         // preview replaces the reasoning one.
-        state.streaming_reasoning = None
-      }
-    ReasoningDelta(text) =>
-      if text != "" {
-        state.streaming_reasoning = Some(
-          append_streaming_preview(state.streaming_reasoning, text),
-        )
       }
     // The turn's full reasoning, emitted once streaming ends and before the
     // assistant message commits — so the transcript reads thought → answer.
-    ReasoningMessage(text) => {
-      state.streaming_reasoning = None
+    ReasoningMessage(text) =>
       if !text.is_blank() {
         cmds.push(AppendItem(reasoning_item(text)))
       }
-    }
     // Prompt steering took effect at the engine's step boundary: echo the input
     // into the transcript at its true conversational position, the way the
     // model actually saw it.
@@ -438,7 +428,6 @@ fn handle_agent_event(
     AssistantMessage(text) => {
       state.step_response = Some(text)
       state.streaming_response = None
-      state.streaming_reasoning = None
       if !text.is_blank() {
         cmds.push(AppendItem(Response(text)))
       }
@@ -1963,33 +1952,6 @@ test "streamed newlines collapse so the preview stays one line" {
 }
 
 ///|
-test "reasoning deltas stream until answer content takes over" {
-  let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Prompt("do it"))))
-  let items : Array[@ui.TranscriptItem] = []
-  append_items(
-    state,
-    { "event": "reasoning_delta", "content": "Let me" },
-    items,
-  )
-  append_items(
-    state,
-    { "event": "reasoning_delta", "content": " think" },
-    items,
-  )
-  assert_true(state.streaming_reasoning is Some("Let me think"))
-  assert_true(state.streaming_response is None)
-  assert_eq(items.length(), 0)
-  append_items(
-    state,
-    { "event": "assistant_delta", "content": "Answer" },
-    items,
-  )
-  assert_true(state.streaming_reasoning is None)
-  assert_true(state.streaming_response is Some("Answer"))
-}
-
-///|
 test "reasoning_message commits a thought item" {
   let state = drain_test_state()
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
@@ -2003,7 +1965,6 @@ test "reasoning_message commits a thought item" {
     },
     items,
   )
-  assert_true(state.streaming_reasoning is None)
   guard items is [Thought(_)] else { fail("expected a single Thought item") }
   // Blank reasoning never appends an empty aside.
   append_items(state, { "event": "reasoning_message", "content": "  " }, items)
