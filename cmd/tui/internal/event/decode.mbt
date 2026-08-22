@@ -118,7 +118,8 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // describe a headless run's setup, which the TUI performs itself. The
     // remaining MCP events are per-tool registry bookkeeping, already summarized
     // by `mcp_tools_registered`.
-    CompactionStarted(..)
+    ReasoningDelta(..)
+    | CompactionStarted(..)
     | AutoCompactionStarted(..)
     | AutoCompactionFinished(..)
     | AutoCompactionFailed(..)

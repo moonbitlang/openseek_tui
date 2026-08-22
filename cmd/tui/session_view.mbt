@@ -67,11 +67,23 @@ fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
 fn session_transcript_items(
   session : @agent_session.Session,
 ) -> Array[@ui.TranscriptItem] {
-  session
-  .events()
-  .iter()
-  .filter_map(event => session_item(event.item()))
-  .collect()
+  let items : Array[@ui.TranscriptItem] = []
+  let mut reasoning_final_answer : String? = None
+  for event in session.events() {
+    let item = event.item()
+    let repeated_terminal = item is Terminal(Finished(answer)) &&
+      reasoning_final_answer is Some(previous) &&
+      previous == answer
+    if !repeated_terminal && session_item(item) is Some(projected) {
+      items.push(projected)
+    }
+    reasoning_final_answer = match item {
+      Assistant(message) if message.reasoning_content() is Some(reasoning) &&
+        !reasoning.is_blank() => Some(message.content())
+      _ => None
+    }
+  }
+  items
 }
 
 ///|
@@ -138,4 +150,20 @@ test "session items project to transcript items" {
     is Some(Notice(_)) else {
     fail("expected runtime notice")
   }
+}
+
+///|
+test "session history renders a reasoning-bearing final answer once" {
+  let session = @agent_session.Session(SessionId("reasoning"), system_prompt="")
+    .append(User(UserMessage("question")))
+    .append(
+      Assistant(
+        AssistantMessage("answer", reasoning_content="consider the question"),
+      ),
+    )
+    .append(Terminal(Finished("answer")))
+  let items = session_transcript_items(session)
+  inspect(items.length(), content="2")
+  guard items[1] is Response(answer) else { fail("expected one answer") }
+  assert_eq(answer, "answer")
 }
