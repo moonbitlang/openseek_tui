@@ -77,18 +77,17 @@ fn session_transcript_items(
   session : @agent_session.Session,
 ) -> Array[@ui.TranscriptItem] {
   let items : Array[@ui.TranscriptItem] = []
-  let mut reasoning_final_answer : String? = None
+  let mut previous_assistant_answer : String? = None
   for event in session.events() {
     let item = event.item()
     let repeated_terminal = item is Terminal(Finished(answer)) &&
-      reasoning_final_answer is Some(previous) &&
+      previous_assistant_answer is Some(previous) &&
       previous == answer
     if !repeated_terminal {
       items.append(session_items(item))
     }
-    reasoning_final_answer = match item {
-      Assistant(message) if message.reasoning_content() is Some(reasoning) &&
-        !reasoning.is_blank() => Some(message.content())
+    previous_assistant_answer = match item {
+      Assistant(message) => Some(message.content())
       _ => None
     }
   }
@@ -162,7 +161,19 @@ test "session items project to transcript items" {
 }
 
 ///|
-test "session history renders a reasoning-bearing final answer once" {
+test "session history renders an assistant final answer once" {
+  let session = @agent_session.Session(SessionId("reasoning"), system_prompt="")
+    .append(User(UserMessage("question")))
+    .append(Assistant(AssistantMessage("answer")))
+    .append(Terminal(Finished("answer")))
+  let items = session_transcript_items(session)
+  inspect(items.length(), content="2")
+  guard items[1] is Response(answer) else { fail("expected one answer") }
+  assert_eq(answer, "answer")
+}
+
+///|
+test "session history still renders a reasoning-bearing final answer once" {
   let session = @agent_session.Session(SessionId("reasoning"), system_prompt="")
     .append(User(UserMessage("question")))
     .append(
