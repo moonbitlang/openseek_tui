@@ -141,31 +141,10 @@ pub fn decode_event(object : Json) -> AgentEvent? {
 }
 
 ///|
-/// A field of an MCP diagnostic, made terminal-safe for a notice: whitespace
-/// runs collapse to one space, C0/C1 controls and DEL are dropped (the
+/// A field of an MCP diagnostic, made terminal-safe for a notice. The
 /// transcript layout strips C0 but not C1, and these strings carry
-/// configuration metadata), and anything past 120 characters is elided.
+/// configuration metadata, so they go through the shared sanitizer rather than
+/// reaching the notice raw; 120 characters is enough for a config path.
 fn mcp_safe(text : String) -> String {
-  let out = StringBuilder()
-  for ch in text.trim(); last_was_space = false, count = 0 {
-    if count >= 120 {
-      out.write_char('…')
-      break
-    }
-    if ch is (' ' | '\t' | '\n' | '\r') {
-      if !last_was_space {
-        out.write_char(' ')
-        continue true, count + 1
-      }
-      continue true, count
-    } else if ch.to_int() < 0x20 ||
-      ch.to_int() == 0x7F ||
-      (ch.to_int() >= 0x80 && ch.to_int() <= 0x9F) {
-      continue last_was_space, count
-    } else {
-      out.write_char(ch)
-      continue false, count + 1
-    }
-  }
-  out.to_string()
+  @cli.terminal_safe_line(text, limit=120)
 }

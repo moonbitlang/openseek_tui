@@ -1,5 +1,6 @@
 import {
   "bobzhang/openseek/agent_runtime",
+  "bobzhang/openseek/internal/cli",
   "bobzhang/openseek_protocol" @protocol,
   "moonbitlang/core/json",
 }
