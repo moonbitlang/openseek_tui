@@ -34,33 +34,42 @@ fn terminal_item(terminal : @agent_session.TurnTerminal) -> @ui.TranscriptItem? 
 }
 
 ///|
-fn session_item(item : @agent_session.SessionItem) -> @ui.TranscriptItem? {
+fn session_items(
+  item : @agent_session.SessionItem,
+) -> Array[@ui.TranscriptItem] {
+  let items : Array[@ui.TranscriptItem] = []
   match item {
     User(message) =>
       match command_text_item(message.content()) {
-        Some(item) => Some(item)
-        None => Some(Input(Prompt(message.content())))
+        Some(item) => items.push(item)
+        None => items.push(Input(Prompt(message.content())))
       }
-    Assistant(message) =>
-      if message.content().is_blank() {
-        None
-      } else {
-        Some(Response(message.content()))
+    Assistant(message) => {
+      if message.reasoning_content() is Some(reasoning) && !reasoning.is_blank() {
+        items.push(reasoning_item(reasoning))
       }
-    Tool(result) => Some(session_tool_item(result))
+      if !message.content().is_blank() {
+        items.push(Response(message.content()))
+      }
+    }
+    Tool(result) => items.push(session_tool_item(result))
     // Goal markers are transport, not display — the resume path seeds a
     // single "goal: ..." notice from current_goal(), matching the live
     // path where markers are filtered and goal_updated is what renders.
     Runtime(notice) if @agent_session.goal_marker(notice.content()) is Some(_) =>
-      None
+      ()
     // The baseline pairing record is transport too: filtered on the live
     // path, so resume must not resurrect it as a notice card.
     Runtime(notice) if @agent_session.parse_goal_baseline(notice.content())
-      is Some(_) => None
-    Runtime(notice) => Some(runtime_notice_item(notice.content()))
-    Summary(summary) => Some(summary_item(summary))
-    Terminal(terminal) => terminal_item(terminal)
+      is Some(_) => ()
+    Runtime(notice) => items.push(runtime_notice_item(notice.content()))
+    Summary(summary) => items.push(summary_item(summary))
+    Terminal(terminal) =>
+      if terminal_item(terminal) is Some(item) {
+        items.push(item)
+      }
   }
+  items
 }
 
 ///|
@@ -74,8 +83,8 @@ fn session_transcript_items(
     let repeated_terminal = item is Terminal(Finished(answer)) &&
       reasoning_final_answer is Some(previous) &&
       previous == answer
-    if !repeated_terminal && session_item(item) is Some(projected) {
-      items.push(projected)
+    if !repeated_terminal {
+      items.append(session_items(item))
     }
     reasoning_final_answer = match item {
       Assistant(message) if message.reasoning_content() is Some(reasoning) &&
@@ -127,27 +136,27 @@ test "session items project to transcript items" {
     #|_build
     #|</result>
     #|</user_shell_command>
-  guard session_item(User(UserMessage("hello"))) is Some(Input(Prompt(text))) else {
+  guard session_items(User(UserMessage("hello"))) is [Input(Prompt(text))] else {
     fail("expected input")
   }
   assert_eq(text, "hello")
-  guard session_item(Terminal(Finished("done"))) is Some(Response(answer)) else {
+  guard session_items(Terminal(Finished("done"))) is [Response(answer)] else {
     fail("expected response")
   }
   assert_eq(answer, "done")
-  guard session_item(
+  guard session_items(
       Tool(ToolResult(tool_call_id="call_1", tool_name="read", content="ok")),
     )
-    is Some(ToolCall(_)) else {
+    is [ToolCall(_)] else {
     fail("expected tool")
   }
-  guard session_item(User(UserMessage(shell_context))) is Some(ToolCall(_)) else {
+  guard session_items(User(UserMessage(shell_context))) is [ToolCall(_)] else {
     fail("expected command user message to render as a tool")
   }
-  guard session_item(
+  guard session_items(
       Runtime(RuntimeNotice("\{@agent_session.PlanReminderPrefix}\nrun tests")),
     )
-    is Some(Notice(_)) else {
+    is [Notice(_)] else {
     fail("expected runtime notice")
   }
 }
@@ -163,7 +172,8 @@ test "session history renders a reasoning-bearing final answer once" {
     )
     .append(Terminal(Finished("answer")))
   let items = session_transcript_items(session)
-  inspect(items.length(), content="2")
-  guard items[1] is Response(answer) else { fail("expected one answer") }
+  inspect(items.length(), content="3")
+  guard items[1] is Thought(_) else { fail("expected durable reasoning") }
+  guard items[2] is Response(answer) else { fail("expected one answer") }
   assert_eq(answer, "answer")
 }
