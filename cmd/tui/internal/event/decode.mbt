@@ -24,6 +24,7 @@ pub fn decode_event(object : Json) -> AgentEvent? {
   }
   match event {
     AgentStep(_) => Some(AgentStep)
+    ReasoningDelta(content~) => Some(ReasoningDelta(content))
     AssistantDelta(content~) => Some(AssistantDelta(content))
     ReasoningMessage(content~) => Some(ReasoningMessage(content))
     SteerApplied(kind~, content~) =>
@@ -118,8 +119,7 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // describe a headless run's setup, which the TUI performs itself. The
     // remaining MCP events are per-tool registry bookkeeping, already summarized
     // by `mcp_tools_registered`.
-    ReasoningDelta(..)
-    | CompactionStarted(..)
+    CompactionStarted(..)
     | AutoCompactionStarted(..)
     | AutoCompactionFinished(..)
     | AutoCompactionFailed(..)

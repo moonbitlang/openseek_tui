@@ -75,6 +75,12 @@ priv enum RunState {
 }
 
 ///|
+priv enum StreamingPreview {
+  Reasoning(String)
+  Response(String)
+}
+
+///|
 priv struct State {
   config : AppConfig
   queued : Array[@ui.Input]
@@ -96,12 +102,10 @@ priv struct State {
   // Final assistant text for the current step, used to avoid appending the same
   // answer again when `AgentFinished` follows `AssistantMessage`.
   mut step_response : String?
-  // Incremental assistant text currently arriving from `assistant_delta`
-  // events. Cleared once the final assistant message is committed.
-  mut streaming_response : String?
-  // Shown only until the first content delta arrives, so the activity line
-  // moves during the (often long) reasoning phase instead of sitting on
-  // "Working (Ns)".
+  // The newest tail of the current provider stream. Reasoning begins dimmed;
+  // the first answer delta replaces it with the response preview because the
+  // TUI has one live activity row. Completed content is appended separately.
+  mut streaming_preview : StreamingPreview?
   // Steering input sent to the engine but not yet confirmed (no
   // steer_applied/steer_dropped back). Shown on the activity line so the
   // moment of pressing Enter is acknowledged immediately — the transcript
@@ -137,7 +141,7 @@ fn State::new(config : AppConfig) -> State {
     run_is_compaction: false,
     pending_steers: [],
     step_response: None,
-    streaming_response: None,
+    streaming_preview: None,
     usage: None,
     schedule: None,
     goal: None,
@@ -153,7 +157,7 @@ fn State::start_run(self : State, started_ms : Int64) -> Int {
   self.run_id = self.run_id + 1
   self.run = Running(started_ms)
   self.step_response = None
-  self.streaming_response = None
+  self.streaming_preview = None
   self.run_id
 }
 
@@ -177,7 +181,7 @@ fn State::finish_run(self : State) -> Unit {
   // arrives untagged and renders its own resubmit notice.
   self.pending_steers.clear()
   self.step_response = None
-  self.streaming_response = None
+  self.streaming_preview = None
 }
 
 ///|

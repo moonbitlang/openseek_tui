@@ -179,15 +179,21 @@ fn format_activity_text(state : State, cols~ : Int) -> @doc.Text? {
   } else {
     0
   }
-  if state.streaming_response is Some(response) && !response.is_blank() {
-    let spans = streaming_activity_spans(
-      "Streaming ",
-      response,
-      cols~,
-      dim_preview=false,
-      reserved~,
-    )
-    return Some(Text(spans + steer_segment))
+  if state.streaming_preview is Some(preview) {
+    let (label, text, dim_preview) = match preview {
+      Reasoning(text) => ("Thinking ", text, true)
+      Response(text) => ("Streaming ", text, false)
+    }
+    if !text.is_blank() {
+      let spans = streaming_activity_spans(
+        label,
+        text,
+        cols~,
+        dim_preview~,
+        reserved~,
+      )
+      return Some(Text(spans + steer_segment))
+    }
   }
   let elapsed = format_elapsed_compact(
     elapsed_seconds(started_ms, @env.now().reinterpret_as_int64()),

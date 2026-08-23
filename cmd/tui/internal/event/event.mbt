@@ -34,6 +34,7 @@ pub(all) struct ToolResultEvent {
 /// queued input.
 pub(all) enum AgentEvent {
   AgentStep
+  ReasoningDelta(String)
   AssistantDelta(String)
   ReasoningMessage(String)
   SteerApplied(@agent_runtime.SteerInput)

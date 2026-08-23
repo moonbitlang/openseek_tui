@@ -11,11 +11,9 @@ test "decode maps each engine event kind" {
     @event.decode_event({ "event": "assistant_delta", "content": "tok" })
     is Some(AssistantDelta("tok")),
   )
-  // Only the Desktop host opts its serve process into this high-volume stream.
-  // Ignore it defensively if a custom engine sends one to the TUI.
   assert_true(
     @event.decode_event({ "event": "reasoning_delta", "content": "live" })
-    is None,
+    is Some(ReasoningDelta("live")),
   )
   assert_true(
     @event.decode_event({

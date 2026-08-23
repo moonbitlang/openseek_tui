@@ -385,22 +385,38 @@ fn handle_agent_event(
   match event {
     AgentStep => {
       state.step_response = None
-      state.streaming_response = None
+      state.streaming_preview = None
     }
+    ReasoningDelta(text) =>
+      if text != "" && !(state.streaming_preview is Some(Response(_))) {
+        let current = match state.streaming_preview {
+          Some(Reasoning(current)) => Some(current)
+          _ => None
+        }
+        state.streaming_preview = Some(
+          Reasoning(append_streaming_preview(current, text)),
+        )
+      }
     AssistantDelta(text) =>
       if text != "" {
-        state.streaming_response = Some(
-          append_streaming_preview(state.streaming_response, text),
+        let current = match state.streaming_preview {
+          Some(Response(current)) => Some(current)
+          _ => None
+        }
+        state.streaming_preview = Some(
+          Response(append_streaming_preview(current, text)),
         )
-        // Content starting means the thinking phase is over; the content
-        // preview replaces the reasoning one.
       }
     // The turn's full reasoning, emitted once streaming ends and before the
     // assistant message commits — so the transcript reads thought → answer.
-    ReasoningMessage(text) =>
+    ReasoningMessage(text) => {
+      if state.streaming_preview is Some(Reasoning(_)) {
+        state.streaming_preview = None
+      }
       if !text.is_blank() {
         cmds.push(AppendItem(reasoning_item(text)))
       }
+    }
     // Prompt steering took effect at the engine's step boundary: echo the input
     // into the transcript at its true conversational position, the way the
     // model actually saw it.
@@ -433,7 +449,7 @@ fn handle_agent_event(
     }
     AssistantMessage(text) => {
       state.step_response = Some(text)
-      state.streaming_response = None
+      state.streaming_preview = None
       if !text.is_blank() {
         cmds.push(AppendItem(Response(text)))
       }
@@ -1869,14 +1885,14 @@ test "assistant_delta accumulates live text and commits only the final message" 
   append_items(state, { "event": "assistant_delta", "content": "Hel" }, items)
   append_items(state, { "event": "assistant_delta", "content": "lo" }, items)
   assert_eq(items.length(), 0)
-  assert_true(state.streaming_response is Some("Hello"))
+  assert_true(state.streaming_preview is Some(Response("Hello")))
   assert_true(state.step_response is None)
   append_items(
     state,
     { "event": "assistant_message", "content": "Hello" },
     items,
   )
-  assert_true(state.streaming_response is None)
+  assert_true(state.streaming_preview is None)
   assert_true(state.step_response is Some("Hello"))
   append_items(state, { "event": "agent_finished", "answer": "Hello" }, items)
   debug_inspect(items, content="[Response(\"Hello\")]")
@@ -1892,14 +1908,14 @@ test "assistant_message clears live streaming text while tools continue" {
     { "event": "assistant_delta", "content": "Need tool" },
     items,
   )
-  assert_true(state.streaming_response is Some("Need tool"))
+  assert_true(state.streaming_preview is Some(Response("Need tool")))
   append_items(
     state,
     { "event": "assistant_message", "content": "Need tool" },
     items,
   )
   assert_true(state.run is Running(_))
-  assert_true(state.streaming_response is None)
+  assert_true(state.streaming_preview is None)
   assert_true(state.step_response is Some("Need tool"))
   assert_eq(items.length(), 1)
 }
@@ -1917,7 +1933,7 @@ test "assistant_delta live preview keeps the newest tail within the cap" {
     },
     items,
   )
-  guard state.streaming_response is Some(first) else {
+  guard state.streaming_preview is Some(Response(first)) else {
     fail("expected streaming preview")
   }
   assert_true(
@@ -1927,7 +1943,7 @@ test "assistant_delta live preview keeps the newest tail within the cap" {
   // The preview is a tail window: new deltas keep showing up at its end
   // (instead of freezing once the cap is reached, as a head truncation would).
   append_items(state, { "event": "assistant_delta", "content": "more" }, items)
-  guard state.streaming_response is Some(second) else {
+  guard state.streaming_preview is Some(Response(second)) else {
     fail("expected streaming preview")
   }
   assert_true(second.has_suffix("more"))
@@ -1954,14 +1970,28 @@ test "streamed newlines collapse so the preview stays one line" {
   )
   // The run of newline + indentation spanning the two deltas collapses to a
   // single space; the preview holds no control characters.
-  assert_true(state.streaming_response is Some("fn main { println(1) }"))
+  assert_true(
+    state.streaming_preview is Some(Response("fn main { println(1) }")),
+  )
 }
 
 ///|
-test "reasoning_message commits a thought item" {
+test "reasoning streams live, then commits one thought item" {
   let state = drain_test_state()
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
   let items : Array[@ui.TranscriptItem] = []
+  append_items(
+    state,
+    { "event": "reasoning_delta", "content": "Let me" },
+    items,
+  )
+  append_items(
+    state,
+    { "event": "reasoning_delta", "content": " think" },
+    items,
+  )
+  assert_true(state.streaming_preview is Some(Reasoning("Let me think")))
+  assert_eq(items.length(), 0)
   // The turn's reasoning lands as one `✻` thought item.
   append_items(
     state,
@@ -1971,10 +2001,37 @@ test "reasoning_message commits a thought item" {
     },
     items,
   )
+  assert_true(state.streaming_preview is None)
   guard items is [Thought(_)] else { fail("expected a single Thought item") }
   // Blank reasoning never appends an empty aside.
+  append_items(
+    state,
+    { "event": "reasoning_delta", "content": "unused" },
+    items,
+  )
   append_items(state, { "event": "reasoning_message", "content": "  " }, items)
+  assert_true(state.streaming_preview is None)
   assert_eq(items.length(), 1)
+}
+
+///|
+test "late reasoning cannot replace a live response preview" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let items : Array[@ui.TranscriptItem] = []
+  append_items(
+    state,
+    { "event": "reasoning_delta", "content": "thinking" },
+    items,
+  )
+  append_items(
+    state,
+    { "event": "assistant_delta", "content": "answer" },
+    items,
+  )
+  append_items(state, { "event": "reasoning_delta", "content": " late" }, items)
+  assert_true(state.streaming_preview is Some(Response("answer")))
+  assert_eq(items.length(), 0)
 }
 
 ///|
