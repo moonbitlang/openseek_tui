@@ -169,26 +169,8 @@ fn engine_env(
   inherited : Map[String, String],
 ) -> Map[String, String] {
   let env = inherited.copy()
-  discard_retired_workspace_override(env)
   env.merge_in_place(engine_extra_env(config))
   env
-}
-
-///|
-/// A removed ambient workspace selector must not reach an older custom engine.
-/// Keep this boundary tombstone without restoring the retired variable as a
-/// source-level configuration name.
-fn discard_retired_workspace_override(env : Map[String, String]) -> Unit {
-  let retired = ["OPENSEEK", "DIR"].join("_")
-  let remove : Array[String] = []
-  for name, _ in env {
-    if name.to_upper() == retired {
-      remove.push(name)
-    }
-  }
-  for name in remove {
-    env.remove(name)
-  }
 }
 
 ///|
@@ -1081,15 +1063,9 @@ test "agent engine env preserves unrelated inherited values" {
     "OPENSEEK_API_URL": "https://parent.example/chat/completions",
     "PATH": "/bin",
   }
-  let retired_workspace_override = ["OpenSeek", "Dir"].join("_")
-  let duplicate_retired_override = ["OPENSEEK", "DIR"].join("_")
-  inherited[retired_workspace_override] = "/tmp/parent-workspace"
-  inherited[duplicate_retired_override] = "/tmp/duplicate-workspace"
   let env = engine_env(drain_test_state().config, inherited)
   assert_true(env.get("PATH") == Some("/bin"))
   assert_true(env.get("CUSTOM_PARENT_SETTING") == Some("keep"))
-  assert_true(env.get(retired_workspace_override) is None)
-  assert_true(env.get(duplicate_retired_override) is None)
   assert_true(
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
