@@ -149,7 +149,6 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
     "OPENSEEK_API_URL": config.api_url.unwrap_or(""),
     "OPENSEEK_MODEL": config.model.to_string(),
     "OPENSEEK_THINKING": config.thinking.to_string(),
-    "OPENSEEK_DIR": config.cwd,
   }
   // Absent means context-bounded turns: the variable must be OMITTED, not
   // set to "" — the engine treats an empty value as a parse error.
@@ -1016,13 +1015,9 @@ fn compact_session_count(cmds : Array[Cmd]) -> Int {
 }
 
 ///|
-test "engine configuration puts session placement in argv" {
+test "engine configuration puts placement in argv" {
   let config = drain_test_state().config
   let env = engine_extra_env(config)
-  guard env.get("OPENSEEK_DIR") is Some(dir) else {
-    fail("missing workspace dir env")
-  }
-  assert_eq(dir, ".")
   assert_true(env.get("DEEPSEEK") == Some(config.api_key))
   assert_true(env.get("OPENSEEK_THINKING") == Some("max"))
   assert_true(
@@ -1033,34 +1028,40 @@ test "engine configuration puts session placement in argv" {
   assert_true(kimi_env.get("KIMI") == Some(config.api_key))
   assert_true(kimi_env.get("DEEPSEEK") is None)
   @debug.assert_eq(config.engine_command_args("run", ["--", "task"]), [
-    "run", "--session=test", "--session-root=.openseek", "--", "task",
+    "run", "--session=test", "--session-root=.openseek", "--dir=.", "--", "task",
   ])
   @debug.assert_eq(
     { ..config, engine_args_prefix: ["@engine.rsp"] }.engine_command_args(
       "serve",
       [],
     ),
-    ["@engine.rsp", "serve", "--session=test", "--session-root=.openseek"],
+    [
+      "@engine.rsp", "serve", "--session=test", "--session-root=.openseek", "--dir=.",
+    ],
   )
   @debug.assert_eq(
-    { ..config, session_id: SessionId("--resume"), session_root: "--store" }.engine_command_args(
-      "serve",
-      [],
-    ),
-    ["serve", "--session=--resume", "--session-root=--store"],
+    {
+      ..config,
+      cwd: "--workspace",
+      session_id: SessionId("--resume"),
+      session_root: "--store",
+    }.engine_command_args("serve", []),
+    [
+      "serve", "--session=--resume", "--session-root=--store", "--dir=--workspace",
+    ],
   )
 }
 
 ///|
 test "agent engine env preserves unrelated inherited values" {
   let inherited = {
-    "OPENSEEK_DIR": "/tmp/parent-workspace",
+    "CUSTOM_PARENT_SETTING": "keep",
     "OPENSEEK_API_URL": "https://parent.example/chat/completions",
     "PATH": "/bin",
   }
   let env = engine_env(drain_test_state().config, inherited)
   assert_true(env.get("PATH") == Some("/bin"))
-  assert_true(env.get("OPENSEEK_DIR") == Some("."))
+  assert_true(env.get("CUSTOM_PARENT_SETTING") == Some("keep"))
   assert_true(
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
