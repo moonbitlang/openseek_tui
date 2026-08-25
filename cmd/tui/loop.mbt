@@ -1015,7 +1015,7 @@ fn compact_session_count(cmds : Array[Cmd]) -> Int {
 }
 
 ///|
-test "engine configuration puts placement in argv" {
+test "engine configuration puts supported placement in argv" {
   let config = drain_test_state().config
   let env = engine_extra_env(config)
   assert_true(env.get("DEEPSEEK") == Some(config.api_key))
@@ -1049,6 +1049,10 @@ test "engine configuration puts placement in argv" {
     [
       "serve", "--session=--resume", "--session-root=--store", "--dir=--workspace",
     ],
+  )
+  @debug.assert_eq(
+    { ..config, engine_mode: OneShot }.engine_command_args("run", ["--", "task"]),
+    ["run", "--session=test", "--session-root=.openseek", "--", "task"],
   )
 }
 

@@ -34,13 +34,16 @@ fn AppConfig::engine_command_args(
 ) -> Array[String] {
   let all = self.engine_args_prefix.copy()
   all.push(command)
-  // Session and workspace placement are explicit capabilities. Keeping them in
-  // argv prevents a nested command spawned by the engine from silently
-  // inheriting either target. Attach every value so a leading `-` is data, not
-  // a second option.
+  // Session placement is part of both engine protocols. Serve engines speak
+  // the full OpenSeek CLI, so pass workspace placement explicitly there too;
+  // one-shot replay engines follow the older protocol and inherit the TUI's
+  // process cwd instead. Attach every value so a leading `-` is data, not a
+  // second option.
   all.push("--session=\{self.session_id.value()}")
   all.push("--session-root=\{self.session_root}")
-  all.push("--dir=\{self.cwd}")
+  if self.engine_mode is Serve {
+    all.push("--dir=\{self.cwd}")
+  }
   all.append(args)
   all
 }
