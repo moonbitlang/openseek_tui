@@ -67,7 +67,6 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
     OptionArg(
       "session",
       long="session",
-      env="OPENSEEK_SESSION",
       global~,
       about="Create or resume this durable session id.",
     ),

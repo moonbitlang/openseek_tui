@@ -149,7 +149,6 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
     "OPENSEEK_API_URL": config.api_url.unwrap_or(""),
     "OPENSEEK_MODEL": config.model.to_string(),
     "OPENSEEK_THINKING": config.thinking.to_string(),
-    "OPENSEEK_SESSION": config.session_id.value(),
     "OPENSEEK_SESSION_ROOT": config.session_root,
     "OPENSEEK_DIR": config.cwd,
   }
@@ -171,8 +170,6 @@ fn engine_env(
   config : AppConfig,
   inherited : Map[String, String],
 ) -> Map[String, String] {
-  // The merge overwrites every OpenSeek setting — including the always-present
-  // session id — so inherited session vars can never shadow this TUI's config.
   let env = inherited.copy()
   env.merge_in_place(engine_extra_env(config))
   env
@@ -212,11 +209,9 @@ async fn run_agent_task(
       // headless one-shot subcommand. Forward the task after a `--` delimiter
       // so the engine's argparse treats any leading `-`/`--` as the task
       // positional rather than parsing it as one of its own options (which
-      // would exit/print help and never emit a terminal JSONL event). Session
-      // settings go through a fully materialized environment so custom replay
-      // engines do not need to accept OpenSeek-specific flags, and inherited
-      // session vars cannot shadow explicit TUI config.
-      config.engine_args(["run", "--", task]),
+      // would exit/print help and never emit a terminal JSONL event). The
+      // session id is passed explicitly so it cannot leak to nested commands.
+      config.engine_command_args("run", ["--", task]),
       inherit_env=false,
       extra_env=child_env,
       stdin=child_stdin,
@@ -1022,19 +1017,15 @@ fn compact_session_count(cmds : Array[Cmd]) -> Int {
 }
 
 ///|
-test "engine configuration travels through the environment" {
+test "engine configuration passes session identity explicitly" {
   let config = drain_test_state().config
   let env = engine_extra_env(config)
-  guard env.get("OPENSEEK_SESSION") is Some(session_id) else {
-    fail("missing session id env")
-  }
   guard env.get("OPENSEEK_SESSION_ROOT") is Some(session_root) else {
     fail("missing session root env")
   }
   guard env.get("OPENSEEK_DIR") is Some(dir) else {
     fail("missing workspace dir env")
   }
-  assert_eq(session_id, "test")
   assert_eq(session_root, ".openseek")
   assert_eq(dir, ".")
   assert_true(env.get("DEEPSEEK") == Some(config.api_key))
@@ -1046,12 +1037,28 @@ test "engine configuration travels through the environment" {
   let kimi_env = engine_extra_env({ ..config, model: Kimi(K27CodeHighSpeed) })
   assert_true(kimi_env.get("KIMI") == Some(config.api_key))
   assert_true(kimi_env.get("DEEPSEEK") is None)
+  @debug.assert_eq(config.engine_command_args("run", ["--", "task"]), [
+    "run", "--session=test", "--", "task",
+  ])
+  @debug.assert_eq(
+    { ..config, engine_args_prefix: ["@engine.rsp"] }.engine_command_args(
+      "serve",
+      [],
+    ),
+    ["@engine.rsp", "serve", "--session=test"],
+  )
+  @debug.assert_eq(
+    { ..config, session_id: SessionId("--resume") }.engine_command_args(
+      "serve",
+      [],
+    ),
+    ["serve", "--session=--resume"],
+  )
 }
 
 ///|
-test "agent engine env overrides inherited session config" {
+test "agent engine env overrides inherited engine config" {
   let inherited = {
-    "OPENSEEK_SESSION": "parent",
     "OPENSEEK_SESSION_ROOT": "/tmp/parent",
     "OPENSEEK_DIR": "/tmp/parent-workspace",
     "OPENSEEK_API_URL": "https://parent.example/chat/completions",
@@ -1059,14 +1066,12 @@ test "agent engine env overrides inherited session config" {
   }
   let env = engine_env(drain_test_state().config, inherited)
   assert_true(env.get("PATH") == Some("/bin"))
-  assert_true(env.get("OPENSEEK_SESSION") == Some("test"))
   assert_true(env.get("OPENSEEK_SESSION_ROOT") == Some(".openseek"))
   assert_true(env.get("OPENSEEK_DIR") == Some("."))
   assert_true(
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
   )
-  assert_true(inherited.get("OPENSEEK_SESSION") == Some("parent"))
 }
 
 ///|

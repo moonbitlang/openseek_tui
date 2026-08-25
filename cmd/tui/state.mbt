@@ -27,11 +27,18 @@ priv struct AppConfig {
 }
 
 ///|
-fn AppConfig::engine_args(
+fn AppConfig::engine_command_args(
   self : AppConfig,
+  command : String,
   args : ArrayView[String],
 ) -> Array[String] {
   let all = self.engine_args_prefix.copy()
+  all.push(command)
+  // Session identity is an explicit capability. Keeping it in argv prevents a
+  // nested command spawned by the engine from silently resuming this session.
+  // Keep the value attached so an id beginning with `-` is still data, not a
+  // second option parsed by the engine.
+  all.push("--session=\{self.session_id.value()}")
   all.append(args)
   all
 }
