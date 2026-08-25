@@ -169,10 +169,7 @@ fn engine_env(
   config : AppConfig,
   inherited : Map[String, String],
 ) -> Map[String, String] {
-  // The session root travels in argv. Remove an inherited host-config value
-  // before spawning either the bundled engine or a custom one.
   let env = inherited.copy()
-  env.remove("OPENSEEK_SESSION_ROOT")
   env.merge_in_place(engine_extra_env(config))
   env
 }
@@ -1025,7 +1022,6 @@ test "engine configuration puts session placement in argv" {
   guard env.get("OPENSEEK_DIR") is Some(dir) else {
     fail("missing workspace dir env")
   }
-  assert_true(env.get("OPENSEEK_SESSION_ROOT") is None)
   assert_eq(dir, ".")
   assert_true(env.get("DEEPSEEK") == Some(config.api_key))
   assert_true(env.get("OPENSEEK_THINKING") == Some("max"))
@@ -1056,22 +1052,20 @@ test "engine configuration puts session placement in argv" {
 }
 
 ///|
-test "agent engine env removes inherited session root" {
+test "agent engine env preserves unrelated inherited values" {
   let inherited = {
-    "OPENSEEK_SESSION_ROOT": "/tmp/parent",
     "OPENSEEK_DIR": "/tmp/parent-workspace",
     "OPENSEEK_API_URL": "https://parent.example/chat/completions",
     "PATH": "/bin",
   }
   let env = engine_env(drain_test_state().config, inherited)
   assert_true(env.get("PATH") == Some("/bin"))
-  assert_true(env.get("OPENSEEK_SESSION_ROOT") is None)
   assert_true(env.get("OPENSEEK_DIR") == Some("."))
   assert_true(
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
   )
-  assert_true(inherited.get("OPENSEEK_SESSION_ROOT") == Some("/tmp/parent"))
+  assert_true(inherited.get("PATH") == Some("/bin"))
 }
 
 ///|
