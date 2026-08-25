@@ -19,9 +19,10 @@ respawns it on the same session).
 
 A custom or recorded-stream engine that only speaks the original
 one-process-per-prompt protocol works with `--engine-mode oneshot` (env
-`OPENSEEK_ENGINE_MODE`); it spawns `<engine> run --session=<id> -- <task>` per
-prompt, steering is unavailable, and it requires an explicit `--engine`
-(re-launching this binary in oneshot would only lose steering for no gain).
+`OPENSEEK_ENGINE_MODE`); it spawns `<engine> run --session=<id>
+--session-root=<root> -- <task>` per prompt, steering is unavailable, and it
+requires an explicit `--engine` (re-launching this binary in oneshot would only
+lose steering for no gain).
 
 Because the UI takes over the terminal, launching it without a TTY (a pipe, CI
 log, or cron) is refused with a pointer to `openseek run` / `openseek serve`.

@@ -29,7 +29,7 @@ Options:
   --max-steps <max-steps>        Maximum agent steps per turn; omit to bound turns by the model's context window instead (a checkpoint summary carries each turn into the next). [env: OPENSEEK_MAX_STEPS]
   --thinking <thinking>          DeepSeek thinking mode: no, high, or max. [env: OPENSEEK_THINKING] [default: max]
   --session <session>            Create or resume this durable session id.
-  --session-root <session-root>  Directory containing durable OpenSeek sessions. [env: OPENSEEK_SESSION_ROOT] [default: .openseek]
+  --session-root <session-root>  Directory containing durable OpenSeek sessions. [default: .openseek]
   --continue                     Resume the most recently active session in --session-root.
   --engine <engine>              Agent engine to spawn (default: this openseek binary); reads its JSONL event stream from stdout. [env: OPENSEEK_ENGINE]
   --engine-mode <engine-mode>    Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines). [env: OPENSEEK_ENGINE_MODE] [default: serve]

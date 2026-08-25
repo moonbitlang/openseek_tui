@@ -34,11 +34,11 @@ fn AppConfig::engine_command_args(
 ) -> Array[String] {
   let all = self.engine_args_prefix.copy()
   all.push(command)
-  // Session identity is an explicit capability. Keeping it in argv prevents a
-  // nested command spawned by the engine from silently resuming this session.
-  // Keep the value attached so an id beginning with `-` is still data, not a
-  // second option parsed by the engine.
+  // Session placement is an explicit capability. Keeping it in argv prevents
+  // a nested command spawned by the engine from silently writing to this store.
+  // Attach both values so a leading `-` is data, not a second option.
   all.push("--session=\{self.session_id.value()}")
+  all.push("--session-root=\{self.session_root}")
   all.append(args)
   all
 }

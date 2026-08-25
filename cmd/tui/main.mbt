@@ -73,7 +73,6 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
     OptionArg(
       "session-root",
       long="session-root",
-      env="OPENSEEK_SESSION_ROOT",
       default_values=[".openseek"],
       global~,
       about="Directory containing durable OpenSeek sessions.",
@@ -228,9 +227,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   }
   let session_root_value = if explicit_session is Some(_) {
     let root = session_root_input.trim()
-    guard !root.is_empty() else {
-      fail("--session-root or OPENSEEK_SESSION_ROOT must not be empty")
-    }
+    guard !root.is_empty() else { fail("--session-root must not be empty") }
     "\{root}"
   } else {
     let root = session_root_input.trim().to_owned()
