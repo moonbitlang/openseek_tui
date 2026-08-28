@@ -29,7 +29,7 @@ fn FrameCache::placed_surface(
   live_top~ : Int,
 ) -> PlacedSurface? {
   match self {
-    Drawn(surface) => Some({ surface, top: live_top })
+    Drawn(surface) => Some({ surface, top: live_top, })
     Stale(top=_, height=_) => None
   }
 }

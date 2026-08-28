@@ -16,7 +16,7 @@ priv struct CompletionState {
 
 ///|
 fn CompletionState::new() -> CompletionState {
-  { key: "", selected: 0, dismissed: false }
+  { key: "", selected: 0, dismissed: false, }
 }
 
 ///|

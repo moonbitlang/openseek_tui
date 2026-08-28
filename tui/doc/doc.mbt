@@ -19,7 +19,7 @@ struct Doc {
 ///|
 /// Build a document from a sequence of text blocks.
 pub fn Doc::Doc(texts : Array[Text]) -> Doc {
-  { texts: texts.copy() }
+  { texts: texts.copy(), }
 }
 
 ///|
@@ -34,7 +34,7 @@ struct Text {
 ///|
 /// Build a text block from a sequence of styled spans.
 pub fn Text::Text(spans : Array[Span]) -> Text {
-  { spans: spans.copy() }
+  { spans: spans.copy(), }
 }
 
 ///|
@@ -100,7 +100,7 @@ pub fn Span::Span(
   text : @displaytext.DisplayText,
   style? : @style.Style = @style.default,
 ) -> Span {
-  { display: text, style }
+  { display: text, style, }
 }
 
 ///|

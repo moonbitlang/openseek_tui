@@ -153,7 +153,7 @@ fn continue_requested(matches : @argparse.Matches) -> Bool raise {
         | (Some([]) | None with session = ""),
         ..
       },
-      ..,
+      ..
     } => (continue_flag, session.trim())
   }
   if continue_flag && !session.is_empty() {
@@ -170,7 +170,7 @@ fn continue_requested(matches : @argparse.Matches) -> Bool raise {
 /// continue, and starting a new conversation beats refusing to launch.
 async fn with_latest_session(config : AppConfig) -> AppConfig {
   match @store.SessionStore(config.session_root).latest() {
-    Some(id) => { ..config, session_id: id }
+    Some(id) => { ..config, session_id: id, }
     None => config
   }
 }
@@ -213,7 +213,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
         "thinking": [thinking, ..],
         ..
       },
-      ..,
+      ..
     } => (api_url, session, session_root, engine, engine_mode, model, thinking)
     _ => fail("missing parsed TUI defaults")
   }
@@ -333,7 +333,7 @@ fn initial_task(matches : @argparse.Matches) -> String? {
         | (Some([]) | None with prompt = ""),
         ..
       },
-      ..,
+      ..
     } =>
       match prompt.trim() {
         "" => None

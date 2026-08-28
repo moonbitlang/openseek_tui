@@ -16,7 +16,7 @@ struct Entry {
 ///|
 /// Build a history entry from composer text and its mode.
 pub fn Entry::new(text : String, mode : @composer.Mode) -> Entry {
-  { text, mode }
+  { text, mode, }
 }
 
 ///|
@@ -50,7 +50,7 @@ struct History {
 ///|
 /// An empty history positioned on the fresh draft.
 pub fn History::new() -> History {
-  { entries: [], cursor: 0, draft: None }
+  { entries: [], cursor: 0, draft: None, }
 }
 
 ///|

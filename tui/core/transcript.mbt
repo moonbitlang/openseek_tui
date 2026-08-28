@@ -34,7 +34,7 @@ pub fn ToolCall::ToolCall(
   status? : ToolStatus,
   details? : Array[@doc.Text] = [],
 ) -> ToolCall {
-  { title, status, details: details.copy() }
+  { title, status, details: details.copy(), }
 }
 
 ///|

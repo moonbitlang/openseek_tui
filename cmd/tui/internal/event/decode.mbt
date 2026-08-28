@@ -40,10 +40,10 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // Only the derived total reaches the status line.
     Usage(usage~) =>
       Some(
-        Usage({ total_tokens: usage.prompt_tokens + usage.completion_tokens }),
+        Usage({ total_tokens: usage.prompt_tokens + usage.completion_tokens, }),
       )
     ToolResult(tool_name~, content~, is_error~, ..) =>
-      Some(ToolResult({ name: tool_name, content, is_error }))
+      Some(ToolResult({ name: tool_name, content, is_error, }))
     // A call the engine could not decode never ran: show it as a failed result
     // so the transcript still accounts for the model's request.
     ToolCallDecodeError(tool_name~, error~, ..) =>

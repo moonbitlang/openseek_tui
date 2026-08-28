@@ -43,7 +43,7 @@ fn status_segments(state : State) -> Array[Segment] {
       text: loop_segment_text(state.schedule),
       style: Style(foreground=Basic(Blue)),
     },
-    { text: state.config.cwd, style: Style(foreground=Basic(Green)) },
+    { text: state.config.cwd, style: Style(foreground=Basic(Green)), },
     {
       text: format_usage_segment(state.usage),
       style: Style(foreground=Basic(Magenta)),

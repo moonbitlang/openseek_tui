@@ -14,7 +14,7 @@ fn split_logical_lines(text : StringView) -> Array[LogicLine] {
 
 ///|
 fn LogicLine::new(display : @displaytext.DisplayText) -> LogicLine {
-  { display, row_start: 0, row_end: 0 }
+  { display, row_start: 0, row_end: 0, }
 }
 
 ///|

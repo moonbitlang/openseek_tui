@@ -15,7 +15,7 @@ pub fn SlashCommandSpec::new(
   name~ : String,
   description~ : String,
 ) -> SlashCommandSpec {
-  { name, description }
+  { name, description, }
 }
 
 ///|
@@ -74,7 +74,7 @@ pub fn SlashCommandInvocation::parse(text : String) -> SlashCommandInvocation? {
   // `/`/`/e` would let it match a command by its `/`-prefixed display label.
   guard !name.is_empty() && !name.has_prefix("/") else { return None }
   let arguments = rest.view(start_offset=name.length()).trim().to_owned()
-  Some({ name, arguments })
+  Some({ name, arguments, })
 }
 
 ///|

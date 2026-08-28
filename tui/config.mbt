@@ -32,5 +32,5 @@ pub fn Config::new(
   } else {
     composer_max_rows
   }
-  { esc_timeout_ms, composer_max_rows, slash_commands: slash_commands.copy() }
+  { esc_timeout_ms, composer_max_rows, slash_commands: slash_commands.copy(), }
 }

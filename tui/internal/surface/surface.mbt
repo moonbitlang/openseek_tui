@@ -52,7 +52,7 @@ pub fn Span::Span(
   text : @displaytext.DisplayText,
   style? : @style.Style = @style.default,
 ) -> Span {
-  { text, style }
+  { text, style, }
 }
 
 ///|
@@ -82,7 +82,7 @@ pub fn Line::spans(self : Line) -> Array[Span] {
 ///|
 /// Build a cursor at a 0-based (row, col) cell offset.
 pub fn Cursor::new(row~ : Int, col~ : Int) -> Cursor {
-  { row, col }
+  { row, col, }
 }
 
 ///|
@@ -120,7 +120,7 @@ pub fn Surface::new(
 ) -> Surface {
   let width = width.max(1)
   let cursor = normalize_surface_cursor(rows, width, cursor)
-  { width, rows, cursor }
+  { width, rows, cursor, }
 }
 
 ///|

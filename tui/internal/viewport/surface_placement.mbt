@@ -59,10 +59,10 @@ test "terminal cursor comparison includes viewport top" {
     rows~,
     cursor=@surface.Cursor::new(row=0, col=4),
   )
-  let left = PlacedSurface::{ surface: left, top: 4 }
-  let same = PlacedSurface::{ surface: same, top: 5 }
-  let moved_row = PlacedSurface::{ surface: moved_row, top: 5 }
-  let moved_col = PlacedSurface::{ surface: moved_col, top: 5 }
+  let left = PlacedSurface::{ surface: left, top: 4, }
+  let same = PlacedSurface::{ surface: same, top: 5, }
+  let moved_row = PlacedSurface::{ surface: moved_row, top: 5, }
+  let moved_col = PlacedSurface::{ surface: moved_col, top: 5, }
   inspect(left.same_terminal_cursor(same), content="true")
   inspect(left.same_terminal_cursor(moved_row), content="false")
   inspect(left.same_terminal_cursor(moved_col), content="false")

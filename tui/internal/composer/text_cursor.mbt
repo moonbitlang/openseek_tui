@@ -27,7 +27,7 @@ fn TextCursor::new(
   let logical_line = logical_lines[line]
   let column = logical_line.display.display_position(position)
   let position = logical_line.display.textual_position_at_or_before(column)
-  { line, position }
+  { line, position, }
 }
 
 ///|

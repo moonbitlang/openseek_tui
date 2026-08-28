@@ -21,7 +21,7 @@ pub fn Style::Style(
   background? : @tty/color.Color = Default,
   underline? : Bool = false,
 ) -> Style {
-  { foreground, background, underline }
+  { foreground, background, underline, }
 }
 
 ///|

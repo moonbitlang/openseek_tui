@@ -14,7 +14,7 @@ pub fn CompletionItem::new(
   insert_text? : String,
   description? : String = "",
 ) -> CompletionItem {
-  { label, insert_text: insert_text.unwrap_or(label), description }
+  { label, insert_text: insert_text.unwrap_or(label), description, }
 }
 
 ///|
@@ -75,7 +75,7 @@ struct Model {
 ///|
 /// A closed completion menu.
 pub fn Model::closed() -> Model {
-  { open: false, items: [], selected: 0 }
+  { open: false, items: [], selected: 0, }
 }
 
 ///|
@@ -89,7 +89,7 @@ pub fn Model::open(
   } else {
     selected.clamp(min=0, max=items.length() - 1)
   }
-  { open: true, items: items.copy(), selected }
+  { open: true, items: items.copy(), selected, }
 }
 
 ///|

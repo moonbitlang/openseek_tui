@@ -48,7 +48,7 @@ fn EngineClient::EngineClient(
   config : AppConfig,
   messages : @async.Queue[Msg],
 ) -> EngineClient {
-  { config, messages, live: None }
+  { config, messages, live: None, }
 }
 
 ///|

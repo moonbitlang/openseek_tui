@@ -26,7 +26,7 @@ pub async fn[T] Queue::wait(self : Queue, f : async () -> T) -> T {
 /// Build a task queue whose submission slot follows `kind` (for example
 /// `Blocking(1)` to accept at most one in-flight task).
 pub fn Queue::Queue(kind~ : @aqueue.Kind) -> Queue {
-  { aq: Queue(kind~) }
+  { aq: Queue(kind~), }
 }
 
 ///|

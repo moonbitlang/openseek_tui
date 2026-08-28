@@ -143,10 +143,10 @@ fn choose_enter_geometry_for_cursor(
   protocol_size? : @terminal_size.TerminalSize,
 ) -> EnterGeometry raise {
   if cursor_position_fits_size(ioctl_size, row=cursor_row, col=cursor_col) {
-    { size: ioctl_size, cursor_row, source: Ioctl }
+    { size: ioctl_size, cursor_row, source: Ioctl, }
   } else if protocol_size is Some(size) &&
     cursor_position_fits_size(size, row=cursor_row, col=cursor_col) {
-    { size, cursor_row, source: Protocol }
+    { size, cursor_row, source: Protocol, }
   } else {
     fail(
       terminal_geometry_error_message(
@@ -276,7 +276,7 @@ async fn resolve_enter_geometry(
 ) -> EnterGeometry {
   if tty.query_cursor_position(timeout_ms~) is Some(position) {
     if cursor_position_fits_size(ioctl_size, row=position.row, col=position.col) {
-      { size: ioctl_size, cursor_row: position.row, source: Ioctl }
+      { size: ioctl_size, cursor_row: position.row, source: Ioctl, }
     } else {
       let protocol_size = probe_terminal_protocol_size(tty, timeout_ms~)
       choose_enter_geometry_for_cursor(
@@ -287,7 +287,7 @@ async fn resolve_enter_geometry(
       )
     }
   } else {
-    { size: ioctl_size, cursor_row: ioctl_size.rows(), source: Ioctl }
+    { size: ioctl_size, cursor_row: ioctl_size.rows(), source: Ioctl, }
   }
 }
 
@@ -608,7 +608,7 @@ pub async fn Viewport::replay_scrollback(
   // `set_geometry` clamps the height to the screen itself.
   self.set_geometry(top=1, height=surface.height())
   let surface = surface.with_max_rows(self.height())
-  let frame = PlacedSurface::{ surface, top: self.top() }
+  let frame = PlacedSurface::{ surface, top: self.top(), }
   let bottom = self.bottom()
   without_auto_wrap(tty, () => {
     draw_frame_rows(tty, frame, top=self.top(), bottom~)
@@ -666,9 +666,9 @@ pub async fn Viewport::enter(
   }
   let geometry = @geometry.Geometry::new(top~, height~)
   let surface = surface.with_max_rows(geometry.height())
-  let frame = PlacedSurface::{ surface, top: geometry.top() }
+  let frame = PlacedSurface::{ surface, top: geometry.top(), }
   enter_placed_surface_rows(tty, frame)
-  { size, size_source: enter_geometry.source, geometry, cache: Drawn(surface) }
+  { size, size_source: enter_geometry.source, geometry, cache: Drawn(surface), }
 }
 
 ///|
@@ -692,10 +692,10 @@ pub async fn Viewport::redraw(
   let top = @geometry.clamp_top(self.size, height~, top=self.top())
   self.set_geometry(top~, height~)
   let surface = surface.with_max_rows(self.height())
-  let new_frame = PlacedSurface::{ surface, top: self.top() }
+  let new_frame = PlacedSurface::{ surface, top: self.top(), }
   match old_cache {
     Drawn(old_surface) => {
-      let old_frame = PlacedSurface::{ surface: old_surface, top: old_top }
+      let old_frame = PlacedSurface::{ surface: old_surface, top: old_top, }
       let old = @geometry.Geometry::new(
         top=old_top,
         height=old_surface.height(),

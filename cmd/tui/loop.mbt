@@ -1024,14 +1024,14 @@ test "engine configuration puts supported placement in argv" {
     env.get("OPENSEEK_API_URL") ==
     Some("https://proxy.example/v1/chat/completions"),
   )
-  let kimi_env = engine_extra_env({ ..config, model: Kimi(K27CodeHighSpeed) })
+  let kimi_env = engine_extra_env({ ..config, model: Kimi(K27CodeHighSpeed), })
   assert_true(kimi_env.get("KIMI") == Some(config.api_key))
   assert_true(kimi_env.get("DEEPSEEK") is None)
   @debug.assert_eq(config.engine_command_args("run", ["--", "task"]), [
     "run", "--session=test", "--session-root=.openseek", "--dir=.", "--", "task",
   ])
   @debug.assert_eq(
-    { ..config, engine_args_prefix: ["@engine.rsp"] }.engine_command_args(
+    { ..config, engine_args_prefix: ["@engine.rsp"], }.engine_command_args(
       "serve",
       [],
     ),
@@ -1051,7 +1051,9 @@ test "engine configuration puts supported placement in argv" {
     ],
   )
   @debug.assert_eq(
-    { ..config, engine_mode: OneShot }.engine_command_args("run", ["--", "task"]),
+    { ..config, engine_mode: OneShot, }.engine_command_args("run", [
+      "--", "task",
+    ]),
     ["run", "--session=test", "--session-root=.openseek", "--", "task"],
   )
 }
@@ -1075,7 +1077,7 @@ test "agent engine env preserves unrelated inherited values" {
 
 ///|
 test "agent engine env clears inherited api url without override" {
-  let config = { ..drain_test_state().config, api_url: None }
+  let config = { ..drain_test_state().config, api_url: None, }
   let env = engine_env(config, {
     "OPENSEEK_API_URL": "https://parent.example/chat/completions",
   })
@@ -1223,7 +1225,7 @@ test "compact slash command rejects arguments and pending work" {
 
 ///|
 test "compact slash command is unavailable on a oneshot engine" {
-  let state = State::new({ ..drain_test_state().config, engine_mode: OneShot })
+  let state = State::new({ ..drain_test_state().config, engine_mode: OneShot, })
   let cmds = update(state, UiInput(SlashCommand(name="compact", arguments="")))
   assert_eq(error_item_count(cmds), 1)
   assert_eq(compact_session_count(cmds), 0)
