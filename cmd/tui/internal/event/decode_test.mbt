@@ -145,7 +145,7 @@ test "compaction wire events decode to their terminal forms" {
 test "decode returns None for a non-object value or unknown event" {
   // `@jsonl` handles blank and malformed lines before decoding; the mapping only
   // has to tolerate a non-object value and a newer engine's unknown event kind.
-  assert_true(@event.decode_event(Json::string("not an object")) is None)
+  assert_true(@event.decode_event(Json("not an object")) is None)
   assert_true(@event.decode_event({ "event": "future_event_kind" }) is None)
 }
 
