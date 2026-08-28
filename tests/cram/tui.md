@@ -24,10 +24,10 @@ OpenSeek terminal UI.
 Options:
   -h, --help                     Show help information.
   --api-key <api-key>            API key for the selected chat provider. [default: ]
-  --model <model>                Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, or kimi-k2.7-code-highspeed. [env: OPENSEEK_MODEL] [default: deepseek-v4-pro]
-  --api-url <api-url>            DeepSeek-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
+  --model <model>                Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, kimi-k2.7-code-highspeed, glm-5.3, or glm-5.3-flash. [env: OPENSEEK_MODEL] [default: deepseek-v4-pro]
+  --api-url <api-url>            OpenAI-compatible chat completions endpoint. [env: OPENSEEK_API_URL] [default: ]
   --max-steps <max-steps>        Maximum agent steps per turn; omit to bound turns by the model's context window instead (a checkpoint summary carries each turn into the next). [env: OPENSEEK_MAX_STEPS]
-  --thinking <thinking>          DeepSeek thinking mode: no, high, or max. [env: OPENSEEK_THINKING] [default: max]
+  --thinking <thinking>          Model thinking mode: no, high, or max; GLM maps no to low effort. [env: OPENSEEK_THINKING] [default: max]
   --session <session>            Create or resume this durable session id.
   --session-root <session-root>  Directory containing durable OpenSeek sessions. [default: .openseek]
   --continue                     Resume the most recently active session in --session-root.

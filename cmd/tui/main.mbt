@@ -34,12 +34,20 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
       hidden=true,
     ),
     OptionArg(
+      "glm-api-key",
+      long="glm-api-key",
+      env="GLM",
+      default_values=[""],
+      global~,
+      hidden=true,
+    ),
+    OptionArg(
       "model",
       long="model",
       env="OPENSEEK_MODEL",
       default_values=[@deepseek.Deepseek(V4Pro).to_string()],
       global~,
-      about="Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, or kimi-k2.7-code-highspeed.",
+      about="Chat model: deepseek-v4-flash, deepseek-v4-pro, kimi-k2.7-code, kimi-k2.7-code-highspeed, glm-5.3, or glm-5.3-flash.",
     ),
     OptionArg(
       "api-url",
@@ -47,7 +55,7 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
       env="OPENSEEK_API_URL",
       default_values=[""],
       global~,
-      about="DeepSeek-compatible chat completions endpoint.",
+      about="OpenAI-compatible chat completions endpoint.",
     ),
     OptionArg(
       "max-steps",
@@ -62,7 +70,7 @@ pub fn tui_shared_options(global? : Bool = false) -> Array[@argparse.OptionArg] 
       env="OPENSEEK_THINKING",
       default_values=["max"],
       global~,
-      about="DeepSeek thinking mode: no, high, or max.",
+      about="Model thinking mode: no, high, or max; GLM maps no to low effort.",
     ),
     OptionArg(
       "session",
@@ -497,7 +505,7 @@ test "cli parses api url" {
 }
 
 ///|
-test "cli uses KIMI only for Kimi models" {
+test "cli uses provider API keys only for their models" {
   let kimi = cli_command().parse(argv=[], env={
     "KIMI": "kimi-key",
     "OPENSEEK_MODEL": "kimi-k2.7-code-highspeed",
@@ -505,16 +513,26 @@ test "cli uses KIMI only for Kimi models" {
   let kimi_config = parse_config(kimi)
   assert_eq(kimi_config.api_key, "kimi-key")
   assert_true(kimi_config.model is Kimi(K27CodeHighSpeed))
-  // KIMI is not a fallback for a DeepSeek model: `Model::api_key` returns
+  let glm = cli_command().parse(argv=[], env={
+    "GLM": "glm-key",
+    "OPENSEEK_MODEL": "glm-5.3",
+  })
+  let glm_config = parse_config(glm)
+  assert_eq(glm_config.api_key, "glm-key")
+  assert_true(glm_config.model is Glm(G53))
+  // Provider keys do not fall back across models: `Model::api_key` returns
   // `None` and this main is the one that turns that into a failure.
-  let deepseek = cli_command().parse(argv=[], env={ "KIMI": "kimi-key" })
+  let deepseek = cli_command().parse(argv=[], env={
+    "KIMI": "kimi-key",
+    "GLM": "glm-key",
+  })
   let _ = parse_config(deepseek) catch {
     error => {
       assert_true("\{error}".contains("an API key is required"))
       return
     }
   }
-  fail("KIMI was accepted for a DeepSeek model")
+  fail("a non-DeepSeek key was accepted for a DeepSeek model")
 }
 
 ///|

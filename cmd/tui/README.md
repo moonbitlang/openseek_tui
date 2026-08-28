@@ -43,7 +43,7 @@ startup banner) stores the conversation under `--session-root` (default
 ## Configuration
 
 `--api-key` or a provider-specific key env is required: `DEEPSEEK` for DeepSeek
-models and `KIMI` for Kimi models. `--model`, `--api-url`,
+models, `KIMI` for Kimi models, and `GLM` for Z.AI GLM models. `--model`, `--api-url`,
 `--max-steps`, and `--thinking` mirror the engine's flags and are forwarded to
 it through the environment, alongside the session settings.
 
