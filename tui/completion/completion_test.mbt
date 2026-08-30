@@ -1,7 +1,7 @@
 ///|
 test "completion item matches label or inserted text case-insensitively" {
   let items = [
-    @completion.CompletionItem::CompletionItem(
+    @completion.CompletionItem(
       label="/model",
       insert_text="model",
       description="show model",
@@ -25,7 +25,7 @@ test "exact completion matches rank ahead of longer prefix matches" {
   // user typed (the /resume hazard): `abc` must win index 0 over `abcd`, since
   // Enter accepts the first item.
   let items = [
-    @completion.CompletionItem::CompletionItem(label="abcd"),
+    @completion.CompletionItem(label="abcd"),
     CompletionItem(label="abc"),
   ]
   let matches = @completion.completion_item_matches(items, "abc")
@@ -43,7 +43,7 @@ test "exact completion matches rank ahead of longer prefix matches" {
 ///|
 test "completion model carries open state defensively" {
   let items = [
-    @completion.CompletionItem::CompletionItem(label="deepseek-v4-flash"),
+    @completion.CompletionItem(label="deepseek-v4-flash"),
     CompletionItem(label="deepseek-v4-pro"),
   ]
   let model = @completion.Model::open(items~, selected=99)

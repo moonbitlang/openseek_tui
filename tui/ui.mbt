@@ -28,10 +28,7 @@ struct Ui {
 
 ///|
 fn Ui::Ui(tty : @tty.Tty, config : Config) -> Ui {
-  let composer = @composer.Model::Model(
-    "",
-    max_text_rows=config.composer_max_rows,
-  )
+  let composer = @composer.Model("", max_text_rows=config.composer_max_rows)
   {
     tty,
     config,

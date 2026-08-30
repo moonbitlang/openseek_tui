@@ -38,27 +38,11 @@ fn PlacedSurface::same_terminal_cursor(
 
 ///|
 test "terminal cursor comparison includes viewport top" {
-  let rows = [@surface.Line::Line([]), Line([])]
-  let left = @surface.Surface::Surface(
-    width=10,
-    rows~,
-    cursor=Cursor(row=1, col=3),
-  )
-  let same = @surface.Surface::Surface(
-    width=10,
-    rows~,
-    cursor=Cursor(row=0, col=3),
-  )
-  let moved_row = @surface.Surface::Surface(
-    width=10,
-    rows~,
-    cursor=Cursor(row=1, col=3),
-  )
-  let moved_col = @surface.Surface::Surface(
-    width=10,
-    rows~,
-    cursor=Cursor(row=0, col=4),
-  )
+  let rows = [@surface.Line([]), Line([])]
+  let left = @surface.Surface(width=10, rows~, cursor=Cursor(row=1, col=3))
+  let same = @surface.Surface(width=10, rows~, cursor=Cursor(row=0, col=3))
+  let moved_row = @surface.Surface(width=10, rows~, cursor=Cursor(row=1, col=3))
+  let moved_col = @surface.Surface(width=10, rows~, cursor=Cursor(row=0, col=4))
   let left = PlacedSurface::{ surface: left, top: 4, }
   let same = PlacedSurface::{ surface: same, top: 5, }
   let moved_row = PlacedSurface::{ surface: moved_row, top: 5, }

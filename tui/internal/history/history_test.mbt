@@ -1,12 +1,12 @@
 ///|
 fn prompt_entry(text : String) -> @history.Entry {
-  let composer = @composer.Model::Model("")
+  let composer = @composer.Model("")
   Entry(text, composer.mode())
 }
 
 ///|
 fn shell_entry(text : String) -> @history.Entry {
-  let composer = @composer.Model::Model("")
+  let composer = @composer.Model("")
   composer.insert_user_text("!\{text}")
   Entry(composer.text(), composer.mode())
 }
@@ -37,7 +37,7 @@ fn recalled_is_input(entry : @history.Entry?) -> Bool {
 
 ///|
 test "history recalls entries and restores draft" {
-  let history = @history.History::History()
+  let history = @history.History()
   inspect(history.previous(prompt_entry("draft")) is None, content="true")
   history.push(prompt_entry("one"))
   history.push(prompt_entry("two"))
@@ -56,7 +56,7 @@ test "history recalls entries and restores draft" {
 
 ///|
 test "history skips empty and adjacent duplicate entries" {
-  let history = @history.History::History()
+  let history = @history.History()
   history.push(prompt_entry(""))
   inspect(history.previous(prompt_entry("draft")) is None, content="true")
   history.push(prompt_entry("same"))
@@ -69,7 +69,7 @@ test "history skips empty and adjacent duplicate entries" {
 
 ///|
 test "history distinguishes shell and prompt entries" {
-  let history = @history.History::History()
+  let history = @history.History()
   history.push(prompt_entry("pwd"))
   history.push(shell_entry("pwd"))
   let previous = history.previous(prompt_entry("draft"))

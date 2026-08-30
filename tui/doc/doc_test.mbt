@@ -1,14 +1,14 @@
 ///|
 test "doc layout wraps styled text by display width" {
   inspect(
-    @doc.Doc::Doc([@doc.Text::plain("abcdef")])
+    @doc.Doc([@doc.Text::plain("abcdef")])
     .layout(width=3)
     .map(line => line.text())
     .join("|"),
     content="abc|def",
   )
   inspect(
-    @doc.Doc::Doc([@doc.Text::plain("你好世界")])
+    @doc.Doc([@doc.Text::plain("你好世界")])
     .layout(width=4)
     .map(line => line.text())
     .join("|"),
@@ -21,14 +21,14 @@ test "layout expands tabs, breaks rows on hard newlines, and drops other control
   // `\t` expands to spaces up to the next 8-column tab stop so following text
   // is not shoved to a terminal tab stop we never accounted for.
   inspect(
-    @doc.Doc::Doc([@doc.Text::plain("a\tb")])
+    @doc.Doc([@doc.Text::plain("a\tb")])
     .layout(width=40)
     .map(line => line.text())
     .join("|"),
     content="a       b",
   )
   inspect(
-    @doc.Doc::Doc([@doc.Text::plain("abcdef\tg")])
+    @doc.Doc([@doc.Text::plain("abcdef\tg")])
     .layout(width=40)
     .map(line => line.text())
     .join("|"),
@@ -39,14 +39,14 @@ test "layout expands tabs, breaks rows on hard newlines, and drops other control
   // the documented contract is that layout splits on '\n'. CRLF and a lone CR
   // each split exactly once (the LF of a CRLF pair is swallowed, not a second row).
   inspect(
-    @doc.Doc::Doc([@doc.Text::plain("x\r\ny")])
+    @doc.Doc([@doc.Text::plain("x\r\ny")])
     .layout(width=40)
     .map(line => line.text())
     .join("|"),
     content="x|y",
   )
   inspect(
-    @doc.Doc::Doc([@doc.Text::plain("x\ry\nz")])
+    @doc.Doc([@doc.Text::plain("x\ry\nz")])
     .layout(width=40)
     .map(line => line.text())
     .join("|"),
@@ -54,7 +54,7 @@ test "layout expands tabs, breaks rows on hard newlines, and drops other control
   )
   // Other C0 controls (here `ESC`) are still dropped, not treated as breaks.
   inspect(
-    @doc.Doc::Doc([@doc.Text::plain("x\u{1b}y")])
+    @doc.Doc([@doc.Text::plain("x\u{1b}y")])
     .layout(width=40)
     .map(line => line.text())
     .join("|"),
@@ -71,7 +71,7 @@ test "split_lines splits CRLF and CR so no stray carriage return remains" {
   inspect(blocks.length(), content="2")
   let mut total_rows = 0
   for block in blocks {
-    total_rows += @doc.Doc::Doc([block]).layout(width=40).length()
+    total_rows += @doc.Doc([block]).layout(width=40).length()
   }
   inspect(total_rows, content="2")
 }
@@ -79,14 +79,14 @@ test "split_lines splits CRLF and CR so no stray carriage return remains" {
 ///|
 test "doc constructors copy mutable arrays" {
   let spans = [@doc.Span::plain("a")]
-  let text = @doc.Text::Text(spans)
+  let text = @doc.Text(spans)
   spans.push(@doc.Span::plain("b"))
   inspect(
-    @doc.Doc::Doc([text]).layout(width=20).map(line => line.text()).join("|"),
+    @doc.Doc([text]).layout(width=20).map(line => line.text()).join("|"),
     content="a",
   )
   let texts = [@doc.Text::plain("a")]
-  let doc = @doc.Doc::Doc(texts)
+  let doc = @doc.Doc(texts)
   texts.push(@doc.Text::plain("b"))
   inspect(doc.layout(width=20).map(line => line.text()).join("|"), content="a")
 }

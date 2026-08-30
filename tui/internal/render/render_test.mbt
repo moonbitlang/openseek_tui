@@ -67,7 +67,7 @@ test "composer surface renders viewport rows and cursor" {
 
 ///|
 test "composer surface grows with multiline input up to max rows" {
-  let two_lines = @composer.Model::Model("")
+  let two_lines = @composer.Model("")
   two_lines.insert("a\nb")
   let two_line_surface = @render.composer_surface(
     two_lines,
@@ -104,7 +104,7 @@ test "composer surface grows with multiline input up to max rows" {
     ),
   )
   inspect(display_width(two_line_surface.line_at(2).text()), content="12")
-  let five_lines = @composer.Model::Model("")
+  let five_lines = @composer.Model("")
   five_lines.insert("a\nb\nc\nd\ne")
   let capped_surface = @render.composer_surface(
     five_lines,

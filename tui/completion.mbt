@@ -308,15 +308,15 @@ fn command_specs() -> Array[@slash.SlashCommandSpec] {
 
 ///|
 fn composer_with(text : String) -> @composer.Model {
-  let composer = @composer.Model::Model("")
+  let composer = @composer.Model("")
   composer.insert_user_text(text)
   composer
 }
 
 ///|
 test "submitted input marks prompt and shell command" {
-  let input = @composer.Model::Model("")
-  let shell = @composer.Model::Model("")
+  let input = @composer.Model("")
+  let shell = @composer.Model("")
   shell.insert_user_text("!")
   assert_true(submitted_input("hello", input.mode()) == Prompt("hello"))
   assert_true(submitted_input("pwd ", shell.mode()) == Command("pwd"))
@@ -325,7 +325,7 @@ test "submitted input marks prompt and shell command" {
 
 ///|
 test "completion menu only opens for single-line slash input contexts" {
-  let slash = @composer.Model::Model("")
+  let slash = @composer.Model("")
   slash.insert_user_text("/co")
   guard completion_menu_for_composer(command_specs(), slash)
     is Some(command_menu) else {
@@ -334,16 +334,16 @@ test "completion menu only opens for single-line slash input contexts" {
   assert_eq(command_menu.key, "command:co")
   assert_eq(command_menu.items.length(), 1)
   assert_eq(command_menu.items[0].label(), "/compact")
-  let plain = @composer.Model::Model("")
+  let plain = @composer.Model("")
   plain.insert_user_text("co")
   assert_true(completion_menu_for_composer(command_specs(), plain) is None)
   // Past the command name there is nothing to complete: the configured commands
   // take no arguments, so a separator closes the menu.
-  let spaced = @composer.Model::Model("")
+  let spaced = @composer.Model("")
   spaced.insert_user_text("/compact now")
   assert_true(completion_menu_for_composer(command_specs(), spaced) is None)
   // Multi-line input never opens a menu.
-  let multiline = @composer.Model::Model("")
+  let multiline = @composer.Model("")
   multiline.insert_user_text("/compact\n")
   assert_true(completion_menu_for_composer(command_specs(), multiline) is None)
 }
@@ -547,7 +547,7 @@ test "a slash-command line is never queued as a prompt" {
 ///|
 test "slash command invocation parses any single-line slash entry" {
   let specs = command_specs()
-  let with_args = @composer.Model::Model("")
+  let with_args = @composer.Model("")
   with_args.insert_user_text("/compact now")
   guard slash_command_invocation_for_composer(specs, with_args)
     is Some(invocation) else {
@@ -555,7 +555,7 @@ test "slash command invocation parses any single-line slash entry" {
   }
   assert_eq(invocation.name(), "compact")
   assert_eq(invocation.arguments(), "now")
-  let trailing_space = @composer.Model::Model("")
+  let trailing_space = @composer.Model("")
   trailing_space.insert_user_text("/compact   ")
   guard slash_command_invocation_for_composer(specs, trailing_space)
     is Some(invocation) else {
@@ -563,7 +563,7 @@ test "slash command invocation parses any single-line slash entry" {
   }
   assert_eq(invocation.arguments(), "")
   // Unknown commands still parse — dispatch is independent of registration.
-  let unknown = @composer.Model::Model("")
+  let unknown = @composer.Model("")
   unknown.insert_user_text("/unknown focus")
   guard slash_command_invocation_for_composer(specs, unknown)
     is Some(unknown_inv) else {
@@ -574,7 +574,7 @@ test "slash command invocation parses any single-line slash entry" {
   // With no commands configured the feature is off: a slash line is not an
   // invocation, so it stays ordinary input.
   let no_commands : @slash.SlashCommands = []
-  let disabled = @composer.Model::Model("")
+  let disabled = @composer.Model("")
   disabled.insert_user_text("/path/to/file")
   assert_true(
     slash_command_invocation_for_composer(no_commands, disabled) is None,

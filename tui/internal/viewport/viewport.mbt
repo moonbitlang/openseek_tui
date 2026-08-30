@@ -655,7 +655,7 @@ pub async fn Viewport::enter(
     tty.set_cursor_position(size.rows(), 1)
     tty.write("\r\n".repeat(overflow))
   }
-  let geometry = @geometry.Geometry::Geometry(top~, height~)
+  let geometry = @geometry.Geometry(top~, height~)
   let surface = surface.with_max_rows(geometry.height())
   let frame = PlacedSurface::{ surface, top: geometry.top(), }
   enter_placed_surface_rows(tty, frame)
@@ -687,10 +687,7 @@ pub async fn Viewport::redraw(
   match old_cache {
     Drawn(old_surface) => {
       let old_frame = PlacedSurface::{ surface: old_surface, top: old_top, }
-      let old = @geometry.Geometry::Geometry(
-        top=old_top,
-        height=old_surface.height(),
-      )
+      let old = @geometry.Geometry(top=old_top, height=old_surface.height())
       let scrolled_screen = scroll_scrollback_up_for_growth(
         tty,
         old,
@@ -707,7 +704,7 @@ pub async fn Viewport::redraw(
       }
     }
     Stale(top~, height~) => {
-      let old = @geometry.Geometry::Geometry(top~, height~)
+      let old = @geometry.Geometry(top~, height~)
       let _ = scroll_scrollback_up_for_growth(
         tty,
         old,
