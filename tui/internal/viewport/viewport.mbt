@@ -90,10 +90,7 @@ fn Viewport::set_geometry(self : Viewport, top~ : Int, height~ : Int) -> Unit {
   // bottom) is raised/shrunk to fit, so `bottom()` stays within `size.rows()`.
   let clamped_height = @geometry.clamp_height(self.size, height~)
   let clamped_top = @geometry.clamp_top(self.size, height=clamped_height, top~)
-  self.geometry = @geometry.Geometry::new(
-    top=clamped_top,
-    height=clamped_height,
-  )
+  self.geometry = Geometry(top=clamped_top, height=clamped_height)
 }
 
 ///|
@@ -164,18 +161,12 @@ test "viewport remembers stale frame footprint after resize invalidates frame" {
   let viewport = Viewport::{
     size: TerminalSize(rows=10, cols=80),
     size_source: Ioctl,
-    geometry: @geometry.Geometry::new(top=6, height=4),
+    geometry: Geometry(top=6, height=4),
     cache: Drawn(
-      @surface.Surface::new(
+      Surface(
         width=80,
-        rows=[
-          @surface.Line::new([]),
-          @surface.Line::new([]),
-          @surface.Line::new([]),
-          @surface.Line::new([]),
-          @surface.Line::new([]),
-        ],
-        cursor=@surface.Cursor::new(row=1, col=0),
+        rows=[Line([]), Line([]), Line([]), Line([]), Line([])],
+        cursor=Cursor(row=1, col=0),
       ),
     ),
   }
@@ -664,7 +655,7 @@ pub async fn Viewport::enter(
     tty.set_cursor_position(size.rows(), 1)
     tty.write("\r\n".repeat(overflow))
   }
-  let geometry = @geometry.Geometry::new(top~, height~)
+  let geometry = @geometry.Geometry::Geometry(top~, height~)
   let surface = surface.with_max_rows(geometry.height())
   let frame = PlacedSurface::{ surface, top: geometry.top(), }
   enter_placed_surface_rows(tty, frame)
@@ -696,7 +687,7 @@ pub async fn Viewport::redraw(
   match old_cache {
     Drawn(old_surface) => {
       let old_frame = PlacedSurface::{ surface: old_surface, top: old_top, }
-      let old = @geometry.Geometry::new(
+      let old = @geometry.Geometry::Geometry(
         top=old_top,
         height=old_surface.height(),
       )
@@ -716,7 +707,7 @@ pub async fn Viewport::redraw(
       }
     }
     Stale(top~, height~) => {
-      let old = @geometry.Geometry::new(top~, height~)
+      let old = @geometry.Geometry::Geometry(top~, height~)
       let _ = scroll_scrollback_up_for_growth(
         tty,
         old,

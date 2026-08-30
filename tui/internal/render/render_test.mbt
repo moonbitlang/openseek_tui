@@ -23,7 +23,7 @@ fn display_prefix(text : String, units : Int) -> String {
 ///|
 test "composer surface renders viewport rows and cursor" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=None,
     queued_inputs=[],
     status=@doc.Text::plain("ready"),
@@ -67,7 +67,7 @@ test "composer surface renders viewport rows and cursor" {
 
 ///|
 test "composer surface grows with multiline input up to max rows" {
-  let two_lines = @composer.Model::new("")
+  let two_lines = @composer.Model::Model("")
   two_lines.insert("a\nb")
   let two_line_surface = @render.composer_surface(
     two_lines,
@@ -104,7 +104,7 @@ test "composer surface grows with multiline input up to max rows" {
     ),
   )
   inspect(display_width(two_line_surface.line_at(2).text()), content="12")
-  let five_lines = @composer.Model::new("")
+  let five_lines = @composer.Model::Model("")
   five_lines.insert("a\nb\nc\nd\ne")
   let capped_surface = @render.composer_surface(
     five_lines,
@@ -147,7 +147,7 @@ test "composer surface grows with multiline input up to max rows" {
 ///|
 test "composer surface renders queued inputs above composer" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=None,
     queued_inputs=[Prompt("first"), Command("pwd")],
     status=@doc.Text::plain("ready"),
@@ -197,11 +197,11 @@ test "composer surface renders queued inputs above composer" {
 ///|
 test "composer surface renders slash command completions below composer" {
   let surface = @render.composer_surface(
-    @composer.Model::new("/"),
+    Model("/"),
     activity=None,
     queued_inputs=[],
     completion=@completion.Model::open(items=[
-      @completion.CompletionItem::new(
+      CompletionItem(
         label="/model",
         insert_text="model",
         description="show or change the model",
@@ -226,14 +226,11 @@ test "composer surface renders slash command completions below composer" {
 ///|
 test "composer surface renders model argument completions below composer" {
   let surface = @render.composer_surface(
-    @composer.Model::new("/model deepseek-v4-f"),
+    Model("/model deepseek-v4-f"),
     activity=None,
     queued_inputs=[],
     completion=@completion.Model::open(items=[
-      @completion.CompletionItem::new(
-        label="deepseek-v4-flash",
-        description="model",
-      ),
+      CompletionItem(label="deepseek-v4-flash", description="model"),
     ]),
     status=@doc.Text::plain("ready"),
     notice=None,
@@ -252,11 +249,11 @@ test "composer surface renders model argument completions below composer" {
 ///|
 test "composer surface renders prefiltered completion items" {
   let surface = @render.composer_surface(
-    @composer.Model::new("/mo"),
+    Model("/mo"),
     activity=None,
     queued_inputs=[],
     completion=@completion.Model::open(items=[
-      @completion.CompletionItem::new(
+      CompletionItem(
         label="/model",
         insert_text="model",
         description="show model",
@@ -282,7 +279,7 @@ test "composer surface reserves completion rows from the queue budget" {
   // total live area (menu and status included) must stay within the budget, or
   // the viewport keeps only the leading rows and clips the menu off the bottom.
   let surface = @render.composer_surface(
-    @composer.Model::new("/"),
+    Model("/"),
     activity=None,
     queued_inputs=[
       Prompt("a"),
@@ -292,9 +289,9 @@ test "composer surface reserves completion rows from the queue budget" {
       Prompt("e"),
     ],
     completion=@completion.Model::open(items=[
-      @completion.CompletionItem::new(label="/model", description="m1"),
-      @completion.CompletionItem::new(label="/exit", description="m2"),
-      @completion.CompletionItem::new(label="/resume", description="m3"),
+      CompletionItem(label="/model", description="m1"),
+      CompletionItem(label="/exit", description="m2"),
+      CompletionItem(label="/resume", description="m3"),
     ]),
     status=@doc.Text::plain("ready"),
     notice=None,
@@ -315,14 +312,11 @@ test "composer surface reserves completion rows from the queue budget" {
 ///|
 test "composer surface keeps a multi-line completion description on one row" {
   let surface = @render.composer_surface(
-    @composer.Model::new("/"),
+    Model("/"),
     activity=None,
     queued_inputs=[],
     completion=@completion.Model::open(items=[
-      @completion.CompletionItem::new(
-        label="session-1",
-        description="first line\nsecond line",
-      ),
+      CompletionItem(label="session-1", description="first line\nsecond line"),
     ]),
     status=@doc.Text::plain("ready"),
     notice=None,
@@ -353,11 +347,11 @@ test "completion menu fits only above the minimum live height" {
 ///|
 test "composer surface drops completion menu when terminal is only minimum height" {
   let surface = @render.composer_surface(
-    @composer.Model::new("/"),
+    Model("/"),
     activity=None,
     queued_inputs=[],
     completion=@completion.Model::open(items=[
-      @completion.CompletionItem::new(
+      CompletionItem(
         label="/model",
         insert_text="model",
         description="show model",
@@ -376,7 +370,7 @@ test "composer surface drops completion menu when terminal is only minimum heigh
 ///|
 test "composer surface renders activity above separator" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=Some(@doc.Text::plain("Working (0s • esc to interrupt)")),
     queued_inputs=[],
     status=@doc.Text::plain("gpt-5 · ~/repo · Context 100% left"),
@@ -420,7 +414,7 @@ test "composer surface renders activity above separator" {
 ///|
 test "composer surface puts activity above queued inputs" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=Some(@doc.Text::plain("Working (3s)")),
     queued_inputs=[Prompt("next")],
     status=@doc.Text::plain("ready"),
@@ -454,7 +448,7 @@ test "composer surface puts activity above queued inputs" {
 ///|
 test "composer surface shows a notice when the terminal is below the minimum" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=Some(@doc.Text::plain("Working")),
     queued_inputs=[Prompt("a")],
     status=@doc.Text::plain("ready"),
@@ -472,7 +466,7 @@ test "composer surface shows a notice when the terminal is below the minimum" {
 ///|
 test "composer surface drops activity and queue when the terminal is too short" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=Some(@doc.Text::plain("Working (3s)")),
     queued_inputs=[Prompt("a"), Prompt("b")],
     status=@doc.Text::plain("ready"),
@@ -490,7 +484,7 @@ test "composer surface drops activity and queue when the terminal is too short" 
 ///|
 test "composer surface bounds queued previews so the composer stays visible" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=Some(@doc.Text::plain("Working")),
     queued_inputs=[
       Prompt("a"),
@@ -521,7 +515,7 @@ test "composer surface bounds queued previews so the composer stays visible" {
 ///|
 test "composer surface notice overrides persistent status" {
   let surface = @render.composer_surface(
-    @composer.Model::new(""),
+    Model(""),
     activity=None,
     queued_inputs=[],
     status=@doc.Text::plain("gpt-5 · ~/repo"),

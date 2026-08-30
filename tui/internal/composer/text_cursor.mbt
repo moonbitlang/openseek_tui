@@ -18,7 +18,7 @@ priv struct TextCursor {
 }
 
 ///|
-fn TextCursor::new(
+fn TextCursor::TextCursor(
   logical_lines : Array[LogicLine],
   line~ : Int,
   position~ : @displaytext.TextualPosition,
@@ -36,11 +36,7 @@ fn TextCursor::line_start(
   line~ : Int,
 ) -> TextCursor {
   let line = line.clamp(min=0, max=logical_lines.length() - 1)
-  TextCursor::new(
-    logical_lines,
-    line~,
-    position=logical_lines[line].display.start(),
-  )
+  TextCursor(logical_lines, line~, position=logical_lines[line].display.start())
 }
 
 ///|
@@ -49,11 +45,7 @@ fn TextCursor::line_end(
   line~ : Int,
 ) -> TextCursor {
   let line = line.clamp(min=0, max=logical_lines.length() - 1)
-  TextCursor::new(
-    logical_lines,
-    line~,
-    position=logical_lines[line].display.end(),
-  )
+  TextCursor(logical_lines, line~, position=logical_lines[line].display.end())
 }
 
 ///|
@@ -85,7 +77,7 @@ fn move_cursor_left(
 ) -> TextCursor {
   let line = logical_lines[cursor.line]
   if line.display.prev(cursor.position) is Some(position) {
-    TextCursor::new(logical_lines, line=cursor.line, position~)
+    TextCursor(logical_lines, line=cursor.line, position~)
   } else if cursor.line <= 0 {
     TextCursor::line_start(logical_lines, line=0)
   } else {
@@ -100,7 +92,7 @@ fn move_cursor_right(
 ) -> TextCursor {
   let line = logical_lines[cursor.line]
   if line.display.next(cursor.position) is Some(position) {
-    TextCursor::new(logical_lines, line=cursor.line, position~)
+    TextCursor(logical_lines, line=cursor.line, position~)
   } else if cursor.line + 1 >= logical_lines.length() {
     TextCursor::text_end(logical_lines)
   } else {

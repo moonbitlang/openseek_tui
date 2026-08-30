@@ -100,7 +100,7 @@ struct Model {
 ///|
 /// Create an `Input` mode composer initialized with `text` whose editable area
 /// grows to at most `max_text_rows` wrapped rows.
-pub fn Model::new(
+pub fn Model::Model(
   text : String,
   max_text_rows? : Int = DefaultMaxTextRows,
 ) -> Model {
@@ -291,7 +291,7 @@ fn Model::set_logical_lines(
     logical_lines,
     content_width=self.content_width,
   )
-  let cursor = TextCursor::new(
+  let cursor = TextCursor::TextCursor(
     logical_lines,
     line=cursor.line,
     position=cursor.position,
@@ -316,7 +316,7 @@ fn Model::set_cursor(
   preferred_column? : Int,
   at_wrap_end? : Bool = false,
 ) -> Unit {
-  self.cursor = TextCursor::new(
+  self.cursor = TextCursor(
     self.logical_lines,
     line=cursor.line,
     position=cursor.position,
@@ -375,7 +375,7 @@ fn Model::replace_line_range(
   let prefix = line.display.view(line.display.start(), start)
   let suffix = line.display.view(end, line.display.end())
   let cursor_text = "\{prefix}\{replacement}"
-  let new_line = LogicLine::new(DisplayText("\{cursor_text}\{suffix}"))
+  let new_line = LogicLine::LogicLine(DisplayText("\{cursor_text}\{suffix}"))
   let replacement_lines = [new_line]
   let logical_lines = splice_logical_lines(
     self.logical_lines,
@@ -385,7 +385,7 @@ fn Model::replace_line_range(
   )
   self.set_logical_lines(
     logical_lines~,
-    cursor=TextCursor::new(
+    cursor=TextCursor(
       logical_lines,
       line=line_index,
       position=new_line.display.textual_position_at_char(
@@ -404,7 +404,7 @@ fn Model::join_with_next_line(self : Model, line_index~ : Int) -> Unit {
   } else {
     let left = self.logical_lines[line_index].text()
     let right = self.logical_lines[line_index + 1].text()
-    let joined = LogicLine::new(DisplayText("\{left}\{right}"))
+    let joined = LogicLine::LogicLine(DisplayText("\{left}\{right}"))
     let replacement_lines = [joined]
     let logical_lines = splice_logical_lines(
       self.logical_lines,
@@ -414,7 +414,7 @@ fn Model::join_with_next_line(self : Model, line_index~ : Int) -> Unit {
     )
     self.set_logical_lines(
       logical_lines~,
-      cursor=TextCursor::new(
+      cursor=TextCursor(
         logical_lines,
         line=line_index,
         position=joined.display.textual_position_at_char(offset=left.length()),
@@ -472,13 +472,13 @@ pub fn Model::insert(self : Model, text : String) -> Unit {
       inserted_line.end(),
     )
     let replacement_line = if inserted.length() == 1 {
-      LogicLine::new(DisplayText("\{prefix}\{inserted_text}\{suffix}"))
+      LogicLine::LogicLine(DisplayText("\{prefix}\{inserted_text}\{suffix}"))
     } else if index == 0 {
-      LogicLine::new(DisplayText("\{prefix}\{inserted_text}"))
+      LogicLine(DisplayText("\{prefix}\{inserted_text}"))
     } else if index == last {
-      LogicLine::new(DisplayText("\{inserted_text}\{suffix}"))
+      LogicLine(DisplayText("\{inserted_text}\{suffix}"))
     } else {
-      LogicLine::new(inserted_line)
+      LogicLine(inserted_line)
     }
     replacement_lines.push(replacement_line)
   }
@@ -502,7 +502,7 @@ pub fn Model::insert(self : Model, text : String) -> Unit {
   )
   self.set_logical_lines(
     logical_lines~,
-    cursor=TextCursor::new(
+    cursor=TextCursor(
       logical_lines,
       line=cursor_line,
       position=replacement_lines[last].display.textual_position_at_char(
@@ -718,7 +718,7 @@ pub fn Model::move_vertical(self : Model, delta : Int) -> Unit {
   let target_position = target_line.position_at_display_column(
     column=target_display_column,
   )
-  let target_cursor = TextCursor::new(
+  let target_cursor = TextCursor::TextCursor(
     self.logical_lines,
     line=target_line_index,
     position=target_position,
@@ -759,7 +759,7 @@ fn visible_row_text(model : Model, row : Int) -> String {
 
 ///|
 test "model starts at end and keeps cursor visible" {
-  let model = Model::new("a\nb\nc")
+  let model = Model::Model("a\nb\nc")
   let point = model.cursor
   inspect(point.line, content="2")
   inspect(cursor_column(model), content="1")
@@ -770,7 +770,7 @@ test "model starts at end and keeps cursor visible" {
 
 ///|
 test "model up down moves cursor and visible line window" {
-  let model = Model::new("one\ntwo\nthree")
+  let model = Model::Model("one\ntwo\nthree")
   inspect(model.cursor.line, content="2")
   inspect(model.view_start, content="0")
   model.move_vertical(-1)
@@ -791,7 +791,7 @@ test "model up down moves cursor and visible line window" {
 
 ///|
 test "model scrolls visible window after max rows" {
-  let model = Model::new("a\nb\nc\nd\ne")
+  let model = Model::Model("a\nb\nc\nd\ne")
   inspect(model.visible_text_rows(), content="4")
   inspect(model.cursor_row(), content="3")
   inspect(model.view_start, content="1")
@@ -805,17 +805,17 @@ test "model scrolls visible window after max rows" {
 
 ///|
 test "model inserts and deletes at cursor" {
-  let inserted = Model::new("ab")
+  let inserted = Model::Model("ab")
   inserted.move_left()
   inserted.insert("X")
   inspect(inserted.text, content="aXb")
   inspect(cursor_line_prefix(inserted), content="aX")
-  let deleted_before = Model::new("a👨‍👩‍👧‍👦b")
+  let deleted_before = Model::Model("a👨‍👩‍👧‍👦b")
   deleted_before.move_left()
   deleted_before.delete_before()
   inspect(deleted_before.text, content="ab")
   inspect(cursor_line_prefix(deleted_before), content="a")
-  let deleted_after = Model::new("ab")
+  let deleted_after = Model::Model("ab")
   deleted_after.move_home()
   deleted_after.delete_after()
   inspect(deleted_after.text, content="b")
@@ -824,7 +824,7 @@ test "model inserts and deletes at cursor" {
 
 ///|
 test "model home end moves within logical line" {
-  let model = Model::new("ab\ncd")
+  let model = Model::Model("ab\ncd")
   model.move_home()
   inspect(model.cursor.line, content="1")
   inspect(cursor_column(model), content="0")
@@ -835,12 +835,12 @@ test "model home end moves within logical line" {
 
 ///|
 test "model kills before and after cursor within logical line" {
-  let before = Model::new("ab\ncd")
+  let before = Model::Model("ab\ncd")
   before.kill_before()
   inspect(before.text, content="ab\n")
   inspect(before.cursor.line, content="1")
   inspect(cursor_column(before), content="0")
-  let after = Model::new("ab\ncd")
+  let after = Model::Model("ab\ncd")
   after.move_home()
   after.kill_after()
   inspect(after.text, content="ab\n")
@@ -851,21 +851,21 @@ test "model kills before and after cursor within logical line" {
 ///|
 test "kill after removes empty lines and joins lines" {
   // On an empty middle line, kill-line removes the forward line break.
-  let middle = Model::new("ab\n\ncd")
+  let middle = Model::Model("ab\n\ncd")
   middle.move_vertical(-1)
   inspect(middle.cursor.line, content="1")
   inspect(cursor_column(middle), content="0")
   middle.kill_after()
   inspect(middle.text, content="ab\ncd")
   // At the end of a non-empty line it likewise joins the next line up.
-  let joined = Model::new("ab\ncd")
+  let joined = Model::Model("ab\ncd")
   joined.move_vertical(-1)
   joined.move_end()
   joined.kill_after()
   inspect(joined.text, content="abcd")
   // A trailing empty line (e.g. from an extra Shift+Enter) has nothing forward,
   // so kill-line removes the empty line by deleting the preceding break.
-  let trailing = Model::new("ab\n")
+  let trailing = Model::Model("ab\n")
   inspect(trailing.cursor.line, content="1")
   trailing.kill_after()
   inspect(trailing.text, content="ab")
@@ -875,7 +875,7 @@ test "kill after removes empty lines and joins lines" {
 test "soft-wrapped line scrolls when it exceeds max rows" {
   // cols 3 leaves a content width of 1, so "abcdef" wraps to six rows and the
   // four-row window scrolls to keep the trailing cursor visible.
-  let model = Model::new("abcdef", max_text_rows=4)
+  let model = Model::Model("abcdef", max_text_rows=4)
   model.resize(cols=3)
   inspect(model.visible_text_rows(), content="4")
   inspect(model.cursor_row(), content="3")
@@ -888,7 +888,7 @@ test "soft-wrapped line scrolls when it exceeds max rows" {
 test "vertical movement steps through wrapped rows of one logical line" {
   // content width 5 splits "abcdefghij" into "abcde" / "fghij"; the cursor
   // starts at the end of the second wrapped row.
-  let model = Model::new("abcdefghij")
+  let model = Model::Model("abcdefghij")
   model.resize(cols=7)
   inspect(model.cursor_row(), content="1")
   // Up moves within the single logical line to the first wrapped row, landing on
@@ -906,7 +906,7 @@ test "vertical movement steps through wrapped rows of one logical line" {
 
 ///|
 test "word motion steps across word boundaries" {
-  let model = Model::new("foo bar.baz")
+  let model = Model::Model("foo bar.baz")
   model.move_home()
   inspect(cursor_line_prefix(model), content="")
   model.move_word_right()
@@ -929,7 +929,7 @@ test "word motion steps across word boundaries" {
 
 ///|
 test "word motion treats non-ascii runs as words" {
-  let model = Model::new("你好 world")
+  let model = Model::Model("你好 world")
   model.move_home()
   model.move_word_right()
   inspect(cursor_line_prefix(model), content="你好")

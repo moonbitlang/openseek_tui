@@ -963,7 +963,7 @@ async fn[G] run_message_loop(
 
 ///|
 fn drain_test_state() -> State {
-  State::new({
+  State({
     api_key: "k",
     api_url: Some("https://proxy.example/v1/chat/completions"),
     model: Deepseek(V4Pro),
@@ -980,7 +980,7 @@ fn drain_test_state() -> State {
 
 ///|
 fn drain_oneshot_test_state() -> State {
-  State::new({
+  State({
     ..drain_test_state().config,
     engine: "./replayer",
     engine_args_prefix: [],
@@ -1229,7 +1229,10 @@ test "compact slash command rejects arguments and pending work" {
 
 ///|
 test "compact slash command is unavailable on a oneshot engine" {
-  let state = State::new({ ..drain_test_state().config, engine_mode: OneShot, })
+  let state = State::State({
+    ..drain_test_state().config,
+    engine_mode: OneShot,
+  })
   let cmds = update(state, UiInput(SlashCommand(name="compact", arguments="")))
   assert_eq(error_item_count(cmds), 1)
   assert_eq(compact_session_count(cmds), 0)

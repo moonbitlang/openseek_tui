@@ -67,7 +67,7 @@ fn apply_goal_update(state : State, goal : String?, cmds : Array[Cmd]) -> Unit {
 
 ///|
 fn goal_test_state() -> State {
-  State::new({
+  State({
     api_key: "k",
     api_url: Some("https://proxy.example/v1/chat/completions"),
     model: Deepseek(V4Pro),
@@ -177,7 +177,7 @@ test "clearing without a mirrored goal still goes to the engine" {
 
 ///|
 test "goal set is rejected on a oneshot engine" {
-  let state = State::new({
+  let state = State::State({
     api_key: "k",
     api_url: None,
     model: Deepseek(V4Pro),

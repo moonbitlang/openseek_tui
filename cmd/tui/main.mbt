@@ -354,17 +354,17 @@ fn initial_task(matches : @argparse.Matches) -> String? {
 async fn run_tui(config : AppConfig, initial : String?) -> Unit {
   // Commands only name and describe themselves.
   @ui.with_ui(
-    config=@ui.Config::new(composer_max_rows=4, slash_commands=[
-      @ui.SlashCommandSpec::new(name="exit", description="exit the TUI"),
-      @ui.SlashCommandSpec::new(
+    config=Config(composer_max_rows=4, slash_commands=[
+      SlashCommandSpec(name="exit", description="exit the TUI"),
+      SlashCommandSpec(
         name="compact",
         description="summarize and compact the conversation",
       ),
-      @ui.SlashCommandSpec::new(
+      SlashCommandSpec(
         name="loop",
         description="recurring prompt: /loop [--max <n>] <interval> <prompt> | off | status | pause | resume",
       ),
-      @ui.SlashCommandSpec::new(
+      SlashCommandSpec(
         name="goal",
         description="standing goal: /goal | /goal set <text> | /goal clear",
       ),
@@ -375,7 +375,7 @@ async fn run_tui(config : AppConfig, initial : String?) -> Unit {
 
 ///|
 async fn run_app(config : AppConfig, initial : String?, ui : @ui.Ui) -> Unit {
-  let state = State::new(config)
+  let state = State::State(config)
   let messages = @async.Queue(kind=Unbounded)
   append_session_history(state, ui)
   // Name the session so the conversation is resumable later with

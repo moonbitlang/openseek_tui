@@ -1,10 +1,10 @@
 ///|
 test "surface cursor is normalized when stored" {
-  let rows = [@surface.Line::new([]), @surface.Line::new([])]
-  let surface = @surface.Surface::new(
+  let rows = [@surface.Line::Line([]), Line([])]
+  let surface = @surface.Surface::Surface(
     width=4,
     rows~,
-    cursor=@surface.Cursor::new(row=9, col=9),
+    cursor=Cursor(row=9, col=9),
   )
   inspect(surface.cursor().row(), content="1")
   inspect(surface.cursor().col(), content="3")
@@ -13,14 +13,14 @@ test "surface cursor is normalized when stored" {
 ///|
 test "with_max_rows keeps the leading rows" {
   let rows = [
-    @surface.Line::new([Span(DisplayText("a"))]),
-    @surface.Line::new([Span(DisplayText("b"))]),
-    @surface.Line::new([Span(DisplayText("c"))]),
+    @surface.Line::Line([Span(DisplayText("a"))]),
+    Line([Span(DisplayText("b"))]),
+    Line([Span(DisplayText("c"))]),
   ]
-  let surface = @surface.Surface::new(
+  let surface = @surface.Surface::Surface(
     width=10,
     rows~,
-    cursor=@surface.Cursor::new(row=0, col=0),
+    cursor=Cursor(row=0, col=0),
   )
   let capped = surface.with_max_rows(2)
   inspect(capped.height(), content="2")
@@ -34,10 +34,10 @@ test "with_max_rows keeps the leading rows" {
 test "line equality includes span text and style" {
   let green = @style.Style(foreground=Basic(BrightGreen))
   let red = @style.Style(foreground=Basic(BrightRed))
-  let left = @surface.Line::new([Span(DisplayText("x"), style=green)])
-  let same = @surface.Line::new([Span(DisplayText("x"), style=green)])
-  let different_text = @surface.Line::new([Span(DisplayText("y"), style=green)])
-  let different_style = @surface.Line::new([Span(DisplayText("x"), style=red)])
+  let left = @surface.Line::Line([Span(DisplayText("x"), style=green)])
+  let same = @surface.Line::Line([Span(DisplayText("x"), style=green)])
+  let different_text = @surface.Line::Line([Span(DisplayText("y"), style=green)])
+  let different_style = @surface.Line::Line([Span(DisplayText("x"), style=red)])
   assert_true(left == same)
   assert_false(left == different_text)
   assert_false(left == different_style)

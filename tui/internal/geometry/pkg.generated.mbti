@@ -14,9 +14,9 @@ pub fn clamp_top(@terminal_size.TerminalSize, height~ : Int, top~ : Int) -> Int
 
 // Types and methods
 type Geometry
+pub fn Geometry::Geometry(top~ : Int, height~ : Int) -> Self
 pub fn Geometry::bottom(Self) -> Int
 pub fn Geometry::height(Self) -> Int
-pub fn Geometry::new(top~ : Int, height~ : Int) -> Self
 pub fn Geometry::top(Self) -> Int
 
 // Type aliases

@@ -11,7 +11,7 @@ struct SlashCommandSpec {
 
 ///|
 /// Build a slash command spec. `name` does not include the leading slash.
-pub fn SlashCommandSpec::new(
+pub fn SlashCommandSpec::SlashCommandSpec(
   name~ : String,
   description~ : String,
 ) -> SlashCommandSpec {
@@ -35,7 +35,7 @@ pub fn SlashCommands::completion_items(
 ) -> Array[@completion.CompletionItem] {
   [
     for command in self.0 => {
-      @completion.CompletionItem::new(
+      CompletionItem(
         label="/\{command.name()}",
         insert_text=command.name(),
         description=command.description(),

@@ -15,7 +15,7 @@ pub async fn[T] with_ui(config? : Config, async (Ui) -> T) -> T
 
 // Types and methods
 type Config
-pub fn Config::new(esc_timeout_ms? : Int, composer_max_rows? : Int, slash_commands? : Array[@slash.SlashCommandSpec]) -> Self
+pub fn Config::Config(esc_timeout_ms? : Int, composer_max_rows? : Int, slash_commands? : Array[@slash.SlashCommandSpec]) -> Self
 
 type Ui
 pub async fn Ui::append_item(Self, @core.TranscriptItem) -> Unit

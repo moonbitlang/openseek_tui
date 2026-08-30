@@ -17,7 +17,7 @@ struct Config {
 /// caps how tall the editable input area grows. `slash_commands` configures the
 /// optional slash-command completion menu. Non-positive numeric values fall back
 /// to the defaults (`50` ms and `@composer.DefaultMaxTextRows`).
-pub fn Config::new(
+pub fn Config::Config(
   esc_timeout_ms? : Int = DefaultEscTimeoutMs,
   composer_max_rows? : Int = DefaultComposerMaxRows,
   slash_commands? : Array[@slash.SlashCommandSpec] = [],

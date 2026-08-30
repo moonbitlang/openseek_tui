@@ -69,7 +69,7 @@ pub fn Span::style(self : Span) -> @style.Style {
 
 ///|
 /// Build a line from its styled spans, in left-to-right order.
-pub fn Line::new(spans : Array[Span]) -> Line {
+pub fn Line::Line(spans : Array[Span]) -> Line {
   { spans, }
 }
 
@@ -81,7 +81,7 @@ pub fn Line::spans(self : Line) -> Array[Span] {
 
 ///|
 /// Build a cursor at a 0-based (row, col) cell offset.
-pub fn Cursor::new(row~ : Int, col~ : Int) -> Cursor {
+pub fn Cursor::Cursor(row~ : Int, col~ : Int) -> Cursor {
   { row, col, }
 }
 
@@ -113,7 +113,7 @@ fn normalize_surface_cursor(
 /// Build a surface frame, normalizing invariants: `width` is forced to `>= 1`
 /// and the cursor is clamped inside the rows and width so the renderer never
 /// has to re-validate.
-pub fn Surface::new(
+pub fn Surface::Surface(
   width~ : Int,
   rows~ : Array[Line],
   cursor~ : Cursor,
@@ -142,7 +142,7 @@ pub fn Surface::cursor(self : Surface) -> Cursor {
 pub fn Surface::with_max_rows(self : Surface, max_rows : Int) -> Surface {
   let row_count = max_rows.clamp(min=0, max=self.rows.length())
   let rows = self.rows[:row_count].to_owned()
-  Surface::new(width=self.width, rows~, cursor=self.cursor)
+  Surface(width=self.width, rows~, cursor=self.cursor)
 }
 
 ///|
@@ -151,7 +151,7 @@ pub fn Surface::line_at(self : Surface, row : Int) -> Line {
   if self.rows.get(row) is Some(line) {
     line
   } else {
-    Line::new([])
+    Line([])
   }
 }
 

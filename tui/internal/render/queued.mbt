@@ -18,7 +18,7 @@ fn queued_input_line(
   // Defense-in-depth: queued previews are written straight to the terminal, so
   // collapse the input to one sanitized line (composer input is already
   // sanitized, but other sources — e.g. an initial CLI task — are not).
-  @surface.Line::new([
+  Line([
     Span(marker, style=@style.dim),
     Span(prefix, style=@style.dim),
     Span(
@@ -38,7 +38,7 @@ fn indented_dim_line(
   cols~ : Int,
   indent~ : Int,
 ) -> @surface.Line {
-  @surface.Line::new([
+  Line([
     Span(
       DisplayText("\{String::make(indent, ' ')}\{line.truncate(cols - indent)}"),
       style=@style.dim,

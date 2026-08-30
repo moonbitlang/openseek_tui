@@ -158,7 +158,7 @@ fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
       // arrive as their own unit and break once too.
       if unit == "\n" || unit == "\r" || unit == "\r\n" {
         flush_run(style)
-        rows.push(@surface.Line::new(spans))
+        rows.push(Line(spans))
         spans = []
         used = 0
       } else if unit == "\t" {
@@ -166,7 +166,7 @@ fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
         for _ in 0..<spaces {
           if used > 0 && used + 1 > width {
             flush_run(style)
-            rows.push(@surface.Line::new(spans))
+            rows.push(Line(spans))
             spans = []
             used = 0
           }
@@ -178,7 +178,7 @@ fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
         let next = @text.unit_width(display_line, start~, end~)
         if used > 0 && used + next > width {
           flush_run(style)
-          rows.push(@surface.Line::new(spans))
+          rows.push(Line(spans))
           spans = []
           used = 0
         }
@@ -192,7 +192,7 @@ fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
     // (its style may differ).
     flush_run(style)
   }
-  rows.push(@surface.Line::new(spans))
+  rows.push(Line(spans))
   rows
 }
 
@@ -201,7 +201,7 @@ fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
 pub fn Text::first_line(self : Text, width~ : Int) -> @surface.Line {
   match self.wrap(width~) {
     [line, ..] => line
-    [] => @surface.Line::new([])
+    [] => Line([])
   }
 }
 

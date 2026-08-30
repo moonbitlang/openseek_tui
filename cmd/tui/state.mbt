@@ -143,7 +143,7 @@ priv struct State {
 }
 
 ///|
-fn State::new(config : AppConfig) -> State {
+fn State::State(config : AppConfig) -> State {
   {
     config,
     queued: [],

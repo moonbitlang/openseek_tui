@@ -9,7 +9,7 @@ fn submitted_input(text : String, mode : @composer.Mode) -> Input {
 
 ///|
 fn Ui::current_history_entry(self : Self) -> @history.Entry {
-  @history.Entry::new(self.composer.text(), self.composer.mode())
+  Entry(self.composer.text(), self.composer.mode())
 }
 
 ///|
@@ -21,7 +21,7 @@ async fn Ui::submit_current_input(self : Self) -> Input? {
   } else {
     let text = self.composer.text()
     let mode = self.composer.mode()
-    self.history.push(@history.Entry::new(text, mode))
+    self.history.push(Entry(text, mode))
     // From this reset until the returned event reaches the app's queue, the
     // submission is mid-flight (the redraw below awaits): `input_idle` must
     // read as engaged so nothing acts past the Enter the user just pressed.

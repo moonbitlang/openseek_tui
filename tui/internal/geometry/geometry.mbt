@@ -36,7 +36,7 @@ struct Geometry {
 
 ///|
 /// Build a row region from a start row and a height.
-pub fn Geometry::new(top~ : Int, height~ : Int) -> Geometry {
+pub fn Geometry::Geometry(top~ : Int, height~ : Int) -> Geometry {
   { top, height, }
 }
 

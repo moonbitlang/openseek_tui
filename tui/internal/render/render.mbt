@@ -11,9 +11,7 @@
 
 ///|
 fn separator_line(cols~ : Int) -> @surface.Line {
-  @surface.Line::new([
-    Span(DisplayText(String::make(cols, '─')), style=@style.dim),
-  ])
+  Line([Span(DisplayText(String::make(cols, '─')), style=@style.dim)])
 }
 
 ///|
@@ -27,7 +25,7 @@ fn prompt_line(
   let used = prefix_width + content.width()
   let fill_cols = if used < cols { cols - used } else { 0 }
   let fill_cols = @displaytext.DisplayText(String::make(fill_cols, ' '))
-  @surface.Line::new([
+  Line([
     Span(prefix, style=@style.dim),
     Span(content, style=@style.default),
     Span(fill_cols, style=@style.default),
@@ -58,7 +56,7 @@ fn padded_line(spans : Array[@surface.Span], cols~ : Int) -> @surface.Line {
       Span(DisplayText(String::make(cols - used, ' ')), style=@style.default),
     )
   }
-  @surface.Line::new(spans)
+  Line(spans)
 }
 
 ///|
@@ -132,7 +130,7 @@ fn indent_line(line : @surface.Line, indent~ : Int) -> @surface.Line {
     return line
   }
   let indent = @displaytext.DisplayText(String::make(indent, ' '))
-  @surface.Line::new([Span(indent, style=@style.default), ..line.spans()])
+  Line([Span(indent, style=@style.default), ..line.spans()])
 }
 
 ///|
@@ -154,10 +152,10 @@ pub fn completion_menu_fits(max_rows~ : Int) -> Bool {
 /// A one-line notice shown in place of the composer when the terminal is too
 /// short to render it without clipping the prompt or status.
 fn too_small_surface(cols~ : Int) -> @surface.Surface {
-  @surface.Surface::new(
+  Surface(
     width=cols,
     rows=[
-      @surface.Line::new([
+      Line([
         Span(
           DisplayText(
             @displaytext.DisplayText(
@@ -168,7 +166,7 @@ fn too_small_surface(cols~ : Int) -> @surface.Surface {
         ),
       ]),
     ],
-    cursor=@surface.Cursor::new(row=0, col=0),
+    cursor=Cursor(row=0, col=0),
   )
 }
 
@@ -248,18 +246,18 @@ pub fn composer_surface(
   // A blank spacer above the live area so the committed transcript does not butt
   // directly against the composer's top border — matching the blank that
   // precedes each transcript item.
-  rows.push(@surface.Line::new([]))
+  rows.push(Line([]))
   if show_activity && activity is Some(activity) {
     rows.push(indent_line(activity.first_line(width=cols - indent), indent~))
   }
   // Blank between the activity line and the queue, when both are present.
   if show_activity && has_queue {
-    rows.push(@surface.Line::new([]))
+    rows.push(Line([]))
   }
   rows.append(queued)
   // Set the live-status group off from the composer border with a blank.
   if show_activity || has_queue {
-    rows.push(@surface.Line::new([]))
+    rows.push(Line([]))
   }
   let composer_top = rows.length()
   rows.push(separator_line(cols~))
@@ -273,10 +271,10 @@ pub fn composer_surface(
   rows.push(
     indent_line(status_line(status, notice, cols=cols - indent), indent~),
   )
-  @surface.Surface::new(
+  Surface(
     width=cols,
     rows~,
-    cursor=@surface.Cursor::new(
+    cursor=Cursor(
       row=composer_top + 1 + composer.cursor_row(),
       col=composer.cursor_offset(),
     ),

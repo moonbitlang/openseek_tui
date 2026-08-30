@@ -9,7 +9,7 @@ struct CompletionItem {
 ///|
 /// Build a completion item. `label` is shown in the menu, `insert_text` is the
 /// semantic value submitted when the item is accepted.
-pub fn CompletionItem::new(
+pub fn CompletionItem::CompletionItem(
   label~ : String,
   insert_text? : String,
   description? : String = "",

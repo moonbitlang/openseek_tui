@@ -27,8 +27,8 @@ struct Ui {
 }
 
 ///|
-fn Ui::new(tty : @tty.Tty, config : Config) -> Ui {
-  let composer = @composer.Model::new(
+fn Ui::Ui(tty : @tty.Tty, config : Config) -> Ui {
+  let composer = @composer.Model::Model(
     "",
     max_text_rows=config.composer_max_rows,
   )
@@ -37,8 +37,8 @@ fn Ui::new(tty : @tty.Tty, config : Config) -> Ui {
     config,
     viewport: None,
     composer,
-    history: @history.History::new(),
-    completion: CompletionState::new(),
+    history: History(),
+    completion: CompletionState(),
     transcript: [],
     activity: None,
     queued_inputs: [],
@@ -120,12 +120,12 @@ async fn Ui::read_tty_events(self : Ui) -> Unit {
 /// first frame, then spawns the command queue and tty reader for the duration of
 /// `body`.
 pub async fn[T] with_ui(
-  config? : Config = Config::new(),
+  config? : Config = Config(),
   body : async (Ui) -> T,
 ) -> T {
   let tty = @tty.Tty::open()
   defer tty.close()
-  let ui = Ui::new(tty, config)
+  let ui = Ui::Ui(tty, config)
   // Request the kitty keyboard protocol's "disambiguate" level so modified keys
   // the legacy encoding cannot represent — Shift+Enter, Alt+F/Alt+B — are
   // reported as distinct CSI-u events. We deliberately avoid the higher levels

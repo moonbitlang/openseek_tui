@@ -8,12 +8,12 @@ priv struct LogicLine {
 ///|
 fn split_logical_lines(text : StringView) -> Array[LogicLine] {
   [
-    for display in @displaytext.split_lines(text) => LogicLine::new(display)
+    for display in @displaytext.split_lines(text) => LogicLine(display)
   ]
 }
 
 ///|
-fn LogicLine::new(display : @displaytext.DisplayText) -> LogicLine {
+fn LogicLine::LogicLine(display : @displaytext.DisplayText) -> LogicLine {
   { display, row_start: 0, row_end: 0, }
 }
 

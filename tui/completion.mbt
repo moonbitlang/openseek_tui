@@ -15,7 +15,7 @@ priv struct CompletionState {
 }
 
 ///|
-fn CompletionState::new() -> CompletionState {
+fn CompletionState::CompletionState() -> CompletionState {
   { key: "", selected: 0, dismissed: false, }
 }
 
@@ -181,7 +181,7 @@ async fn Ui::submit_slash_command(
   // arguments that differ from the typed prefix, and recalling the prefix would
   // re-select the first match and run a different command.
   let text = slash_command_text(name~, arguments~)
-  self.history.push(@history.Entry::new(text, self.composer.mode()))
+  self.history.push(Entry(text, self.composer.mode()))
   // Mid-flight until the app's queue receives the event (the redraw below
   // awaits); see `pending_submissions`.
   self.pending_submissions += 1
@@ -301,25 +301,22 @@ fn ui_enter_decision(
 ///|
 fn command_specs() -> Array[@slash.SlashCommandSpec] {
   [
-    @slash.SlashCommandSpec::new(name="exit", description="exit the TUI"),
-    @slash.SlashCommandSpec::new(
-      name="compact",
-      description="compact the conversation",
-    ),
+    SlashCommandSpec(name="exit", description="exit the TUI"),
+    SlashCommandSpec(name="compact", description="compact the conversation"),
   ]
 }
 
 ///|
 fn composer_with(text : String) -> @composer.Model {
-  let composer = @composer.Model::new("")
+  let composer = @composer.Model::Model("")
   composer.insert_user_text(text)
   composer
 }
 
 ///|
 test "submitted input marks prompt and shell command" {
-  let input = @composer.Model::new("")
-  let shell = @composer.Model::new("")
+  let input = @composer.Model::Model("")
+  let shell = @composer.Model::Model("")
   shell.insert_user_text("!")
   assert_true(submitted_input("hello", input.mode()) == Prompt("hello"))
   assert_true(submitted_input("pwd ", shell.mode()) == Command("pwd"))
@@ -328,7 +325,7 @@ test "submitted input marks prompt and shell command" {
 
 ///|
 test "completion menu only opens for single-line slash input contexts" {
-  let slash = @composer.Model::new("")
+  let slash = @composer.Model::Model("")
   slash.insert_user_text("/co")
   guard completion_menu_for_composer(command_specs(), slash)
     is Some(command_menu) else {
@@ -337,16 +334,16 @@ test "completion menu only opens for single-line slash input contexts" {
   assert_eq(command_menu.key, "command:co")
   assert_eq(command_menu.items.length(), 1)
   assert_eq(command_menu.items[0].label(), "/compact")
-  let plain = @composer.Model::new("")
+  let plain = @composer.Model::Model("")
   plain.insert_user_text("co")
   assert_true(completion_menu_for_composer(command_specs(), plain) is None)
   // Past the command name there is nothing to complete: the configured commands
   // take no arguments, so a separator closes the menu.
-  let spaced = @composer.Model::new("")
+  let spaced = @composer.Model::Model("")
   spaced.insert_user_text("/compact now")
   assert_true(completion_menu_for_composer(command_specs(), spaced) is None)
   // Multi-line input never opens a menu.
-  let multiline = @composer.Model::new("")
+  let multiline = @composer.Model::Model("")
   multiline.insert_user_text("/compact\n")
   assert_true(completion_menu_for_composer(command_specs(), multiline) is None)
 }
@@ -359,7 +356,7 @@ test "enter dispatches the accepted command name with no arguments" {
     guard ui_enter_decision(
         command_specs(),
         composer_with(typed),
-        CompletionState::new(),
+        CompletionState(),
         menu_visible=true,
       )
       is RunSlashCommand(name~, arguments~) else {
@@ -377,7 +374,7 @@ test "enter dispatches a command with typed arguments verbatim" {
   guard ui_enter_decision(
       command_specs(),
       composer_with("/compact extra"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=true,
     )
     is RunSlashCommand(name~, arguments~) else {
@@ -396,7 +393,7 @@ test "accepted slash completion is recorded so recall re-runs it" {
   guard ui_enter_decision(
       command_specs(),
       composer_with("/comp"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=true,
     )
     is RunSlashCommand(name~, arguments~) else {
@@ -413,7 +410,7 @@ test "enter ignores the completion menu when it cannot be rendered" {
   guard ui_enter_decision(
       command_specs(),
       composer_with("/comp"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=false,
     )
     is RunSlashCommand(name~, arguments~) else {
@@ -425,7 +422,7 @@ test "enter ignores the completion menu when it cannot be rendered" {
   guard ui_enter_decision(
       command_specs(),
       composer_with("/comp"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=true,
     )
     is RunSlashCommand(name=completed, ..) else {
@@ -439,7 +436,7 @@ test "a malformed slash entry is not submitted as a prompt" {
   let specs = command_specs()
   // Menu dismissed (Esc): a lone `/` or `/ ` parses to no command, but must not
   // be submitted — that would leak the raw slash text into the agent.
-  let dismissed = CompletionState::new()
+  let dismissed = CompletionState::CompletionState()
   dismissed.dismissed = true
   for typed in ["/", "/ "] {
     assert_true(
@@ -457,7 +454,7 @@ test "a malformed slash entry is not submitted as a prompt" {
     ui_enter_decision(
       specs,
       composer_with("/"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=false,
     )
     is NoCompletionMatch,
@@ -485,7 +482,7 @@ test "enter on a bare or doubled slash does not run the first command" {
       ui_enter_decision(
         command_specs(),
         composer_with(typed),
-        CompletionState::new(),
+        CompletionState(),
         menu_visible=true,
       )
       is NoCompletionMatch,
@@ -503,7 +500,7 @@ test "enter submits ordinary input outside a slash context" {
     ui_enter_decision(
       command_specs(),
       composer_with("hello world"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=true,
     )
     is SubmitInput,
@@ -550,7 +547,7 @@ test "a slash-command line is never queued as a prompt" {
 ///|
 test "slash command invocation parses any single-line slash entry" {
   let specs = command_specs()
-  let with_args = @composer.Model::new("")
+  let with_args = @composer.Model::Model("")
   with_args.insert_user_text("/compact now")
   guard slash_command_invocation_for_composer(specs, with_args)
     is Some(invocation) else {
@@ -558,7 +555,7 @@ test "slash command invocation parses any single-line slash entry" {
   }
   assert_eq(invocation.name(), "compact")
   assert_eq(invocation.arguments(), "now")
-  let trailing_space = @composer.Model::new("")
+  let trailing_space = @composer.Model::Model("")
   trailing_space.insert_user_text("/compact   ")
   guard slash_command_invocation_for_composer(specs, trailing_space)
     is Some(invocation) else {
@@ -566,7 +563,7 @@ test "slash command invocation parses any single-line slash entry" {
   }
   assert_eq(invocation.arguments(), "")
   // Unknown commands still parse — dispatch is independent of registration.
-  let unknown = @composer.Model::new("")
+  let unknown = @composer.Model::Model("")
   unknown.insert_user_text("/unknown focus")
   guard slash_command_invocation_for_composer(specs, unknown)
     is Some(unknown_inv) else {
@@ -577,7 +574,7 @@ test "slash command invocation parses any single-line slash entry" {
   // With no commands configured the feature is off: a slash line is not an
   // invocation, so it stays ordinary input.
   let no_commands : @slash.SlashCommands = []
-  let disabled = @composer.Model::new("")
+  let disabled = @composer.Model::Model("")
   disabled.insert_user_text("/path/to/file")
   assert_true(
     slash_command_invocation_for_composer(no_commands, disabled) is None,
@@ -591,7 +588,7 @@ test "enter submits slash-prefixed input when no commands are configured" {
     ui_enter_decision(
       no_commands,
       composer_with("/path"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=true,
     )
     is SubmitInput,
@@ -605,7 +602,7 @@ test "enter dispatches unknown slash commands to the handler" {
   guard ui_enter_decision(
       command_specs(),
       composer_with("/doesnotexist test"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=true,
     )
     is RunSlashCommand(name~, arguments~) else {
@@ -616,7 +613,7 @@ test "enter dispatches unknown slash commands to the handler" {
   guard ui_enter_decision(
       command_specs(),
       composer_with("/doesnotexist"),
-      CompletionState::new(),
+      CompletionState(),
       menu_visible=true,
     )
     is RunSlashCommand(name=bare_name, arguments=bare_args) else {

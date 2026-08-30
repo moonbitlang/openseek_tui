@@ -8,7 +8,7 @@ priv struct VisualRow {
 }
 
 ///|
-fn VisualRow::new(
+fn VisualRow::VisualRow(
   line : LogicLine,
   start~ : @displaytext.TextualPosition,
   end~ : @displaytext.TextualPosition,
@@ -33,7 +33,7 @@ fn wrap_visual_rows(
     let mut start = line.display.start()
     let line_end = line.display.end()
     if start == line_end {
-      rows.push(VisualRow::new(line, start~, end=line_end))
+      rows.push(VisualRow(line, start~, end=line_end))
     } else {
       while start != line_end {
         let column = line.display.display_position(start).column()
@@ -42,7 +42,7 @@ fn wrap_visual_rows(
         if end == start {
           end = line.display.next(start).unwrap_or(line_end)
         }
-        rows.push(VisualRow::new(line, start~, end~))
+        rows.push(VisualRow(line, start~, end~))
         start = end
       }
     }
