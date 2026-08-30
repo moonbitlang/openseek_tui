@@ -16,7 +16,7 @@ testable without a terminal in the loop.
 ## Usage
 
 ```mbt
-let model = @composer.Model::new(max_text_rows=4)
+let model = @composer.Model(max_text_rows=4)
 model.resize(cols=80)         // relay out for the terminal width
 
 model.insert_user_text("!ls") // leading '!' on empty input → Shell mode ("! ")

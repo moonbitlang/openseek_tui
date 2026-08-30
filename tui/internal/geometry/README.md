@@ -13,7 +13,7 @@ the screen, so callers never have to re-validate.
 ## Usage
 
 ```mbt
-let area = @geometry.Geometry::new(top=20, height=4)
+let area = @geometry.Geometry(top=20, height=4)
 area.bottom() // 23  (== top + height - 1)
 ```
 

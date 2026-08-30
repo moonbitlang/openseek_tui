@@ -15,14 +15,14 @@ the rows and width.
 ## Usage
 
 ```mbt
-let line = Line::new([
-  Span::new("error", style=Style::new(foreground=Red)),
-  Span::new(": failed"),
+let line = Line::Line([
+  Span::Span("error", style=Style::Style(foreground=Red)),
+  Span::Span(": failed"),
 ])
-let surface = Surface::new(
+let surface = Surface::Surface(
   width=80,
   rows=[line],
-  cursor=Cursor::new(row=0, col=5),
+  cursor=Cursor::Cursor(row=0, col=5),
 )
 ```
 

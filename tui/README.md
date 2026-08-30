@@ -58,7 +58,7 @@ What you can push onto the screen:
   below it, the transient activity line above it (`None` hides it; it never
   enters the transcript), and the pending input queue.
 
-Tune the session with `with_ui(config=Config::new(esc_timeout_ms=…,
+Tune the session with `with_ui(config=Config::Config(esc_timeout_ms=…,
 composer_max_rows=…), …)`.
 
 ## Key bindings

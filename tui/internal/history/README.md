@@ -18,13 +18,13 @@ Push on submit, then walk back and forth, feeding the current draft in so it can
 be saved and restored at the boundary:
 
 ```mbt
-let history = @history.History::new()
+let history = @history.History()
 
 // On submit: record it (empty text and adjacent duplicates are skipped).
-history.push(@history.Entry::new(model.text(), model.mode()))
+history.push(@history.Entry(model.text(), model.mode()))
 
 // Up / Ctrl-P: recall the previous entry, saving the live draft on the way back.
-match history.previous(@history.Entry::new(model.text(), model.mode())) {
+match history.previous(@history.Entry(model.text(), model.mode())) {
   Some(entry) => model.replace(entry.text(), mode=entry.mode())
   None => () // nothing older
 }
