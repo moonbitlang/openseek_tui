@@ -63,7 +63,6 @@ fn session_items(
     Runtime(notice) if @agent_session.parse_goal_baseline(notice.content())
       is Some(_) => ()
     Runtime(notice) => items.push(runtime_notice_item(notice.content()))
-    Queue(_) => ()
     Summary(summary) => items.push(summary_item(summary))
     Terminal(terminal) =>
       if terminal_item(terminal) is Some(item) {
