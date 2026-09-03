@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/text
+# moonbitlang/openseek_tui/tui/internal/text
 
 This package owns the TUI's input sanitization policy.
 

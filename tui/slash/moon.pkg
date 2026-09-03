@@ -1,5 +1,5 @@
 import {
-  "bobzhang/openseek/tui/completion",
+  "moonbitlang/openseek_tui/tui/completion",
 }
 
 supported_targets = "native"

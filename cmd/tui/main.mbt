@@ -208,24 +208,19 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
 }
 
 ///|
-/// The engine command when `--engine` is unset: the `openseek` automation CLI
-/// that ships next to this `openseek_tui` binary. A path argv0 whose basename is
-/// the TUI's is rewritten to that sibling (see `sibling_engine`); a bare argv0,
-/// or a path whose basename is not `openseek_tui` (a renamed copy), falls back
-/// to PATH lookup — never to argv0 itself, which is this UI and cannot `serve`.
-/// Moon's debug native `tcc -run` path is different: argv0 is the generated C
-/// source and no sibling `.exe` is produced, so re-enter through the engine's
-/// generated TCC response file; it carries the include paths, defines, linked
-/// dylibs, and `-run <source.c>`.
+/// The engine command when `--engine` is unset: the `openseek` automation CLI,
+/// which is a separate module (`bobzhang/openseek`) and a separate binary. A
+/// path argv0 whose basename is the TUI's is rewritten to the sibling next to
+/// it (see `sibling_engine`), which is where an install puts both binaries. A
+/// bare argv0, a path whose basename is not `openseek_tui` (a renamed copy), or
+/// a path inside Moon's build tree (the engine is never built there: it belongs
+/// to the other module) falls back to PATH lookup — never to argv0 itself,
+/// which is this UI and cannot `serve`.
 fn default_engine(args : ArrayView[String]) -> (String, Array[String]) {
   match args {
     [argv0, ..] if argv0.contains("/") || argv0.contains("\\") =>
       match sibling_engine(argv0) {
-        Some(engine_argv0) =>
-          match moon_native_tcc_run_args(engine_argv0) {
-            Some(args_prefix) => ("tcc", args_prefix)
-            None => (engine_argv0, [])
-          }
+        Some(engine_argv0) => (engine_argv0, [])
         None => ("openseek", [])
       }
     _ => ("openseek", [])
@@ -234,14 +229,17 @@ fn default_engine(args : ArrayView[String]) -> (String, Array[String]) {
 
 ///|
 /// The sibling `openseek` engine for a path argv0 of this `openseek_tui`
-/// binary, or `None` when the basename is not the TUI's. Only the basename is
-/// rewritten (`openseek_tui` → `openseek`, keeping a suffix such as `.exe`), so
-/// a parent directory that merely happens to be named `openseek_tui` is left
-/// alone. The one directory rewrite is Moon's build tree, where each executable
-/// lives under its own package directory: the UI is
-/// `…/cmd/openseek_tui/openseek_tui[.exe|.c]` and the engine is
-/// `…/cmd/openseek/openseek[.exe|.c]`.
+/// binary, or `None` when the basename is not the TUI's or the path is inside
+/// Moon's build tree (`_build/native/…`, where `moon run cmd/openseek_tui`
+/// executes the UI: the engine is another module's executable and is never
+/// built there). Only the basename is rewritten (`openseek_tui` → `openseek`,
+/// keeping a suffix such as `.exe`), so a parent directory that merely happens
+/// to be named `openseek_tui` is left alone.
 fn sibling_engine(argv0 : String) -> String? {
+  guard !(argv0.contains("/_build/native/") ||
+    argv0.contains("\\_build\\native\\")) else {
+    return None
+  }
   // The basename follows the last separator of either kind (Windows paths can
   // mix them), so strip at `/` first and then at `\`.
   let base = match argv0.rev_split_once("/") {
@@ -254,26 +252,8 @@ fn sibling_engine(argv0 : String) -> String? {
   }
   guard base.contains("openseek_tui") else { return None }
   let dir = argv0[:argv0.length() - base.length()]
-  let engine_dir = match dir.strip_suffix("cmd/openseek_tui/") {
-    Some(parent) => "\{parent}cmd/openseek/"
-    None =>
-      match dir.strip_suffix("cmd\\openseek_tui\\") {
-        Some(parent) => "\{parent}cmd\\openseek\\"
-        None => "\{dir}"
-      }
-  }
   let engine_base = "\{base}".replace_all(old="openseek_tui", new="openseek")
-  Some("\{engine_dir}\{engine_base}")
-}
-
-///|
-fn moon_native_tcc_run_args(argv0 : String) -> Array[String]? {
-  if argv0.strip_suffix(".c") is Some(stem) &&
-    (argv0.contains("/_build/native/") || argv0.contains("\\_build\\native\\")) {
-    Some(["@\{stem}.rspfile"])
-  } else {
-    None
-  }
+  Some("\{dir}\{engine_base}")
 }
 
 ///|
@@ -388,15 +368,9 @@ pub async fn run(matches : @argparse.Matches) -> Unit {
     println(
       "error: engine '\{config.engine_display()}' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.",
     )
-    println("Pass --engine <path> or install the openseek binary.")
-    // Inside Moon's build tree the sibling engine is a separate executable
-    // package that `moon run cmd/openseek_tui` does not build, so name the fix.
-    if config.engine_display().contains("/_build/native/") ||
-      config.engine_display().contains("\\_build\\native\\") {
-      println(
-        "Build the engine first: `moon build cmd/openseek`, then relaunch the UI.",
-      )
-    }
+    println(
+      "Pass --engine <path> or put the openseek binary on PATH (built from github.com/moonbitlang/openseek, package cmd/openseek).",
+    )
     @sys.exit(1)
   }
   // The UI takes over the terminal, so refuse when stdin/stdout is not a TTY (a
@@ -602,9 +576,17 @@ test "default_engine never spawns this UI: unrecognized argv0 falls back to PATH
     default_engine(["target\\native\\openseek.exe"]),
     ("openseek", []),
   )
+  // Inside Moon's build tree (`moon run cmd/openseek_tui`) the engine is never
+  // a sibling: it is another module's executable, so PATH decides.
   @debug.assert_eq(
     default_engine([
-      "/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.c",
+      "/repo/_build/native/debug/build/moonbitlang/openseek_tui/cmd/openseek_tui/openseek_tui.exe",
+    ]),
+    ("openseek", []),
+  )
+  @debug.assert_eq(
+    default_engine([
+      "C:\\repo\\_build\\native\\release\\build\\moonbitlang\\openseek_tui\\cmd\\openseek_tui\\openseek_tui.exe",
     ]),
     ("openseek", []),
   )
@@ -698,47 +680,5 @@ test "default_engine maps a tui argv0 to the sibling openseek engine" {
   @debug.assert_eq(
     default_engine(["C:\\tools\\openseek_tui\\openseek_tui.exe"]),
     ("C:\\tools\\openseek_tui\\openseek.exe", []),
-  )
-  // Moon's build tree nests each executable under its own package directory,
-  // so there the package directory is rewritten as well.
-  @debug.assert_eq(
-    default_engine([
-      "/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek_tui/openseek_tui.exe",
-    ]),
-    (
-      "/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.exe",
-      [],
-    ),
-  )
-  @debug.assert_eq(
-    default_engine([
-      "/repo/_build/native/release/build/bobzhang/openseek/cmd/openseek_tui/openseek_tui",
-    ]),
-    (
-      "/repo/_build/native/release/build/bobzhang/openseek/cmd/openseek/openseek",
-      [],
-    ),
-  )
-  @debug.assert_eq(
-    default_engine([
-      "/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek_tui/openseek_tui.c",
-    ]),
-    (
-      "tcc",
-      [
-        "@/repo/_build/native/debug/build/bobzhang/openseek/cmd/openseek/openseek.rspfile",
-      ],
-    ),
-  )
-  @debug.assert_eq(
-    default_engine([
-      "C:\\repo\\_build\\native\\debug\\build\\bobzhang\\openseek\\cmd\\openseek_tui\\openseek_tui.c",
-    ]),
-    (
-      "tcc",
-      [
-        "@C:\\repo\\_build\\native\\debug\\build\\bobzhang\\openseek\\cmd\\openseek\\openseek.rspfile",
-      ],
-    ),
   )
 }

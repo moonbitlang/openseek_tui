@@ -1,11 +1,11 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/doc"
+package "moonbitlang/openseek_tui/tui/doc"
 
 import {
-  "bobzhang/openseek/tui/internal/surface",
-  "bobzhang/openseek/tui/style",
   "moonbit-community/displaytext",
   "moonbitlang/core/debug",
+  "moonbitlang/openseek_tui/tui/internal/surface",
+  "moonbitlang/openseek_tui/tui/style",
 }
 
 // Values

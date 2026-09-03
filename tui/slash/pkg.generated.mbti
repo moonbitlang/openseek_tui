@@ -1,9 +1,9 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/slash"
+package "moonbitlang/openseek_tui/tui/slash"
 
 import {
-  "bobzhang/openseek/tui/completion",
   "moonbitlang/core/debug",
+  "moonbitlang/openseek_tui/tui/completion",
 }
 
 // Values

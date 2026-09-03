@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/surface
+# moonbitlang/openseek_tui/tui/internal/surface
 
 This is the **picture format** the TUI passes around — an immutable description
 of one frame, with no terminal and no IO attached. A `Span` is styled text, a

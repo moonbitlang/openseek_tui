@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/history
+# moonbitlang/openseek_tui/tui/internal/history
 
 This is the **shell-style command history** behind the input box: press Up to
 walk back through what you've submitted, Down to come forward, and your

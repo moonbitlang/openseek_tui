@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/completion"
+package "moonbitlang/openseek_tui/tui/completion"
 
 import {
   "moonbitlang/core/debug",

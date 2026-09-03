@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/cmd/tui"
+package "moonbitlang/openseek_tui/cmd/tui"
 
 import {
   "moonbitlang/core/argparse",

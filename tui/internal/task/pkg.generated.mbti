@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/internal/task"
+package "moonbitlang/openseek_tui/tui/internal/task"
 
 import {
   "moonbitlang/async/aqueue",

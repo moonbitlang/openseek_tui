@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/internal/text"
+package "moonbitlang/openseek_tui/tui/internal/text"
 
 import {
   "moonbit-community/displaytext",

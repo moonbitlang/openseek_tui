@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/core
+# moonbitlang/openseek_tui/tui/core
 
 This package is the **vocabulary** of the Agent TUI — the nouns and verbs of a
 conversation, with no rendering or IO attached. When the user submits something

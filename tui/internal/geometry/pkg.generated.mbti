@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/internal/geometry"
+package "moonbitlang/openseek_tui/tui/internal/geometry"
 
 import {
-  "bobzhang/openseek/tui/internal/terminal_size",
+  "moonbitlang/openseek_tui/tui/internal/terminal_size",
 }
 
 // Values

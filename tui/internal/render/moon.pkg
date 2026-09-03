@@ -1,11 +1,11 @@
 import {
-  "bobzhang/openseek/tui/completion",
-  "bobzhang/openseek/tui/core",
-  "bobzhang/openseek/tui/doc",
-  "bobzhang/openseek/tui/internal/composer",
-  "bobzhang/openseek/tui/internal/surface",
-  "bobzhang/openseek/tui/internal/text",
-  "bobzhang/openseek/tui/style",
+  "moonbitlang/openseek_tui/tui/completion",
+  "moonbitlang/openseek_tui/tui/core",
+  "moonbitlang/openseek_tui/tui/doc",
+  "moonbitlang/openseek_tui/tui/internal/composer",
+  "moonbitlang/openseek_tui/tui/internal/surface",
+  "moonbitlang/openseek_tui/tui/internal/text",
+  "moonbitlang/openseek_tui/tui/style",
   "moonbit-community/displaytext",
 }
 

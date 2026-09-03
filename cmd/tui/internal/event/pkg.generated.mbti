@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/cmd/tui/internal/event"
+package "moonbitlang/openseek_tui/cmd/tui/internal/event"
 
 import {
   "bobzhang/openseek/agent_runtime",

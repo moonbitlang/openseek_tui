@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/render
+# moonbitlang/openseek_tui/tui/internal/render
 
 This is where the core layout logic of the input area resides — the view layer
 that decides what the bottom of an Agent TUI (Codex / Claude Code style) looks

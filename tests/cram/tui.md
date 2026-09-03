@@ -1,15 +1,16 @@
 # Verified OpenSeek TUI CLI Documentation
 
 These examples are executed by `moon cram test tests/cram`. The Moon wrapper
-builds the native packages at `cmd/openseek` and `cmd/openseek_tui` and exposes
-their executables on `PATH` as `openseek.exe` and `openseek_tui.exe`.
-`openseek_tui` is the dedicated interactive terminal UI binary; an initial
-prompt is passed with `--prompt` (there is no free-form positional).
+builds the native package at `cmd/openseek_tui` and exposes its executable on
+`PATH` as `openseek_tui.exe`. `openseek_tui` is the dedicated interactive
+terminal UI binary; an initial prompt is passed with `--prompt` (there is no
+free-form positional). The `openseek` engine it spawns is a separate binary from
+the `moonbitlang/openseek` repository, so these examples never launch a real
+engine.
 
 These commands are offline: they exercise only the argument parser and the
 engine-usability preflight, which run before the terminal UI starts, so the
-suite needs no API key, no TTY, and makes no network calls. The live,
-API-backed examples live in [`tests/live/deepseek.md`](../live/deepseek.md).
+suite needs no API key, no TTY, and makes no network calls.
 
 ## Help Banner
 
@@ -86,23 +87,25 @@ missing engine fails fast, before the UI takes over the terminal.
 ```mooncram
 $ env DEEPSEEK=test-key openseek_tui.exe --engine openseek-not-a-real-binary
 error: engine 'openseek-not-a-real-binary' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
-Pass --engine <path> or install the openseek binary.
+Pass --engine <path> or put the openseek binary on PATH (built from github.com/moonbitlang/openseek, package cmd/openseek).
 [1]
 ```
 
-## The Default Engine Is The Sibling `openseek`
+## The Default Engine Is `openseek` On `PATH`
 
 With no `--engine`, `openseek_tui` spawns the `openseek` CLI: the binary beside
-its own when launched by path, otherwise the `openseek` found on `PATH`. The cram
-sandbox exposes the engine only as `openseek.exe`, so symlinking it under the
-canonical name into a scratch directory on `PATH` simulates a real install. The
-default engine's preflight then succeeds and the launch reaches the non-TTY
-guard, proving the `openseek_tui` → `openseek` handoff.
+its own when launched by path, otherwise the `openseek` found on `PATH` (the
+cram sandbox launches the UI via `PATH`, so that is the case here). The engine
+is not part of this module, so a stub that honors the `--help` probe stands in
+for it in a scratch directory on `PATH`. The default engine's preflight then
+succeeds and the launch reaches the non-TTY guard, proving the
+`openseek_tui` → `openseek` handoff.
 
 ```mooncram
 $ sh <<'EOF'
 > bin=$(mktemp -d)
-> ln -s "$(command -v openseek.exe)" "$bin/openseek"
+> printf '#!/bin/sh\nexit 0\n' > "$bin/openseek"
+> chmod +x "$bin/openseek"
 > PATH="$bin:$PATH" env DEEPSEEK=test-key openseek_tui.exe 2>&1
 > rm -rf "$bin"
 > EOF
@@ -118,6 +121,6 @@ prompt path is wired — there is no free-form positional.
 ```mooncram
 $ env DEEPSEEK=test-key openseek_tui.exe --engine does-not-exist --prompt "inspect project"
 error: engine 'does-not-exist' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
-Pass --engine <path> or install the openseek binary.
+Pass --engine <path> or put the openseek binary on PATH (built from github.com/moonbitlang/openseek, package cmd/openseek).
 [1]
 ```

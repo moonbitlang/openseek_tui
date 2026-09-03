@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/style"
+package "moonbitlang/openseek_tui/tui/style"
 
 import {
   "moonbit-community/tty/color",

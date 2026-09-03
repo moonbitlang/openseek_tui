@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: check (stable, native)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up MoonBit (stable)
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- latest
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+
+      - name: Show MoonBit version
+        run: moon version --all
+
+      - name: Update MoonBit package registry
+        run: moon update
+
+      - name: Check formatting
+        run: moon fmt --check
+
+      - name: Check native target
+        run: moon check --target native --deny-warn
+
+      - name: Check generated interfaces
+        # Generated interfaces are toolchain-versioned; reject content drift
+        # and new `.mbti` files, ignoring blank-only formatter drift.
+        run: |
+          moon info
+          untracked_mbti="$(git ls-files --others --exclude-standard -- '*.mbti')"
+          if [ -n "$untracked_mbti" ] ||
+            ! git diff --quiet --ignore-blank-lines -- '*.mbti'; then
+            git status --short -- '*.mbti'
+            git diff --ignore-blank-lines -- '*.mbti'
+            exit 1
+          fi
+
+      - name: Test native target
+        run: moon test --target native
+
+      - name: Verified CLI documentation (cram)
+        run: moon cram test tests/cram

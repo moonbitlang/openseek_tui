@@ -1,6 +1,6 @@
 import {
-  "bobzhang/openseek/tui/doc",
-  "bobzhang/openseek/tui/style",
+  "moonbitlang/openseek_tui/tui/doc",
+  "moonbitlang/openseek_tui/tui/style",
   "moonbit-community/displaytext",
 }
 

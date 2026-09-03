@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/task
+# moonbitlang/openseek_tui/tui/internal/task
 
 This is the **serialization point** for everything the TUI does to the screen.
 Drawing a frame, handling a keystroke, and committing a transcript line all

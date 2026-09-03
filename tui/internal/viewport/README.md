@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/viewport
+# moonbitlang/openseek_tui/tui/internal/viewport
 
 This is where the core layout / rendering logic of the whole Agent TUI lives —
 the bottom-anchored input area with a scrolling transcript above it that you've

@@ -1,9 +1,9 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/internal/surface"
+package "moonbitlang/openseek_tui/tui/internal/surface"
 
 import {
-  "bobzhang/openseek/tui/style",
   "moonbit-community/displaytext",
+  "moonbitlang/openseek_tui/tui/style",
 }
 
 // Values

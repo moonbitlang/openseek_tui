@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/composer
+# moonbitlang/openseek_tui/tui/internal/composer
 
 This is the **text editor** behind the input box — the readline-like editing
 core that turns keystrokes into the text the user submits. If you've wired up

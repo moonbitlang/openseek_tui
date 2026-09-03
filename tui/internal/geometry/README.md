@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/geometry
+# moonbitlang/openseek_tui/tui/internal/geometry
 
 This is the **pure arithmetic half of [`viewport`](../viewport/)** — all the
 "where does the live area go and which rows does a redraw touch" math, with no

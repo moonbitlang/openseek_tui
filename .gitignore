@@ -1,0 +1,13 @@
+.DS_Store
+.vscode/
+_build/
+target/
+.mooncakes/
+
+# Local session state from dogfooding the UI in-repo.
+.openseek/
+.claude/
+
+# A local workspace for developing against an openseek checkout (see README);
+# never the published shape of this module.
+moon.work

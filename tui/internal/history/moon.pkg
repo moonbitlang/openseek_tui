@@ -1,5 +1,5 @@
 import {
-  "bobzhang/openseek/tui/internal/composer",
+  "moonbitlang/openseek_tui/tui/internal/composer",
 }
 
 supported_targets = "native"

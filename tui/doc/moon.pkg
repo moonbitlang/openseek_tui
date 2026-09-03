@@ -1,8 +1,8 @@
 import {
-  "bobzhang/openseek/tui/internal/text",
-  "bobzhang/openseek/tui/internal/surface",
+  "moonbitlang/openseek_tui/tui/internal/text",
+  "moonbitlang/openseek_tui/tui/internal/surface",
   "moonbit-community/displaytext",
-  "bobzhang/openseek/tui/style",
+  "moonbitlang/openseek_tui/tui/style",
 }
 
 supported_targets = "native"

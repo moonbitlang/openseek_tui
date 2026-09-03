@@ -1,8 +1,8 @@
 import {
-  "bobzhang/openseek/tui/internal/geometry",
-  "bobzhang/openseek/tui/internal/terminal_size",
-  "bobzhang/openseek/tui/internal/surface",
-  "bobzhang/openseek/tui/style",
+  "moonbitlang/openseek_tui/tui/internal/geometry",
+  "moonbitlang/openseek_tui/tui/internal/terminal_size",
+  "moonbitlang/openseek_tui/tui/internal/surface",
+  "moonbitlang/openseek_tui/tui/style",
   "moonbit-community/tty",
   "moonbit-community/tty/color",
 }

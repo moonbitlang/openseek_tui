@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui
+# moonbitlang/openseek_tui/tui
 
 This is the terminal controller for an Agent TUI — the top-level package you
 reach for to build something like the Codex or Claude Code interface: a

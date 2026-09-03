@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/cmd/tui/internal/command_context"
+package "moonbitlang/openseek_tui/cmd/tui/internal/command_context"
 
 import {
   "bobzhang/openseek/agent_tool/shell",

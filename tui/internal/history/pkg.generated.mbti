@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "bobzhang/openseek/tui/internal/history"
+package "moonbitlang/openseek_tui/tui/internal/history"
 
 import {
-  "bobzhang/openseek/tui/internal/composer",
+  "moonbitlang/openseek_tui/tui/internal/composer",
 }
 
 // Values

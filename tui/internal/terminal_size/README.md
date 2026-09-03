@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/internal/terminal_size
+# moonbitlang/openseek_tui/tui/internal/terminal_size
 
 This is a one-type, pure value package whose whole job is to make terminal
 dimensions **safe to use without checking**. A reported terminal size can be

@@ -1,4 +1,4 @@
-# bobzhang/openseek/tui/doc
+# moonbitlang/openseek_tui/tui/doc
 
 This is the **styled-text vocabulary** of the TUI — the layer where you describe
 what content should look like before anything is drawn. If you've used a rich
