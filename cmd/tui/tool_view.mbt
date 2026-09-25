@@ -95,7 +95,7 @@ fn compaction_item(summary : String) -> @ui.TranscriptItem {
 /// shell collector; a truncation note is appended when that cap was hit.
 fn command_item(
   command : String,
-  result : Result[@shell.ShellOutput, Error],
+  result : Result[@command_context.ShellOutput, Error],
 ) -> @ui.TranscriptItem {
   match result {
     Ok(result) => {

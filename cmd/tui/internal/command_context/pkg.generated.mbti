@@ -1,12 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "moonbitlang/openseek_tui/cmd/tui/internal/command_context"
 
-import {
-  "bobzhang/openseek/agent_tool/shell",
-}
-
 // Values
-pub fn encode(String, Result[@shell.ShellOutput, Error]) -> String
+pub async fn collect_shell_output(String, cwd? : String, max_output_chars? : Int) -> ShellOutput
+
+pub fn encode(String, Result[ShellOutput, Error]) -> String
 
 pub fn parse(String) -> ShellCommand?
 
@@ -17,6 +15,12 @@ pub struct ShellCommand {
   command : String
   exit : String
   output : Array[String]
+  output_limit_reached : Bool
+}
+
+pub struct ShellOutput {
+  exit_code : Int?
+  text : String
   output_limit_reached : Bool
 }
 

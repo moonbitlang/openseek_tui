@@ -34,6 +34,9 @@ pub(all) struct ToolResultEvent {
 /// queued input.
 pub(all) enum AgentEvent {
   AgentStep
+  // The engine is retrying a model request; any streamed preview belongs to
+  // the abandoned attempt.
+  StreamRetry
   ReasoningDelta(String)
   AssistantDelta(String)
   ReasoningMessage(String)

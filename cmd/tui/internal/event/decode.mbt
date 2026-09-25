@@ -1,5 +1,5 @@
 // Mapping from the engine's typed protocol events to the TUI's `AgentEvent`.
-// Reading lines, skipping blanks, and parsing each as JSON is `bobzhang/jsonl`'s
+// Reading lines, skipping blanks, and parsing each as JSON is `moonbitlang/jsonl`'s
 // job (`@jsonl.each` in `cmd/tui`); `@protocol.parse` turns a parsed value into
 // an `Event`; this module maps that into what the UI actually renders.
 
@@ -27,13 +27,14 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     ReasoningDelta(content~) => Some(ReasoningDelta(content))
     AssistantDelta(content~) => Some(AssistantDelta(content))
     ReasoningMessage(content~) => Some(ReasoningMessage(content))
-    SteerApplied(kind~, content~) =>
+    SteerApplied(kind~, content~, submission_id~) =>
       match kind {
-        "command" => Some(SteerApplied(Command(content)))
-        "notice" => Some(SteerApplied(Notice(content)))
-        _ => Some(SteerApplied(Prompt(content)))
+        "command" => Some(SteerApplied(Command(content.text(), submission_id~)))
+        "notice" => Some(SteerApplied(Notice(content.text())))
+        _ => Some(SteerApplied(Prompt(content, submission_id~)))
       }
-    SteerDropped(content~) => Some(SteerDropped(content))
+    // The TUI renders a dropped steer as text; images have no terminal form.
+    SteerDropped(content~, ..) => Some(SteerDropped(content.text()))
     BackgroundNotice(content~) => Some(BackgroundNotice(content))
     AssistantMessage(content~) => Some(AssistantMessage(content))
     SessionError(error~) => Some(SessionError(error))
@@ -85,6 +86,13 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // dead server is visible in the UI instead of silently yielding no tools.
     // `servers` counts the configuration's entries, not successful contributors
     // — say so, since some may have failed or been skipped.
+    StreamRetry(..) => Some(StreamRetry)
+    // Background jobs and workflow runs have no TUI surface yet.
+    JobChanged(..)
+    | JobsSnapshot(..)
+    | JobStopResult(..)
+    | WorkflowStarted(..)
+    | WorkflowFinished(..) => None
     McpToolsRegistered(servers~, tools~, ..) =>
       Some(
         BackgroundNotice(

@@ -61,8 +61,6 @@ async fn drain_stderr_capped(reader : @process.ReadFromProcess) -> String {
     let remaining = StderrCaptureLimitBytes - buffer.length()
     let max_len = if remaining > 0 { remaining } else { StderrDrainChunkBytes }
     let chunk = reader.read_some(max_len~) catch {
-      error if @async.is_being_cancelled() ||
-        @async.is_cancellation_error(error) => raise error
       // Stop on a genuine read error, but keep the prefix already captured and
       // record the failure so it is surfaced below. `None` ends the loop the
       // same way EOF does.
@@ -155,6 +153,13 @@ fn engine_extra_env(config : AppConfig) -> Map[String, String] {
   if config.max_steps is Some(max_steps) {
     env["OPENSEEK_MAX_STEPS"] = max_steps.to_string()
   }
+  // Explicit flags override any inherited value; unset ones leave it alone.
+  if config.retry_attempts is Some(attempts) {
+    env["OPENSEEK_RETRY_ATTEMPTS"] = attempts.to_string()
+  }
+  if config.retry_backoff_ms is Some(backoff_ms) {
+    env["OPENSEEK_RETRY_BACKOFF_MS"] = backoff_ms.to_string()
+  }
   let api_key_env = match config.model {
     Kimi(_) => "KIMI"
     Glm(_) => "GLM"
@@ -192,82 +197,95 @@ async fn run_agent_task(
   task : String,
   messages : @async.Queue[Msg],
 ) -> Unit {
-  @async.with_task_group(group => {
-    let (reader, child_stdout) = @process.read_from_process()
-    let (stderr_reader, child_stderr) = @process.read_from_process()
-    // Provide a closed stdin pipe so the Windows spawn does not fall back to
-    // GetStdHandle, which returns NULL (not INVALID_HANDLE_VALUE) when the
-    // process has no console.
-    let (child_stdin, stdin_writer) = @process.write_to_process()
-    stdin_writer.close()
-    let child_env = engine_env(config, @env.get_env_vars())
-    let proc = @process.spawn(
-      group,
-      config.engine,
-      // The queued task is already prompt text here; `run` is the engine's
-      // headless one-shot subcommand. Forward the task after a `--` delimiter
-      // so the engine's argparse treats any leading `-`/`--` as the task
-      // positional rather than parsing it as one of its own options (which
-      // would exit/print help and never emit a terminal JSONL event). The
-      // session id is passed explicitly so it cannot leak to nested commands.
-      config.engine_command_args("run", ["--", task]),
-      inherit_env=false,
-      extra_env=child_env,
-      stdin=child_stdin,
-      stdout=child_stdout,
-      stderr=child_stderr,
-    )
-    // Drain the engine's stderr concurrently with stdout. Capturing it (rather
-    // than letting it inherit the terminal) keeps diagnostics from corrupting
-    // the screen `@ui.with_ui` is drawing, and lets us surface them if the
-    // engine dies without a terminal event. The drain is bounded: a misbehaving
-    // engine (crash loop, verbose build log) could write unbounded stderr, so we
-    // keep only a capped prefix in memory while still reading to EOF.
-    // `drain_stderr_capped` folds any read error into its returned text and only
-    // raises on cancellation, which should tear the whole group down — so there
-    // is nothing to swallow here.
-    let stderr_task = group.spawn(no_wait=true) <| () => {
-      drain_stderr_capped(stderr_reader)
-    }
-    let mut saw_terminal = false
-    // A malformed (non-JSON) line raises out of `each`. The only such output is
-    // a runtime crash dump, so rather than surface a parse error we stop reading
-    // and let the exit code below explain the failure. Cancellation is re-raised
-    // to the outer handler so a Ctrl-C still reports `AgentCancelled`.
-    // `each`'s callback is synchronous, so enqueue with `try_put` (the queue
-    // is unbounded, so it never rejects) rather than the async `put`.
-    @jsonl.each(reader, json => {
-      if @event.decode_event(json) is Some(event) {
-        if is_terminal_event(event) {
-          saw_terminal = true
+  // Cancellation (Ctrl-C) bypasses `catch`, so it is observed here: the
+  // wrapped run returns `None` when it was cancelled.
+  let completed = @async.handle_cancellation(() => {
+    @async.with_task_group(group => {
+      let (reader, child_stdout) = @process.read_from_process()
+      let (stderr_reader, child_stderr) = @process.read_from_process()
+      let (child_stdin, stdin_writer) = @process.write_to_process()
+      let child_env = engine_env(config, @env.get_env_vars())
+      let proc = @process.spawn(
+        group,
+        config.engine,
+        // `openseek run` prints text for a person, so the per-prompt engine
+        // speaks the same JSONL `serve` protocol as the persistent one: one
+        // `prompt` command on stdin, then EOF, which `serve` answers by running
+        // that turn and exiting. The task travels as JSON data, so a leading
+        // `-` can never be read as an engine option.
+        config.engine_serve_args(),
+        inherit_env=false,
+        extra_env=child_env,
+        stdin=child_stdin,
+        stdout=child_stdout,
+        stderr=child_stderr,
+      )
+      // Send the prompt from a sibling task while stdout and stderr drain
+      // below: a prompt larger than the pipe buffer, written before anything
+      // reads the engine's output, could deadlock against an engine that
+      // fills its own output first.
+      group.spawn_bg(no_wait=true) <| () => {
+        defer stdin_writer.close()
+        stdin_writer.write(
+          (
+            Prompt(content=Content([Text(task)]), submission_id=None) :
+            @protocol.Command)
+          .to_json()
+          .stringify() +
+          "\n",
+        )
+      }
+      // Drain the engine's stderr concurrently with stdout. Capturing it (rather
+      // than letting it inherit the terminal) keeps diagnostics from corrupting
+      // the screen `@ui.with_ui` is drawing, and lets us surface them if the
+      // engine dies without a terminal event. The drain is bounded: a misbehaving
+      // engine (crash loop, verbose build log) could write unbounded stderr, so we
+      // keep only a capped prefix in memory while still reading to EOF.
+      // `drain_stderr_capped` folds any read error into its returned text and only
+      // raises on cancellation, which should tear the whole group down — so there
+      // is nothing to swallow here.
+      let stderr_task = group.spawn(no_wait=true) <| () => {
+        drain_stderr_capped(stderr_reader)
+      }
+      let mut saw_terminal = false
+      // A malformed (non-JSON) line raises out of `each`. The only such output is
+      // a runtime crash dump, so rather than surface a parse error we stop reading
+      // and let the exit code below explain the failure. A Ctrl-C bypasses this
+      // `catch`; `handle_cancellation` above reports it as `AgentCancelled`.
+      // `each`'s callback is synchronous, so enqueue with `try_put` (the queue
+      // is unbounded, so it never rejects) rather than the async `put`.
+      @jsonl.each(reader, json => {
+        if @event.decode_event(json) is Some(event) {
+          if is_terminal_event(event) {
+            saw_terminal = true
+          }
+          messages.try_put(AgentProgress(run_id~, event)) |> ignore
         }
-        messages.try_put(AgentProgress(run_id~, event)) |> ignore
+      }) catch {
+        // Protocol violation: stop reading and kill the child instead of waiting
+        // for it. If the engine keeps writing past the bad line, nobody is
+        // draining its stdout, so a plain `proc.wait()` could deadlock on a full
+        // pipe. `cancel()` sends SIGTERM (then SIGKILL) so `wait()` returns.
+        _ => proc.cancel()
+      }
+      // We are done reading; close the read end so the child sees EOF/EPIPE
+      // rather than blocking on a pipe we no longer drain.
+      reader.close()
+      let code = proc.wait()
+      if !saw_terminal {
+        // The engine produced no terminal event. Its stderr is the only clue to
+        // why (a crash, a network/API error), so fold it into the reported error.
+        let diagnostics = stderr_task.wait().trim()
+        messages.put(
+          AgentProgress(run_id~, engine_exit_without_result(code, diagnostics)),
+        )
       }
     }) catch {
-      error if @async.is_being_cancelled() ||
-        @async.is_cancellation_error(error) => raise error
-      // Protocol violation: stop reading and kill the child instead of waiting
-      // for it. If the engine keeps writing past the bad line, nobody is
-      // draining its stdout, so a plain `proc.wait()` could deadlock on a full
-      // pipe. `cancel()` sends SIGTERM (then SIGKILL) so `wait()` returns.
-      _ => proc.cancel()
+      error => messages.put(AgentFailed(run_id~, error))
     }
-    // We are done reading; close the read end so the child sees EOF/EPIPE
-    // rather than blocking on a pipe we no longer drain.
-    reader.close()
-    let code = proc.wait()
-    if !saw_terminal {
-      // The engine produced no terminal event. Its stderr is the only clue to
-      // why (a crash, a network/API error), so fold it into the reported error.
-      let diagnostics = stderr_task.wait().trim()
-      messages.put(
-        AgentProgress(run_id~, engine_exit_without_result(code, diagnostics)),
-      )
-    }
-  }) catch {
-    error if @async.is_being_cancelled() || @async.is_cancellation_error(error) =>
-      messages.put(AgentCancelled(run_id~))
-    error => messages.put(AgentFailed(run_id~, error))
+  })
+  if completed is None {
+    messages.try_put(AgentCancelled(run_id~)) |> ignore
   }
 }
 
@@ -275,7 +293,7 @@ async fn run_agent_task(
 /// Run a `!` shell command locally and post its result to the message loop.
 ///
 /// Unlike a prompt, a shell command is the TUI's own responsibility: it runs it
-/// through the agent's shell execution (`@shell.collect_shell_output`, which
+/// through the agent's shell execution (`@command_context.collect_shell_output`, which
 /// picks `sh`/`pwsh` per platform and captures merged output but skips the
 /// agent-only command policy), then posts the raw result back to the message
 /// loop for transcript rendering and shell-style text handoff. A Ctrl-C cancels
@@ -285,22 +303,23 @@ async fn run_shell_command(
   messages : @async.Queue[Msg],
   run_id? : Int,
 ) -> Unit {
-  let result : Result[@shell.ShellOutput, Error] = try
-    @shell.collect_shell_output(command)
-  catch {
-    error if @async.is_being_cancelled() || @async.is_cancellation_error(error) => {
-      // A foreground command owns the run slot: report its cancellation so the
-      // command line survives as a "(cancelled)" card. A background command
-      // (no run id) leaves no trace — it never owned the slot and its agent
-      // turn reports its own interruption.
-      if run_id is Some(id) {
-        messages.put(CommandCancelled(command~, run_id=id))
+  let outcome : Result[@command_context.ShellOutput, Error]? = @async.handle_cancellation(() => {
+      try @command_context.collect_shell_output(command) catch {
+        error => Err(error)
+      } noraise {
+        output => Ok(output)
       }
-      return
+    },
+  )
+  guard outcome is Some(result) else {
+    // Cancelled (cancellation bypasses `catch`). A foreground command owns the
+    // run slot: report its cancellation so the command line survives as a
+    // "(cancelled)" card. A background command (no run id) leaves no trace —
+    // it never owned the slot and its agent turn reports its own interruption.
+    if run_id is Some(id) {
+      messages.try_put(CommandCancelled(command~, run_id=id)) |> ignore
     }
-    error => Err(error)
-  } noraise {
-    output => Ok(output)
+    return
   }
   messages.put(CommandResult(command~, run_id~, result))
 }
@@ -381,6 +400,9 @@ fn handle_agent_event(
       state.step_response = None
       state.streaming_preview = None
     }
+    // The retried request streams from scratch: drop what the abandoned
+    // attempt previewed, so its deltas are not joined onto it.
+    StreamRetry => state.streaming_preview = None
     ReasoningDelta(text) =>
       if text != "" && !(state.streaming_preview is Some(Response(_))) {
         let current = match state.streaming_preview {
@@ -414,13 +436,14 @@ fn handle_agent_event(
     // Prompt steering took effect at the engine's step boundary: echo the input
     // into the transcript at its true conversational position, the way the
     // model actually saw it.
-    SteerApplied(Prompt(text)) => {
+    SteerApplied(Prompt(content, ..)) => {
+      let text = content.text()
       confirm_pending_steer(state, text)
       cmds.push(AppendItem(Input(Prompt(text))))
     }
     // Command context is already rendered as a local shell result; its applied
     // event is only a delivery acknowledgment.
-    SteerApplied(Command(_)) => ()
+    SteerApplied(Command(_, ..)) => ()
     // A notice (e.g. a background job finishing) originates in the engine, not
     // from a pending local steer, so just render it in the transcript — except
     // goal markers, whose steer path is transport: the user-facing
@@ -685,7 +708,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
                   // Acknowledge immediately: the transcript echo only comes
                   // at the step boundary, but the user pressed Enter *now*.
                   state.pending_steers.push(text)
-                  cmds.push(SteerAgent(Prompt(text)))
+                  cmds.push(SteerAgent(prompt_steer(text)))
                 }
               // No input echo for a `!` command: the result card already shows
               // `$ command`, and that card is the only form persisted, so an
@@ -770,7 +793,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       // entirely: the command still runs and renders locally, it is just not
       // handed to the model.
       if state.config.engine_mode is Serve {
-        cmds.push(SteerAgent(Command(text)))
+        cmds.push(SteerAgent(Command(text, submission_id=None)))
       }
     }
     // The steer never reached a turn; the text would otherwise vanish
@@ -969,6 +992,8 @@ fn drain_test_state() -> State {
     model: Deepseek(V4Pro),
     cwd: ".",
     max_steps: Some(10),
+    retry_attempts: None,
+    retry_backoff_ms: None,
     thinking: Max,
     session_id: SessionId("test"),
     session_root: ".openseek",
@@ -1031,14 +1056,20 @@ test "engine configuration puts supported placement in argv" {
   let glm_env = engine_extra_env({ ..config, model: Glm(G53), })
   assert_true(glm_env.get("GLM") == Some(config.api_key))
   assert_true(glm_env.get("DEEPSEEK") is None)
-  @debug.assert_eq(config.engine_command_args("run", ["--", "task"]), [
-    "run", "--session=test", "--session-root=.openseek", "--dir=.", "--", "task",
+  // Retry overrides reach the engine only when set.
+  assert_true(env.get("OPENSEEK_RETRY_ATTEMPTS") is None)
+  let retry_env = engine_extra_env({
+    ..config,
+    retry_attempts: Some(1),
+    retry_backoff_ms: Some(250),
+  })
+  assert_true(retry_env.get("OPENSEEK_RETRY_ATTEMPTS") == Some("1"))
+  assert_true(retry_env.get("OPENSEEK_RETRY_BACKOFF_MS") == Some("250"))
+  @debug.assert_eq(config.engine_serve_args(), [
+    "serve", "--session=test", "--session-root=.openseek", "--dir=.",
   ])
   @debug.assert_eq(
-    { ..config, engine_args_prefix: ["@engine.rsp"], }.engine_command_args(
-      "serve",
-      [],
-    ),
+    { ..config, engine_args_prefix: ["@engine.rsp"], }.engine_serve_args(),
     [
       "@engine.rsp", "serve", "--session=test", "--session-root=.openseek", "--dir=.",
     ],
@@ -1049,16 +1080,15 @@ test "engine configuration puts supported placement in argv" {
       cwd: "--workspace",
       session_id: SessionId("--resume"),
       session_root: "--store",
-    }.engine_command_args("serve", []),
+    }.engine_serve_args(),
     [
       "serve", "--session=--resume", "--session-root=--store", "--dir=--workspace",
     ],
   )
+  // One-shot drives the same `serve` protocol, one prompt per process.
   @debug.assert_eq(
-    { ..config, engine_mode: OneShot, }.engine_command_args("run", [
-      "--", "task",
-    ]),
-    ["run", "--session=test", "--session-root=.openseek", "--", "task"],
+    { ..config, engine_mode: OneShot, }.engine_serve_args(),
+    config.engine_serve_args(),
   )
 }
 
@@ -1387,10 +1417,10 @@ test "steering a running agent sends a steer command" {
   assert_eq(state.queued.length(), 0)
   assert_eq(start_agent_count(cmds), 0)
   assert_eq(error_item_count(cmds), 0)
-  guard cmds is [SteerAgent(Prompt(text))] else {
+  guard cmds is [SteerAgent(Prompt(content, ..))] else {
     fail("expected a steer command")
   }
-  assert_eq(text, "b")
+  assert_eq(content.text(), "b")
   assert_true(state.run is Running(_))
 
   // A shell command runs locally in the background; its output is sent as
@@ -1418,7 +1448,7 @@ test "a background shell command result sends command context" {
     state,
     CommandResult(command="ls", run_id=None, Err(Failure::Failure("boom"))),
   )
-  guard cmds is [AppendItem(_), SteerAgent(Command(text))] else {
+  guard cmds is [AppendItem(_), SteerAgent(Command(text, ..))] else {
     fail("expected command transcript item and command steer")
   }
   assert_true(text.contains("<user_shell_command>"))
@@ -1518,7 +1548,7 @@ test "a completed shell command is persisted as an idle user message" {
   // A spawn failure still renders a command card (not a bare error), so the
   // `$ ls` line survives now that the live input echo is gone — matching the
   // `$ ls (failed)` card resume reconstructs from the persisted context.
-  guard cmds is [AppendItem(ToolCall(_)), SteerAgent(Command(text))] else {
+  guard cmds is [AppendItem(ToolCall(_)), SteerAgent(Command(text, ..))] else {
     fail("expected a command card and command steer")
   }
   assert_true(text.contains("<user_shell_command>"))
@@ -1612,7 +1642,10 @@ test "a sent steer is acknowledged until the engine settles it" {
   // The engine confirms: acknowledgment clears, transcript echo appends.
   let _ = update(
     state,
-    AgentProgress(run_id=state.run_id, SteerApplied(Prompt("make it rhyme"))),
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(prompt_steer("make it rhyme")),
+    ),
   )
   assert_eq(state.pending_steers.length(), 0)
   assert_eq(pending_steer_segment(state.pending_steers).length(), 0)
@@ -1674,7 +1707,10 @@ test "a steer_applied event echoes the input into the transcript" {
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
   let cmds = update(
     state,
-    AgentProgress(run_id=state.run_id, SteerApplied(Prompt("make it rhyme"))),
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(prompt_steer("make it rhyme")),
+    ),
   )
   guard cmds is [AppendItem(Input(Prompt(text)))] else {
     fail("expected the steered input echoed as a transcript item")
@@ -1692,7 +1728,7 @@ test "a command steer_applied event is only a delivery acknowledgment" {
     state,
     AgentProgress(
       run_id=state.run_id,
-      SteerApplied(Command("<user_shell_command>")),
+      SteerApplied(Command("<user_shell_command>", submission_id=None)),
     ),
   )
   assert_eq(cmds.length(), 0)
@@ -1727,10 +1763,79 @@ fn append_items(
 }
 
 ///|
+/// Cancellation bypasses `catch` under async 0.22, so these two check that a
+/// Ctrl-C is still reported: the handlers moved to `handle_cancellation`.
+async test "a cancelled foreground shell command reports its cancellation" {
+  let messages : @async.Queue[Msg] = Queue(kind=Unbounded)
+  @async.with_task_group(group => {
+    let task = group.spawn(() => {
+      run_shell_command("sleep 10", messages, run_id=7)
+    })
+    @async.sleep(200)
+    task.cancel()
+  })
+  guard messages.try_get() is Some(CommandCancelled(command~, run_id=7)) else {
+    fail("expected CommandCancelled")
+  }
+  assert_eq(command, "sleep 10")
+}
+
+///|
+#cfg(not(platform="windows"))
+async test "a cancelled oneshot engine run reports its cancellation" {
+  let messages : @async.Queue[Msg] = Queue(kind=Unbounded)
+  // An engine that never answers: `sh -c "sleep 10"` ignores the serve
+  // arguments appended after the prefix.
+  let config = {
+    ..drain_test_state().config,
+    engine: "sh",
+    engine_args_prefix: ["-c", "sleep 10", "engine"],
+    engine_mode: OneShot,
+  }
+  @async.with_task_group(group => {
+    let task = group.spawn(() => run_agent_task(config, 3, "task", messages))
+    @async.sleep(200)
+    task.cancel()
+  })
+  guard messages.try_get() is Some(AgentCancelled(run_id=3)) else {
+    fail("expected AgentCancelled")
+  }
+}
+
+///|
+#cfg(not(platform="windows"))
+async test "a oneshot engine gets a prompt larger than a pipe buffer" {
+  let messages : @async.Queue[Msg] = Queue(kind=Unbounded)
+  // An engine that fills stderr past a pipe buffer before it reads stdin,
+  // then answers once it has the whole prompt line.
+  let script =
+    #|head -c 200000 /dev/zero >&2
+    #|IFS= read -r line
+    #|printf '{"event":"agent_finished","answer":"%s"}\n' "${#line}"
+  let config = {
+    ..drain_test_state().config,
+    engine: "sh",
+    engine_args_prefix: ["-c", script, "engine"],
+    engine_mode: OneShot,
+  }
+  let task = "x".repeat(200000)
+  @async.with_timeout(20000, () => run_agent_task(config, 4, task, messages))
+  guard messages.try_get()
+    is Some(AgentProgress(run_id=4, AgentFinished(length))) else {
+    fail("expected the engine's answer")
+  }
+  // The engine read the whole JSON `prompt` command as one line.
+  let sent = (
+    Prompt(content=Content([Text(task)]), submission_id=None) :
+    @protocol.Command)
+  assert_eq(length, sent.to_json().stringify().length().to_string())
+}
+
+///|
 async test "a shell command runs locally and posts its output" {
   let messages = @async.Queue(kind=Unbounded)
   // `echo` is the same on POSIX `sh` and Windows `pwsh`, so the platform shell
-  // `@shell.collect_shell_output` picks runs this on either.
+  // `@command_context.collect_shell_output` picks runs this on either.
   run_shell_command("echo hello", messages, run_id=1)
   // The only message is the local command result: a completed tool item titled
   // with the command, its stdout as a dimmed detail line. Nothing is sent to the
@@ -1888,6 +1993,32 @@ async test "a shell command runs locally and posts its output" {
       #|)
     ),
   )
+}
+
+///|
+test "a stream retry drops the abandoned attempt's preview" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let items : Array[@ui.TranscriptItem] = []
+  append_items(
+    state,
+    { "event": "assistant_delta", "content": "half an ans" },
+    items,
+  )
+  append_items(
+    state,
+    {
+      "event": "stream_retry",
+      "attempt": 1,
+      "max_attempts": 3,
+      "reason": "connection reset",
+    },
+    items,
+  )
+  assert_true(state.streaming_preview is None)
+  append_items(state, { "event": "assistant_delta", "content": "Hello" }, items)
+  assert_true(state.streaming_preview is Some(Response("Hello")))
+  assert_eq(items.length(), 0)
 }
 
 ///|

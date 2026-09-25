@@ -1,5 +1,7 @@
 import {
-  "bobzhang/openseek/agent_tool/shell",
+  "moonbitlang/async",
+  "moonbitlang/async/process",
+  "moonbitlang/core/encoding/utf8",
 }
 
 import {

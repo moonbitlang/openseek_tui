@@ -14,7 +14,7 @@ pub fn tui_ui_options() -> Array[@argparse.OptionArg] {
       "engine-mode",
       long="engine-mode",
       default_values=["serve"],
-      about="Engine protocol: serve (one persistent, steerable process) or oneshot (spawn per prompt, for replay engines).",
+      about="Engine lifetime: serve (one persistent, steerable process) or oneshot (one serve process per prompt, for replay engines).",
     ),
     OptionArg(
       "prompt",
@@ -193,6 +193,16 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
         Some(@cli.parse_positive_int(input, "--max-steps"))
       _ => None
     },
+    retry_attempts: match matches {
+      { values: { "retry-attempts": [input, ..], .. }, .. } =>
+        Some(@cli.parse_positive_int(input, "--retry-attempts"))
+      _ => None
+    },
+    retry_backoff_ms: match matches {
+      { values: { "retry-backoff-ms": [input, ..], .. }, .. } =>
+        Some(@cli.parse_positive_int(input, "--retry-backoff-ms"))
+      _ => None
+    },
     // Parsed eagerly so a typo fails at launch with a CLI error instead of
     // inside the first turn's engine run.
     thinking: @deepseek.ThinkingMode::parse(thinking_input),
@@ -209,7 +219,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
 
 ///|
 /// The engine command when `--engine` is unset: the `openseek` automation CLI,
-/// which is a separate module (`bobzhang/openseek`) and a separate binary. A
+/// which is a separate module (`moonbitlang/openseek`) and a separate binary. A
 /// path argv0 whose basename is the TUI's is rewritten to the sibling next to
 /// it (see `sibling_engine`), which is where an install puts both binaries. A
 /// bare argv0, a path whose basename is not `openseek_tui` (a renamed copy), or
@@ -499,6 +509,32 @@ test "cli accepts an initial prompt and max steps" {
   )
   assert_true(initial_task(parsed) == Some("inspect project"))
   assert_true(parse_config(parsed).max_steps is Some(5))
+}
+
+///|
+test "cli parses the retry overrides" {
+  let parsed = cli_command().parse(
+    argv=["--retry-attempts", "1", "--retry-backoff-ms", "250"],
+    env={ "DEEPSEEK": "test-key" },
+  )
+  let config = parse_config(parsed)
+  assert_true(config.retry_attempts is Some(1))
+  assert_true(config.retry_backoff_ms is Some(250))
+  let defaults = parse_config(
+    cli_command().parse(argv=[], env={ "DEEPSEEK": "test-key" }),
+  )
+  assert_true(defaults.retry_attempts is None)
+  let _ = parse_config(
+    cli_command().parse(argv=["--retry-attempts", "0"], env={
+      "DEEPSEEK": "test-key",
+    }),
+  ) catch {
+    error => {
+      assert_true("\{error}".contains("--retry-attempts"))
+      return
+    }
+  }
+  fail("a zero --retry-attempts was accepted")
 }
 
 ///|
