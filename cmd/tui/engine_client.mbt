@@ -70,7 +70,7 @@ async fn[G] EngineClient::start(
   let proc = @process.spawn(
     group,
     self.config.engine,
-    self.config.engine_command_args("serve", []),
+    self.config.engine_serve_args(),
     inherit_env=false,
     extra_env=child_env,
     stdin=child_stdin,
@@ -149,7 +149,7 @@ async fn[G] EngineClient::start(
           // A command context's delivery ack. The output is already rendered as
           // a local card and the engine appended it synchronously, so there is
           // nothing to do — in particular, do not echo it like a prompt steer.
-          SteerApplied(Command(_)) => ()
+          SteerApplied(Command(_, ..)) => ()
           // The engine reports this when a command-context append failed; surface
           // it so the lost output is not silent.
           AgentError(_) as failure => {
@@ -180,8 +180,6 @@ async fn[G] EngineClient::start(
         }
       }
     }) catch {
-      error if @async.is_being_cancelled() ||
-        @async.is_cancellation_error(error) => raise error
       // Protocol violation (a non-JSON line is a crash dump): stop reading
       // and kill the engine so `wait` below returns and reports it.
       _ => proc.cancel()
@@ -247,8 +245,6 @@ async fn EngineClient::send(
     return
   }
   live.writer.write("\{command.stringify()}\n") catch {
-    error if @async.is_being_cancelled() || @async.is_cancellation_error(error) =>
-      raise error
     error => {
       self.live = None
       self.messages.put(AgentFailed(run_id~, error))
@@ -286,8 +282,6 @@ async fn[G] EngineClient::prompt(
 ) -> Unit {
   if self.live is None {
     self.start(group) catch {
-      error if @async.is_being_cancelled() ||
-        @async.is_cancellation_error(error) => raise error
       error => {
         self.messages.put(AgentFailed(run_id~, error))
         return
@@ -297,7 +291,9 @@ async fn[G] EngineClient::prompt(
   self.open_run(
     run_id,
     // The TUI never reconciles a delivery by id, so its prompts are untagged.
-    (Prompt(text~, submission_id=None) : @protocol.Command).to_json(),
+    (
+      Prompt(content=Content([Text(text)]), submission_id=None) :
+      @protocol.Command).to_json(),
   )
 }
 
@@ -313,8 +309,6 @@ async fn[G] EngineClient::live_for(
 ) -> EngineProcess? {
   if self.live is None {
     self.start(group) catch {
-      error if @async.is_being_cancelled() ||
-        @async.is_cancellation_error(error) => raise error
       error => {
         self.messages.put(
           EngineSessionError("failed to start engine for \{what}: \{error}"),
@@ -335,6 +329,24 @@ async fn[G] EngineClient::live_for(
 }
 
 ///|
+/// Deliver prompt steering to the open run, or report it dropped when no run
+/// is open to take it.
+async fn EngineClient::steer_prompt(
+  self : EngineClient,
+  content : @protocol.Content,
+  submission_id~ : String?,
+) -> Unit {
+  match self.live {
+    Some(live) if live.run_open =>
+      self.send(
+        live.latest_run,
+        (Steer(kind=Prompt, content~, submission_id~) : @protocol.Command).to_json(),
+      )
+    _ => self.messages.put(SteerDropped(content.text()))
+  }
+}
+
+///|
 /// Send typed model-visible input to the serve engine. Prompt steering is only
 /// deliverable to an open run; command context may start the long-lived engine
 /// so an idle session can append it without opening a model turn.
@@ -346,20 +358,16 @@ async fn[G] EngineClient::steer(
   match input {
     // A `Notice` is engine-internal (a tool pushing a completion notice); it is
     // not something the TUI sends, but route it like a prompt for completeness.
-    Prompt(text) | Notice(text) =>
-      match self.live {
-        Some(live) if live.run_open =>
-          self.send(
-            live.latest_run,
-            (Steer(kind=Prompt, text~) : @protocol.Command).to_json(),
-          )
-        _ => self.messages.put(SteerDropped(text))
-      }
-    Command(text) => {
+    Prompt(content, submission_id~) =>
+      self.steer_prompt(content, submission_id~)
+    Notice(text) => self.steer_prompt(Content([Text(text)]), submission_id=None)
+    Command(text, submission_id~) => {
       guard self.live_for(group, "command context") is Some(live) else {
         return
       }
-      let command : Json = (Steer(kind=Command, text~) : @protocol.Command).to_json()
+      let command : Json = (
+        Steer(kind=Command, content=Content([Text(text)]), submission_id~) :
+        @protocol.Command).to_json()
       // Delivery here is fire-and-forget by design. The serve protocol's
       // contract is that every accepted command context is answered with
       // exactly one terminal ack — `steer_applied` (persisted) or
@@ -382,8 +390,6 @@ async fn[G] EngineClient::steer(
       // cosmetic and recoverable: the command is simply missing on resume as if
       // never run (the user saw it live and can re-run it); nothing is corrupted.
       live.writer.write("\{command.stringify()}\n") catch {
-        error if @async.is_being_cancelled() ||
-          @async.is_cancellation_error(error) => raise error
         error => {
           self.live = None
           self.messages.put(
@@ -420,8 +426,6 @@ async fn[G] EngineClient::goal(
   // write itself fails.
   live.pending_goal_acks.push(goal)
   live.writer.write("\{command.stringify()}\n") catch {
-    error if @async.is_being_cancelled() || @async.is_cancellation_error(error) =>
-      raise error
     error => {
       if live.pending_goal_acks.search(goal) is Some(index) {
         live.pending_goal_acks.remove(index) |> ignore

@@ -89,7 +89,6 @@ async fn Ui::read_tty_events(self : Ui) -> Unit {
         self.events.close()
         return
       }
-      error if @async.is_being_cancelled() => raise error
       error => {
         self.put_event_result(Err(error))
         self.events.close()
@@ -97,7 +96,6 @@ async fn Ui::read_tty_events(self : Ui) -> Unit {
       }
     }
     let event = self.commands.wait(() => self.handle_tty_event(tty_event)) catch {
-      error if @async.is_being_cancelled() => raise error
       error => {
         self.put_event_result(Err(error))
         self.events.close()

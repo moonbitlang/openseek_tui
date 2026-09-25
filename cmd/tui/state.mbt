@@ -5,6 +5,10 @@ priv struct AppConfig {
   model : @deepseek.Model
   cwd : String
   max_steps : Int?
+  // Model-request retry overrides, forwarded to the engine. `None` leaves the
+  // engine's own default (or an inherited `OPENSEEK_RETRY_*` value) in place.
+  retry_attempts : Int?
+  retry_backoff_ms : Int?
   thinking : @deepseek.ThinkingMode
   // The durable session every prompt of this TUI run converses in. The engine
   // is spawned fresh per prompt, so context only carries between prompts
@@ -26,25 +30,18 @@ priv struct AppConfig {
 }
 
 ///|
-fn AppConfig::engine_command_args(
-  self : AppConfig,
-  command : String,
-  args : ArrayView[String],
-) -> Array[String] {
-  let all = self.engine_args_prefix.copy()
-  all.push(command)
-  // Session placement is part of both engine protocols. Serve engines speak
-  // the full OpenSeek CLI, so pass workspace placement explicitly there too;
-  // one-shot replay engines follow the older protocol and inherit the TUI's
-  // process cwd instead. Attach every value so a leading `-` is data, not a
-  // second option.
-  all.push("--session=\{self.session_id.value()}")
-  all.push("--session-root=\{self.session_root}")
-  if self.engine_mode is Serve {
-    all.push("--dir=\{self.cwd}")
-  }
-  all.append(args)
-  all
+/// The engine's `serve` argv. Both engine modes speak `serve` (one-shot just
+/// sends a single prompt and closes stdin), so both get the full placement:
+/// session and workspace. Every value is attached so a leading `-` is data,
+/// not a second option.
+fn AppConfig::engine_serve_args(self : AppConfig) -> Array[String] {
+  [
+    ..self.engine_args_prefix,
+    "serve",
+    "--session=\{self.session_id.value()}",
+    "--session-root=\{self.session_root}",
+    "--dir=\{self.cwd}",
+  ]
 }
 
 ///|
@@ -61,9 +58,9 @@ fn AppConfig::engine_display(self : AppConfig) -> String {
 ///|
 /// How the TUI talks to its engine. `Serve` (the default) keeps one
 /// persistent `serve` process per session — warm watchers, steering,
-/// polite cancel. `OneShot` spawns the engine once per prompt with the task
-/// as an argument: the escape hatch for replay or custom engines that only
-/// speak the original protocol; steering is unavailable there.
+/// polite cancel. `OneShot` spawns a `serve` engine once per prompt, sends
+/// that one prompt and closes stdin: the escape hatch for replay or custom
+/// engines that answer one prompt per process; steering is unavailable there.
 priv enum EngineMode {
   Serve
   OneShot
@@ -214,7 +211,7 @@ priv enum Msg {
   CommandResult(
     command~ : String,
     run_id~ : Int?,
-    Result[@shell.ShellOutput, Error]
+    Result[@command_context.ShellOutput, Error]
   )
   // A foreground `!` command cancelled by Ctrl-C before it produced a result.
   // It has no output to render or hand to the model, but the command line must
@@ -296,4 +293,11 @@ priv enum Cmd {
   // enough, so kill the engine process outright.
   KillEngine
   Quit
+}
+
+///|
+/// A typed prompt steer as the TUI sends it: text only, and untagged, since
+/// the TUI never reconciles a delivery by id.
+fn prompt_steer(text : String) -> @agent_runtime.SteerInput {
+  Prompt(Content([Text(text)]), submission_id=None)
 }

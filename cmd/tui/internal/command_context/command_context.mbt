@@ -41,10 +41,7 @@ pub struct ShellCommand {
 /// envelope stored as durable user context. A successful run carries its exit
 /// code and captured output (with truncation metadata when the cap was hit); a
 /// command that could not be run carries the `error running shell:` diagnostic.
-pub fn encode(
-  command : String,
-  result : Result[@shell.ShellOutput, Error],
-) -> String {
+pub fn encode(command : String, result : Result[ShellOutput, Error]) -> String {
   let result_text = match result {
     Ok(result) => shell_result_text(result)
     Err(error) => "error running shell: \{error}"
@@ -99,7 +96,7 @@ fn exit_header(exit_code : Int?) -> String {
 }
 
 ///|
-fn shell_result_text(result : @shell.ShellOutput) -> String {
+fn shell_result_text(result : ShellOutput) -> String {
   if result.output_limit_reached {
     let shown_chars = result.text.char_length()
     (

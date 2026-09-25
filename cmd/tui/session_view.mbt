@@ -2,7 +2,7 @@
 fn session_tool_item(result : @agent_session.ToolResult) -> @ui.TranscriptItem {
   let event : @event.ToolResultEvent = {
     name: result.tool_name(),
-    content: result.content(),
+    content: result.content().text(),
     is_error: result.is_error(),
   }
   tool_item(event)
@@ -27,8 +27,11 @@ fn terminal_item(terminal : @agent_session.TurnTerminal) -> @ui.TranscriptItem? 
   match terminal {
     Finished(answer) if !answer.is_blank() => Some(Response(answer))
     Finished(_) => None
+    // Rendered as its notice, as when yields were saved as `finished`.
+    ContextYield(notice) => Some(Response(notice))
     Aborted(reason) => Some(Error("aborted: \{reason}"))
     Interrupted(reason) => Some(Error("interrupted: \{reason}"))
+    MaxStepsExhausted => Some(Error(@agent_session.MaxStepsExhaustedMessage))
     Failed(message) => Some(Error(message))
   }
 }
@@ -40,9 +43,9 @@ fn session_items(
   let items : Array[@ui.TranscriptItem] = []
   match item {
     User(message) =>
-      match command_text_item(message.content()) {
+      match command_text_item(message.content().text()) {
         Some(item) => items.push(item)
-        None => items.push(Input(Prompt(message.content())))
+        None => items.push(Input(Prompt(message.content().text())))
       }
     Assistant(message) => {
       if message.reasoning_content() is Some(reasoning) && !reasoning.is_blank() {
@@ -135,7 +138,8 @@ test "session items project to transcript items" {
     #|_build
     #|</result>
     #|</user_shell_command>
-  guard session_items(User(UserMessage("hello"))) is [Input(Prompt(text))] else {
+  guard session_items(User(UserMessage(Content([Text("hello")]))))
+    is [Input(Prompt(text))] else {
     fail("expected input")
   }
   assert_eq(text, "hello")
@@ -143,13 +147,27 @@ test "session items project to transcript items" {
     fail("expected response")
   }
   assert_eq(answer, "done")
+  // A yield renders its notice and step exhaustion its error, as they did
+  // when older logs saved them as `finished` and `failed`.
+  guard session_items(Terminal(ContextYield("[context ceiling] go on")))
+    is [Response(notice)] else {
+    fail("expected yield notice")
+  }
+  assert_eq(notice, "[context ceiling] go on")
+  guard session_items(Terminal(MaxStepsExhausted)) is [Error(message)] else {
+    fail("expected max-steps error")
+  }
+  assert_eq(message, "max steps exhausted")
   guard session_items(
-      Tool(ToolResult(tool_call_id="call_1", tool_name="read", content="ok")),
+      Tool(
+        ToolResult(tool_call_id="call_1", tool_name="read", content=[Text("ok")]),
+      ),
     )
     is [ToolCall(_)] else {
     fail("expected tool")
   }
-  guard session_items(User(UserMessage(shell_context))) is [ToolCall(_)] else {
+  guard session_items(User(UserMessage(Content([Text(shell_context)]))))
+    is [ToolCall(_)] else {
     fail("expected command user message to render as a tool")
   }
   guard session_items(
@@ -163,7 +181,7 @@ test "session items project to transcript items" {
 ///|
 test "session history renders an assistant final answer once" {
   let session = @agent_session.Session(SessionId("reasoning"), system_prompt="")
-    .append(User(UserMessage("question")))
+    .append(User(UserMessage(Content([Text("question")]))))
     .append(Assistant(AssistantMessage("answer")))
     .append(Terminal(Finished("answer")))
   let items = session_transcript_items(session)
@@ -175,7 +193,7 @@ test "session history renders an assistant final answer once" {
 ///|
 test "session history still renders a reasoning-bearing final answer once" {
   let session = @agent_session.Session(SessionId("reasoning"), system_prompt="")
-    .append(User(UserMessage("question")))
+    .append(User(UserMessage(Content([Text("question")]))))
     .append(
       Assistant(
         AssistantMessage("answer", reasoning_content="consider the question"),

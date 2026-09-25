@@ -1,7 +1,7 @@
 ///|
 #cfg(not(platform="windows"))
 async test "encode follows shell tool output fields on Unix" {
-  let output = @shell.collect_shell_output("printf %s 'abc'")
+  let output = @command_context.collect_shell_output("printf %s 'abc'")
   let expected =
     #|<user_shell_command>
     #|<command>
@@ -13,7 +13,7 @@ async test "encode follows shell tool output fields on Unix" {
     #|</result>
     #|</user_shell_command>
   assert_eq(@command_context.encode("printf %s 'abc'", Ok(output)), expected)
-  let truncated = @shell.collect_shell_output(
+  let truncated = @command_context.collect_shell_output(
     "printf %s 'abcdef'",
     max_output_chars=3,
   )
@@ -40,7 +40,9 @@ async test "encode follows shell tool output fields on Unix" {
 ///|
 #cfg(platform="windows")
 async test "encode follows shell tool output fields on Windows" {
-  let output = @shell.collect_shell_output("[Console]::Out.Write('abc')")
+  let output = @command_context.collect_shell_output(
+    "[Console]::Out.Write('abc')",
+  )
   let expected =
     #|<user_shell_command>
     #|<command>
@@ -55,7 +57,7 @@ async test "encode follows shell tool output fields on Windows" {
     @command_context.encode("[Console]::Out.Write('abc')", Ok(output)),
     expected,
   )
-  let truncated = @shell.collect_shell_output(
+  let truncated = @command_context.collect_shell_output(
     "[Console]::Out.Write('abcdef')",
     max_output_chars=3,
   )

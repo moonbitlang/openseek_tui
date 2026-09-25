@@ -1,14 +1,13 @@
 import {
-  "bobzhang/openseek_protocol" @protocol,
-  "bobzhang/jsonl",
-  "bobzhang/openseek/agent_runtime",
-  "bobzhang/openseek/agent_session",
-  "bobzhang/openseek/agent_session/store",
-  "bobzhang/openseek/agent_tool/shell",
+  "moonbitlang/openseek_protocol" @protocol,
+  "moonbitlang/jsonl",
+  "moonbitlang/openseek/agent_runtime",
+  "moonbitlang/openseek/agent_session",
+  "moonbitlang/openseek/agent_session/store",
   "moonbitlang/openseek_tui/cmd/tui/internal/command_context",
   "moonbitlang/openseek_tui/cmd/tui/internal/event",
-  "bobzhang/openseek/deepseek",
-  "bobzhang/openseek/cli",
+  "moonbitlang/openseek/deepseek",
+  "moonbitlang/openseek/cli",
   "moonbitlang/openseek_tui/tui" @ui,
   "moonbitlang/openseek_tui/tui/doc",
   "moonbitlang/openseek_tui/tui/style",
@@ -26,7 +25,7 @@ import {
 }
 
 import {
-  "bobzhang/openseek/testkit/filesystem" @vfs,
+  "moonbitlang/openseek/testkit/filesystem" @vfs,
 } for "wbtest"
 
 warnings = "+missing_doc+test_unqualified_package+unnecessary_annotation+unnecessary_view_op+ambiguous_range_direction+unqualified_local_using"

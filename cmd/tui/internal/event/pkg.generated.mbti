@@ -2,7 +2,7 @@
 package "moonbitlang/openseek_tui/cmd/tui/internal/event"
 
 import {
-  "bobzhang/openseek/agent_runtime",
+  "moonbitlang/openseek/agent_runtime",
 }
 
 // Values
@@ -13,6 +13,7 @@ pub fn decode_event(Json) -> AgentEvent?
 // Types and methods
 pub(all) enum AgentEvent {
   AgentStep
+  StreamRetry
   ReasoningDelta(String)
   AssistantDelta(String)
   ReasoningMessage(String)

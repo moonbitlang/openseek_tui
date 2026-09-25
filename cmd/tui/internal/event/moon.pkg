@@ -1,8 +1,7 @@
 import {
-  "bobzhang/openseek/agent_runtime",
-  "bobzhang/openseek/cli",
-  "bobzhang/openseek_protocol" @protocol,
-  "moonbitlang/core/json",
+  "moonbitlang/openseek/agent_runtime",
+  "moonbitlang/openseek/cli",
+  "moonbitlang/openseek_protocol" @protocol,
 }
 
 warnings = "+missing_doc+test_unqualified_package+unnecessary_annotation+unnecessary_view_op+ambiguous_range_direction+unqualified_local_using"

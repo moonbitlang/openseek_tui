@@ -867,11 +867,13 @@ test "a due loop defers behind a prompt steer racing the turn's terminal" {
   // still ran) with the terminal event behind it having already cleared
   // pending_steers: the steer is about to bounce off the closed turn, so the
   // fire must wait rather than jump ahead of the user's unsettled text.
-  let steering : Array[Cmd] = [SteerAgent(Prompt("user text"))]
+  let steering : Array[Cmd] = [SteerAgent(prompt_steer("user text"))]
   scheduler_maybe_fire(state, input_idle=true, steering)
   assert_eq(start_agent_count(steering), 0)
   // A command-context steer keeps the designed ordering: fire after it.
-  let command_context : Array[Cmd] = [SteerAgent(Command("ls output"))]
+  let command_context : Array[Cmd] = [
+    SteerAgent(Command("ls output", submission_id=None)),
+  ]
   scheduler_maybe_fire(state, input_idle=true, command_context)
   assert_eq(start_agent_count(command_context), 1)
 }

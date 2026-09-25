@@ -11,8 +11,8 @@ turn.
 The UI runs no agent code itself. The engine is the separate `openseek` binary
 from the [moonbitlang/openseek](https://github.com/moonbitlang/openseek)
 repository; this module depends on that repository's published module
-(`bobzhang/openseek` on mooncakes) for the agent, session, and provider
-packages, and on `bobzhang/openseek_protocol` for the wire contract.
+(`moonbitlang/openseek` on mooncakes) for the agent, session, and provider
+packages, and on `moonbitlang/openseek_protocol` for the wire contract.
 
 ## Running it
 
@@ -22,7 +22,7 @@ You need two binaries: `openseek` (the engine) and `openseek_tui` (this UI).
 # 1. The engine, from the openseek repository.
 git clone https://github.com/moonbitlang/openseek && cd openseek
 moon build --release cmd/openseek
-cp _build/native/release/build/bobzhang/openseek/cmd/openseek/openseek.exe ~/.moon/bin/openseek
+cp _build/native/release/build/moonbitlang/openseek/cmd/openseek/openseek.exe ~/.moon/bin/openseek
 
 # 2. This UI.
 git clone https://github.com/moonbitlang/openseek_tui && cd openseek_tui
@@ -77,7 +77,7 @@ moon info                          # regenerate pkg.generated.mbti after API cha
 line (help banner, argument errors, the engine preflight). It runs offline and
 needs no API key.
 
-**Developing against a local openseek checkout.** `bobzhang/openseek` comes
+**Developing against a local openseek checkout.** `moonbitlang/openseek` comes
 from mooncakes by default. To build against an unpublished checkout, add a
 `moon.work` (git-ignored) that lists this module and the checkout's workspace
 members:
@@ -92,7 +92,7 @@ members = [
 ]
 ```
 
-The editor members are needed because `bobzhang/openseek` itself depends on
+The editor members are needed because `moonbitlang/openseek` itself depends on
 `moonbitlang/editor`, and the checkout's editor is the one it is developed
 against.
 

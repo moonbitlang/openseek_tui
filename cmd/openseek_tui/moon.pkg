@@ -1,6 +1,6 @@
 import {
   "moonbitlang/openseek_tui/cmd/tui",
-  "bobzhang/openseek/cli",
+  "moonbitlang/openseek/cli",
   "moonbitlang/async",
   "moonbitlang/async/stdio",
   "moonbitlang/core/env",
