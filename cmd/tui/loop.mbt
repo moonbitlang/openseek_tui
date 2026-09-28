@@ -479,12 +479,17 @@ fn handle_agent_event(
     // the outer run stays busy throughout.
     SubrunStarted(kind~, label~) =>
       cmds.push(AppendItem(Input(Notice("\{kind} subrun started: \{label}"))))
-    SubrunFinished(status~, steps~) =>
+    // Counts that are not the child's own account are not shown as if they
+    // were: unknown spend is not zero spend.
+    SubrunFinished(status~, steps~, unaccounted~) => {
+      let spend = match unaccounted {
+        Some(_) => "usage unknown"
+        None => "\{steps} step(s)"
+      }
       cmds.push(
-        AppendItem(
-          Input(Notice("subrun finished: \{status} (\{steps} step(s))")),
-        ),
+        AppendItem(Input(Notice("subrun finished: \{status} (\{spend})"))),
       )
+    }
     AgentFinished(answer) => {
       let already_appended = state.step_response is Some(response) &&
         response == answer
@@ -1732,6 +1737,46 @@ test "a command steer_applied event is only a delivery acknowledgment" {
     ),
   )
   assert_eq(cmds.length(), 0)
+  assert_true(state.run is Running(_))
+}
+
+///|
+test "a finished subrun shows its steps, or unknown usage when unaccounted" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let items : Array[@ui.TranscriptItem] = []
+  append_items(
+    state,
+    {
+      "event": "subrun_finished",
+      "id": "sr-1",
+      "status": "captured",
+      "steps": 12,
+      "prompt_tokens": 34000,
+      "completion_tokens": 5600,
+    },
+    items,
+  )
+  append_items(
+    state,
+    {
+      "event": "subrun_finished",
+      "id": "sr-2",
+      "status": "cancelled",
+      "steps": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "unaccounted": "the sub-run was cancelled before its result was read",
+    },
+    items,
+  )
+  guard items is [Input(Notice(accounted)), Input(Notice(unknown))] else {
+    fail("expected two subrun notices")
+  }
+  assert_eq(accounted, "subrun finished: captured (12 step(s))")
+  // Unknown spend is not zero spend: no "0 step(s)".
+  assert_eq(unknown, "subrun finished: cancelled (usage unknown)")
+  // Neither ends the outer run.
   assert_true(state.run is Running(_))
 }
 
