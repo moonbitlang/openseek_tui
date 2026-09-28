@@ -4,9 +4,9 @@ These examples are executed by `moon cram test tests/cram`. The Moon wrapper
 builds the native package at `cmd/openseek_tui` and exposes its executable on
 `PATH` as `openseek_tui.exe`. `openseek_tui` is the dedicated interactive
 terminal UI binary; an initial prompt is passed with `--prompt` (there is no
-free-form positional). The `openseek` engine it spawns is a separate binary from
-the `moonbitlang/openseek` repository, so these examples never launch a real
-engine.
+free-form positional). The engine it spawns is, by default, the pinned
+`moonbitlang/openseek` release run through `moonx`; these examples stand in a
+stub for it and never launch a real engine.
 
 These commands are offline: they exercise only the argument parser and the
 engine-usability preflight, which run before the terminal UI starts, so the
@@ -34,7 +34,7 @@ Options:
   --thinking <thinking>                  Model thinking mode: no, high, or max; GLM maps no to low effort. [env: OPENSEEK_THINKING] [default: high]
   --session <session>                    Create or resume this durable session id.
   --session-root <session-root>          Directory containing durable OpenSeek sessions. [default: .openseek]
-  --engine <engine>                      Agent engine to spawn (default: the openseek CLI binary); reads its JSONL event stream from stdout.
+  --engine <engine>                      Agent engine command to spawn instead of the default (moonx running the pinned moonbitlang/openseek release); it must speak the serve JSONL protocol.
   --prompt <prompt>                      Initial prompt to send once the UI opens.
 ```
 
@@ -81,36 +81,70 @@ stdout-empty
 
 ## The Engine Is Probed Before The UI Starts
 
-The UI spawns the `openseek` engine (by default the `openseek` CLI binary, in
-`serve` mode; override with `--engine`) and probes it with `--help` first. A
+The UI spawns its engine in `serve` mode and probes it with `--help` first. A
 missing engine fails fast, before the UI takes over the terminal.
 
 ```mooncram
 $ env DEEPSEEK=test-key openseek_tui.exe --engine openseek-not-a-real-binary
 error: engine 'openseek-not-a-real-binary' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
-Pass --engine <path> or put the openseek binary on PATH (built from github.com/moonbitlang/openseek, package cmd/openseek).
+Pass --engine <path> to a working openseek binary, or omit --engine to run the pinned release through moonx.
 [1]
 ```
 
-## The Default Engine Is `openseek` On `PATH`
+## The Default Engine Is The Pinned Release Under `moonx`
 
-With no `--engine`, `openseek_tui` spawns the `openseek` CLI: the binary beside
-its own when launched by path, otherwise the `openseek` found on `PATH` (the
-cram sandbox launches the UI via `PATH`, so that is the case here). The engine
-is not part of this module, so a stub that honors the `--help` probe stands in
-for it in a scratch directory on `PATH`. The default engine's preflight then
-succeeds and the launch reaches the non-TTY guard, proving the
-`openseek_tui` → `openseek` handoff.
+With no `--engine`, `openseek_tui` runs `moonx moonbitlang/openseek@<version>`,
+the release this module is compiled against, so the engine always speaks the
+protocol the UI expects. A stub `moonx` on `PATH` records its arguments: the
+preflight passes the pinned coordinate plus `--help`, then the launch reaches
+the non-TTY guard, proving the handoff.
 
 ```mooncram
 $ sh <<'EOF'
 > bin=$(mktemp -d)
-> printf '#!/bin/sh\nexit 0\n' > "$bin/openseek"
-> chmod +x "$bin/openseek"
+> printf '#!/bin/sh\necho "$@" >> "%s/args"\nexit 0\n' "$bin" > "$bin/moonx"
+> chmod +x "$bin/moonx"
 > PATH="$bin:$PATH" env DEEPSEEK=test-key openseek_tui.exe 2>&1
+> cat "$bin/args"
 > rm -rf "$bin"
 > EOF
 error: the interactive UI needs a terminal; run a headless task with `openseek run "…"` (or `openseek serve` for the JSONL protocol).
+moonbitlang/openseek@0.5.0 --help
+```
+
+Without `moonx` on `PATH` (no MoonBit toolchain), the preflight says so.
+
+```mooncram
+$ sh <<'EOF'
+> ui=$(command -v openseek_tui.exe)
+> env -i PATH=/usr/bin:/bin DEEPSEEK=test-key "$ui"
+> EOF
+error: engine 'moonx moonbitlang/openseek@0.5.0' is not usable: `moonx` was not found on PATH.
+The default engine runs through moonx, part of the MoonBit toolchain; its first launch downloads the pinned openseek release, so it needs network access to mooncakes.io.
+Install MoonBit, or pass --engine <path> to an openseek binary.
+[1]
+```
+
+When `moonx` runs but cannot produce the engine (say, the first launch is
+offline), the tail of its output is quoted so the cause is visible.
+
+```mooncram
+$ sh <<'EOF'
+> bin=$(mktemp -d)
+> printf '#!/bin/sh\necho "fetching moonbitlang/openseek@0.5.0"\necho "error: failed to download from mooncakes.io" >&2\nexit 1\n' > "$bin/moonx"
+> chmod +x "$bin/moonx"
+> PATH="$bin:$PATH" env DEEPSEEK=test-key openseek_tui.exe
+> status=$?
+> rm -rf "$bin"
+> exit $status
+> EOF
+error: engine 'moonx moonbitlang/openseek@0.5.0' is not usable: `--help` exited with code 1.
+Its output ended with:
+  fetching moonbitlang/openseek@0.5.0
+  error: failed to download from mooncakes.io
+The default engine runs through moonx, part of the MoonBit toolchain; its first launch downloads the pinned openseek release, so it needs network access to mooncakes.io.
+Install MoonBit, or pass --engine <path> to an openseek binary.
+[1]
 ```
 
 ## An Initial Prompt Comes From `--prompt`
@@ -122,6 +156,6 @@ prompt path is wired — there is no free-form positional.
 ```mooncram
 $ env DEEPSEEK=test-key openseek_tui.exe --engine does-not-exist --prompt "inspect project"
 error: engine 'does-not-exist' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.
-Pass --engine <path> or put the openseek binary on PATH (built from github.com/moonbitlang/openseek, package cmd/openseek).
+Pass --engine <path> to a working openseek binary, or omit --engine to run the pinned release through moonx.
 [1]
 ```

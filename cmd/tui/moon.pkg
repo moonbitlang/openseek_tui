@@ -25,6 +25,7 @@ import {
 }
 
 import {
+  "moonbitlang/async/fs",
   "moonbitlang/openseek/testkit/filesystem" @vfs,
 } for "wbtest"
 

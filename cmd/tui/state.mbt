@@ -11,20 +11,19 @@ priv struct AppConfig {
   retry_backoff_ms : Int?
   thinking : @deepseek.ThinkingMode
   // The durable session every prompt of this TUI run converses in. The engine
-  // is spawned fresh per prompt, so context only carries between prompts
-  // through the session store: without one, each prompt would be an amnesiac
-  // one-shot. `--session` picks (or resumes) an id; otherwise one is generated
-  // per launch.
+  // process may exit between prompts (and is respawned on the next one), so
+  // context only survives through the session store. `--session` picks (or
+  // resumes) an id; otherwise one is generated per launch.
   session_id : @agent_session.SessionId
   session_root : String
   // The agent engine the TUI spawns and reads JSONL events from. Defaults to
-  // this running `openseek` binary re-launched as the engine (see
-  // `default_engine`), so it never spawns a stale, separately-built engine;
-  // override (e.g. to a recorded-stream replayer) with `--engine`.
+  // `moonx` running the pinned `moonbitlang/openseek` release (see
+  // `default_engine`); override (e.g. to a local build or a recorded-stream
+  // replayer) with `--engine`.
   engine : String
-  // Extra arguments inserted before the engine subcommand. Usually empty; when
-  // the TUI itself was launched through Moon's debug native `tcc -run` path, the
-  // engine is `tcc @<generated-response-file> <subcommand>`.
+  // Arguments inserted between the engine command and its subcommand: the
+  // `moonbitlang/openseek@<version>` coordinate for the default `moonx` engine,
+  // empty for an explicit `--engine`.
   engine_args_prefix : Array[String]
 }
 
