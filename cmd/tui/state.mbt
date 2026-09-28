@@ -26,14 +26,12 @@ priv struct AppConfig {
   // the TUI itself was launched through Moon's debug native `tcc -run` path, the
   // engine is `tcc @<generated-response-file> <subcommand>`.
   engine_args_prefix : Array[String]
-  engine_mode : EngineMode
 }
 
 ///|
-/// The engine's `serve` argv. Both engine modes speak `serve` (one-shot just
-/// sends a single prompt and closes stdin), so both get the full placement:
-/// session and workspace. Every value is attached so a leading `-` is data,
-/// not a second option.
+/// The engine's `serve` argv, with the full placement: session and
+/// workspace. Every value is attached so a leading `-` is data, not a second
+/// option.
 fn AppConfig::engine_serve_args(self : AppConfig) -> Array[String] {
   [
     ..self.engine_args_prefix,
@@ -52,26 +50,6 @@ fn AppConfig::engine_display(self : AppConfig) -> String {
     let parts = [self.engine]
     parts.append(self.engine_args_prefix)
     parts.join(" ")
-  }
-}
-
-///|
-/// How the TUI talks to its engine. `Serve` (the default) keeps one
-/// persistent `serve` process per session — warm watchers, steering,
-/// polite cancel. `OneShot` spawns a `serve` engine once per prompt, sends
-/// that one prompt and closes stdin: the escape hatch for replay or custom
-/// engines that answer one prompt per process; steering is unavailable there.
-priv enum EngineMode {
-  Serve
-  OneShot
-}
-
-///|
-fn EngineMode::parse(input : String) -> EngineMode raise {
-  match input {
-    "serve" => Serve
-    "oneshot" => OneShot
-    other => fail("unknown engine mode: \{other} (use serve or oneshot)")
   }
 }
 

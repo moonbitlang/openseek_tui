@@ -35,7 +35,6 @@ Options:
   --session <session>                    Create or resume this durable session id.
   --session-root <session-root>          Directory containing durable OpenSeek sessions. [default: .openseek]
   --engine <engine>                      Agent engine to spawn (default: the openseek CLI binary); reads its JSONL event stream from stdout.
-  --engine-mode <engine-mode>            Engine lifetime: serve (one persistent, steerable process) or oneshot (one serve process per prompt, for replay engines). [default: serve]
   --prompt <prompt>                      Initial prompt to send once the UI opens.
 ```
 

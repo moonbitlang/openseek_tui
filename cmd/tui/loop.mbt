@@ -180,116 +180,6 @@ fn engine_env(
 }
 
 ///|
-/// Spawn the agent engine for one input and stream its JSONL stdout into the
-/// message loop.
-///
-/// The engine is a separate process (`config.engine`, default `openseek` or
-/// `tcc @<generated-response-file>` under Moon's debug native runner): it runs
-/// the task and writes one JSON event per line to stdout. `@jsonl.each`
-/// reads those lines, skips blanks, and parses each as JSON; we map the value to
-/// an `AgentEvent` and forward it as `AgentProgress`. If the engine closes its
-/// stream without a terminal event (it crashed, or exited before answering), we
-/// synthesize an `AgentError` so the loop never hangs waiting for a result that
-/// will not come.
-async fn run_agent_task(
-  config : AppConfig,
-  run_id : Int,
-  task : String,
-  messages : @async.Queue[Msg],
-) -> Unit {
-  // Cancellation (Ctrl-C) bypasses `catch`, so it is observed here: the
-  // wrapped run returns `None` when it was cancelled.
-  let completed = @async.handle_cancellation(() => {
-    @async.with_task_group(group => {
-      let (reader, child_stdout) = @process.read_from_process()
-      let (stderr_reader, child_stderr) = @process.read_from_process()
-      let (child_stdin, stdin_writer) = @process.write_to_process()
-      let child_env = engine_env(config, @env.get_env_vars())
-      let proc = @process.spawn(
-        group,
-        config.engine,
-        // `openseek run` prints text for a person, so the per-prompt engine
-        // speaks the same JSONL `serve` protocol as the persistent one: one
-        // `prompt` command on stdin, then EOF, which `serve` answers by running
-        // that turn and exiting. The task travels as JSON data, so a leading
-        // `-` can never be read as an engine option.
-        config.engine_serve_args(),
-        inherit_env=false,
-        extra_env=child_env,
-        stdin=child_stdin,
-        stdout=child_stdout,
-        stderr=child_stderr,
-      )
-      // Send the prompt from a sibling task while stdout and stderr drain
-      // below: a prompt larger than the pipe buffer, written before anything
-      // reads the engine's output, could deadlock against an engine that
-      // fills its own output first.
-      group.spawn_bg(no_wait=true) <| () => {
-        defer stdin_writer.close()
-        stdin_writer.write(
-          (
-            Prompt(content=Content([Text(task)]), submission_id=None) :
-            @protocol.Command)
-          .to_json()
-          .stringify() +
-          "\n",
-        )
-      }
-      // Drain the engine's stderr concurrently with stdout. Capturing it (rather
-      // than letting it inherit the terminal) keeps diagnostics from corrupting
-      // the screen `@ui.with_ui` is drawing, and lets us surface them if the
-      // engine dies without a terminal event. The drain is bounded: a misbehaving
-      // engine (crash loop, verbose build log) could write unbounded stderr, so we
-      // keep only a capped prefix in memory while still reading to EOF.
-      // `drain_stderr_capped` folds any read error into its returned text and only
-      // raises on cancellation, which should tear the whole group down — so there
-      // is nothing to swallow here.
-      let stderr_task = group.spawn(no_wait=true) <| () => {
-        drain_stderr_capped(stderr_reader)
-      }
-      let mut saw_terminal = false
-      // A malformed (non-JSON) line raises out of `each`. The only such output is
-      // a runtime crash dump, so rather than surface a parse error we stop reading
-      // and let the exit code below explain the failure. A Ctrl-C bypasses this
-      // `catch`; `handle_cancellation` above reports it as `AgentCancelled`.
-      // `each`'s callback is synchronous, so enqueue with `try_put` (the queue
-      // is unbounded, so it never rejects) rather than the async `put`.
-      @jsonl.each(reader, json => {
-        if @event.decode_event(json) is Some(event) {
-          if is_terminal_event(event) {
-            saw_terminal = true
-          }
-          messages.try_put(AgentProgress(run_id~, event)) |> ignore
-        }
-      }) catch {
-        // Protocol violation: stop reading and kill the child instead of waiting
-        // for it. If the engine keeps writing past the bad line, nobody is
-        // draining its stdout, so a plain `proc.wait()` could deadlock on a full
-        // pipe. `cancel()` sends SIGTERM (then SIGKILL) so `wait()` returns.
-        _ => proc.cancel()
-      }
-      // We are done reading; close the read end so the child sees EOF/EPIPE
-      // rather than blocking on a pipe we no longer drain.
-      reader.close()
-      let code = proc.wait()
-      if !saw_terminal {
-        // The engine produced no terminal event. Its stderr is the only clue to
-        // why (a crash, a network/API error), so fold it into the reported error.
-        let diagnostics = stderr_task.wait().trim()
-        messages.put(
-          AgentProgress(run_id~, engine_exit_without_result(code, diagnostics)),
-        )
-      }
-    }) catch {
-      error => messages.put(AgentFailed(run_id~, error))
-    }
-  })
-  if completed is None {
-    messages.try_put(AgentCancelled(run_id~)) |> ignore
-  }
-}
-
-///|
 /// Run a `!` shell command locally and post its result to the message loop.
 ///
 /// Unlike a prompt, a shell command is the TUI's own responsibility: it runs it
@@ -536,14 +426,11 @@ fn handle_agent_event(
       cmds.push(AppendItem(compaction_item(summary)))
       state.finish_run()
     }
-    // The serve client posts goal updates untagged (EngineGoalUpdated) so
-    // idle confirmations survive the stale-run guard — but ONESHOT mode
-    // forwards engine events run-tagged, so this path is live there: the
-    // mirror must follow (a goal(met) mid-run would otherwise leave /goal
-    // reporting a cleared goal until restart).
-    GoalUpdated(goal) => apply_goal_update(state, goal, cmds)
-    // Likewise routed untagged by the client (as background notices).
-    GoalContinue(_) | GoalBudgetExhausted => ()
+    // Routed untagged by the engine client — goal updates as
+    // `EngineGoalUpdated`, so idle confirmations survive the stale-run guard,
+    // and the auto-continue lifecycle as background notices — so they never
+    // arrive run-tagged.
+    GoalUpdated(_) | GoalContinue(_) | GoalBudgetExhausted => ()
     // Terminal for the run but not task success: surface the continuation
     // guidance the yield answer carries. For a scheduled /loop run the next
     // fire IS the continuation, so a ceiling yield settles the schedule as
@@ -580,14 +467,6 @@ fn handle_compact_command(
 ) -> Unit {
   if !arguments.is_blank() {
     cmds.push(AppendItem(Error("/compact does not accept arguments")))
-    return
-  }
-  // Compaction is a command on the persistent serve engine; a oneshot engine is
-  // spawned per prompt and has no session to summarize between turns.
-  if state.config.engine_mode is OneShot {
-    cmds.push(
-      AppendItem(Error("Compaction is not supported by a oneshot engine.")),
-    )
     return
   }
   if !(state.run is Idle) {
@@ -693,16 +572,6 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
                 ),
               ),
             )
-          } else if state.config.engine_mode is OneShot {
-            // One-shot engines have no command channel into a running
-            // process — the original pre-serve limitation.
-            cmds.push(
-              AppendItem(
-                Error(
-                  "Steering is not supported by a oneshot engine. Press Tab to queue this input.",
-                ),
-              ),
-            )
           } else {
             match input {
               Prompt(text) =>
@@ -792,14 +661,9 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       } else {
         state.background_commands = (state.background_commands - 1).max(0)
       }
-      // Serve appends the `!` output as durable user-shell context at its
-      // current session boundary. OneShot has no live engine session to append
-      // to, and its command-context path is retired ahead of removing OneShot
-      // entirely: the command still runs and renders locally, it is just not
-      // handed to the model.
-      if state.config.engine_mode is Serve {
-        cmds.push(SteerAgent(Command(text, submission_id=None)))
-      }
+      // The engine appends the `!` output as durable user-shell context at
+      // its current session boundary.
+      cmds.push(SteerAgent(Command(text, submission_id=None)))
     }
     // The steer never reached a turn; the text would otherwise vanish
     // silently. Run state is untouched — the run's own death report (or
@@ -896,26 +760,15 @@ async fn[G] run_message_loop(
     for cmd in cmds {
       match cmd {
         AppendItem(item) => ui.append_item(item)
-        StartAgent(run_id~, task) =>
-          match state.config.engine_mode {
-            Serve => {
-              // An engine turn has no local task. A queued prompt can start
-              // in the same update that finished a `!` command (state never
-              // passes through Idle, so the cleanup below never runs); clear
-              // the stale handle here or the next Ctrl-C would cancel a dead
-              // command task instead of the engine turn.
-              running_task = None
-              engine.prompt(group, run_id, task)
-            }
-            // The escape hatch for engines that only speak the original
-            // protocol: one process per prompt, cancelled like a local task.
-            OneShot =>
-              running_task = Some(
-                group.spawn(no_wait=true) <| () => {
-                  run_agent_task(state.config, run_id, task, messages)
-                },
-              )
-          }
+        StartAgent(run_id~, task) => {
+          // An engine turn has no local task. A queued prompt can start in
+          // the same update that finished a `!` command (state never passes
+          // through Idle, so the cleanup below never runs); clear the stale
+          // handle here or the next Ctrl-C would cancel a dead command task
+          // instead of the engine turn.
+          running_task = None
+          engine.prompt(group, run_id, task)
+        }
         // A foreground command (run_id present) owns the cancellable run slot:
         // spawn it and stash the task so Cancel/Kill can reach it. A background
         // command (run_id absent) runs alongside a live agent turn and must stay
@@ -1004,17 +857,6 @@ fn drain_test_state() -> State {
     session_root: ".openseek",
     engine: "openseek",
     engine_args_prefix: [],
-    engine_mode: Serve,
-  })
-}
-
-///|
-fn drain_oneshot_test_state() -> State {
-  State({
-    ..drain_test_state().config,
-    engine: "./replayer",
-    engine_args_prefix: [],
-    engine_mode: OneShot,
   })
 }
 
@@ -1089,11 +931,6 @@ test "engine configuration puts supported placement in argv" {
     [
       "serve", "--session=--resume", "--session-root=--store", "--dir=--workspace",
     ],
-  )
-  // One-shot drives the same `serve` protocol, one prompt per process.
-  @debug.assert_eq(
-    { ..config, engine_mode: OneShot, }.engine_serve_args(),
-    config.engine_serve_args(),
   )
 }
 
@@ -1260,18 +1097,6 @@ test "compact slash command rejects arguments and pending work" {
   handle_compact_command(queued_state, "", queued_cmds)
   assert_eq(error_item_count(queued_cmds), 1)
   assert_eq(compact_session_count(queued_cmds), 0)
-}
-
-///|
-test "compact slash command is unavailable on a oneshot engine" {
-  let state = State::State({
-    ..drain_test_state().config,
-    engine_mode: OneShot,
-  })
-  let cmds = update(state, UiInput(SlashCommand(name="compact", arguments="")))
-  assert_eq(error_item_count(cmds), 1)
-  assert_eq(compact_session_count(cmds), 0)
-  assert_true(state.run is Idle)
 }
 
 ///|
@@ -1464,22 +1289,6 @@ test "a background shell command result sends command context" {
 }
 
 ///|
-test "oneshot engines reject steering" {
-  let state = drain_oneshot_test_state()
-  let _ = update(state, UiInput(Steer(Prompt("a"))))
-  assert_true(state.run is Running(_))
-  // No command channel into a one-shot process: steering errors instead of
-  // emitting a steer command.
-  let cmds = update(state, UiInput(Steer(Prompt("b"))))
-  assert_eq(error_item_count(cmds), 1)
-  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
-  let _ = update(
-    state,
-    AgentProgress(run_id=state.run_id, AgentFinished("done")),
-  )
-}
-
-///|
 test "a running shell command is never steered and never kills the engine" {
   let state = drain_test_state()
   let _ = update(state, UiInput(Steer(Command("sleep 5"))))
@@ -1599,35 +1408,6 @@ test "a command context delivery failure reports without prompt fallback" {
     fail("expected prompt transcript item and agent start")
   }
   assert_eq(text, "what changed?")
-}
-
-///|
-test "oneshot shell commands run locally but hand nothing to the model" {
-  let state = drain_oneshot_test_state()
-  let _ = update(state, UiInput(Steer(Command("ls"))))
-  let command_run = state.run_id
-  // The command runs and renders, but OneShot delivers no context: no steer is
-  // emitted and the output is not folded into any later prompt.
-  let cmds = update(
-    state,
-    CommandResult(
-      run_id=Some(command_run),
-      command="ls",
-      Err(Failure::Failure("boom")),
-    ),
-  )
-  guard cmds is [AppendItem(_)] else {
-    fail("expected only the command transcript item")
-  }
-  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
-  assert_true(state.run is Idle)
-
-  let cmds = update(state, UiInput(Steer(Prompt("summarize"))))
-  guard cmds
-    is [AppendItem(Input(Prompt("summarize"))), StartAgent(run_id=_, text)] else {
-    fail("expected prompt transcript item and agent start")
-  }
-  assert_eq(text, "summarize")
 }
 
 ///|
@@ -1823,57 +1603,6 @@ async test "a cancelled foreground shell command reports its cancellation" {
     fail("expected CommandCancelled")
   }
   assert_eq(command, "sleep 10")
-}
-
-///|
-#cfg(not(platform="windows"))
-async test "a cancelled oneshot engine run reports its cancellation" {
-  let messages : @async.Queue[Msg] = Queue(kind=Unbounded)
-  // An engine that never answers: `sh -c "sleep 10"` ignores the serve
-  // arguments appended after the prefix.
-  let config = {
-    ..drain_test_state().config,
-    engine: "sh",
-    engine_args_prefix: ["-c", "sleep 10", "engine"],
-    engine_mode: OneShot,
-  }
-  @async.with_task_group(group => {
-    let task = group.spawn(() => run_agent_task(config, 3, "task", messages))
-    @async.sleep(200)
-    task.cancel()
-  })
-  guard messages.try_get() is Some(AgentCancelled(run_id=3)) else {
-    fail("expected AgentCancelled")
-  }
-}
-
-///|
-#cfg(not(platform="windows"))
-async test "a oneshot engine gets a prompt larger than a pipe buffer" {
-  let messages : @async.Queue[Msg] = Queue(kind=Unbounded)
-  // An engine that fills stderr past a pipe buffer before it reads stdin,
-  // then answers once it has the whole prompt line.
-  let script =
-    #|head -c 200000 /dev/zero >&2
-    #|IFS= read -r line
-    #|printf '{"event":"agent_finished","answer":"%s"}\n' "${#line}"
-  let config = {
-    ..drain_test_state().config,
-    engine: "sh",
-    engine_args_prefix: ["-c", script, "engine"],
-    engine_mode: OneShot,
-  }
-  let task = "x".repeat(200000)
-  @async.with_timeout(20000, () => run_agent_task(config, 4, task, messages))
-  guard messages.try_get()
-    is Some(AgentProgress(run_id=4, AgentFinished(length))) else {
-    fail("expected the engine's answer")
-  }
-  // The engine read the whole JSON `prompt` command as one line.
-  let sent = (
-    Prompt(content=Content([Text(task)]), submission_id=None) :
-    @protocol.Command)
-  assert_eq(length, sent.to_json().stringify().length().to_string())
 }
 
 ///|
