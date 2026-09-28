@@ -8,7 +8,7 @@ pub fn tui_ui_options() -> Array[@argparse.OptionArg] {
     OptionArg(
       "engine",
       long="engine",
-      about="Agent engine to spawn (default: the openseek CLI binary); reads its JSONL event stream from stdout.",
+      about="Agent engine command to spawn instead of the default (moonx running the pinned moonbitlang/openseek release); it must speak the serve JSONL protocol.",
     ),
     OptionArg(
       "prompt",
@@ -86,12 +86,12 @@ async fn with_latest_session(config : AppConfig) -> AppConfig {
 ///|
 /// Session id for a TUI launch that did not pick one.
 ///
-/// Conversation continuity is the TUI's default. The engine runs once per
-/// prompt, so context only carries between prompts through the durable session
-/// store — without a session, telling the assistant something and asking about
-/// it in the next prompt would hit a fresh one-shot that never saw the first
-/// message. The stamp format lives in `SessionId::generated`, shared with the
-/// engine CLI's default recording.
+/// Conversation continuity is the TUI's default. The engine process may exit
+/// between prompts and is respawned on the next one, so context only carries
+/// across that restart through the durable session store — without a session,
+/// the respawned engine would never have seen the earlier messages. The stamp
+/// format lives in `SessionId::generated`, shared with the engine CLI's default
+/// recording.
 fn generated_session_id(now_ms : Int64) -> @agent_session.SessionId {
   @agent_session.SessionId::generated(prefix="tui", now_ms~)
 }
@@ -158,7 +158,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
   }
   let (engine, engine_args_prefix) = match explicit_engine {
     Some(engine) => (engine, [])
-    None => default_engine(@env.args())
+    None => default_engine()
   }
   {
     api_key,
@@ -197,52 +197,21 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
 }
 
 ///|
-/// The engine command when `--engine` is unset: the `openseek` automation CLI,
-/// which is a separate module (`moonbitlang/openseek`) and a separate binary. A
-/// path argv0 whose basename is the TUI's is rewritten to the sibling next to
-/// it (see `sibling_engine`), which is where an install puts both binaries. A
-/// bare argv0, a path whose basename is not `openseek_tui` (a renamed copy), or
-/// a path inside Moon's build tree (the engine is never built there: it belongs
-/// to the other module) falls back to PATH lookup — never to argv0 itself,
-/// which is this UI and cannot `serve`.
-fn default_engine(args : ArrayView[String]) -> (String, Array[String]) {
-  match args {
-    [argv0, ..] if argv0.contains("/") || argv0.contains("\\") =>
-      match sibling_engine(argv0) {
-        Some(engine_argv0) => (engine_argv0, [])
-        None => ("openseek", [])
-      }
-    _ => ("openseek", [])
-  }
-}
+/// The `moonbitlang/openseek` release the default engine runs. It must equal the
+/// version this module imports in `moon.mod` (`engine_version_wbtest.mbt` keeps
+/// them in step), so the spawned engine speaks exactly the `serve` protocol and
+/// session format the UI was compiled against.
+const EngineModuleVersion : String = "0.5.0"
 
 ///|
-/// The sibling `openseek` engine for a path argv0 of this `openseek_tui`
-/// binary, or `None` when the basename is not the TUI's or the path is inside
-/// Moon's build tree (`_build/native/…`, where `moon run cmd/openseek_tui`
-/// executes the UI: the engine is another module's executable and is never
-/// built there). Only the basename is rewritten (`openseek_tui` → `openseek`,
-/// keeping a suffix such as `.exe`), so a parent directory that merely happens
-/// to be named `openseek_tui` is left alone.
-fn sibling_engine(argv0 : String) -> String? {
-  guard !(argv0.contains("/_build/native/") ||
-    argv0.contains("\\_build\\native\\")) else {
-    return None
-  }
-  // The basename follows the last separator of either kind (Windows paths can
-  // mix them), so strip at `/` first and then at `\`.
-  let base = match argv0.rev_split_once("/") {
-    Some((_, base)) => base
-    None => argv0
-  }
-  let base = match base.rev_split_once("\\") {
-    Some((_, base)) => base
-    None => base
-  }
-  guard base.contains("openseek_tui") else { return None }
-  let dir = argv0[:argv0.length() - base.length()]
-  let engine_base = "\{base}".replace_all(old="openseek_tui", new="openseek")
-  Some("\{dir}\{engine_base}")
+/// The engine command when `--engine` is unset: the pinned `moonbitlang/openseek`
+/// release run through `moonx`, which downloads its published linear-Wasm build
+/// from the mooncakes registry once, verifies and caches it, and runs it under
+/// `moonrun` (no local compilation). The engine is never
+/// looked up on `PATH` or beside this binary, so a stale or mismatched
+/// `openseek` install can never be picked up by accident.
+fn default_engine() -> (String, Array[String]) {
+  ("moonx", ["moonbitlang/openseek@\{EngineModuleVersion}"])
 }
 
 ///|
@@ -313,6 +282,17 @@ async fn run_app(config : AppConfig, initial : String?, ui : @ui.Ui) -> Unit {
 }
 
 ///|
+/// The outcome of the engine's `--help` preflight.
+priv enum EngineProbe {
+  Usable
+  /// The command could not be exec'd: not found or not executable.
+  NotLaunchable
+  /// It ran but exited non-zero; carries the exit code and the tail of its
+  /// merged output, which is where `moonx` explains a failed download.
+  Failed(Int, String)
+}
+
+///|
 /// Whether the engine is usable enough to launch. The agent engine is spawned
 /// fresh per task (and only once the user submits one), so a missing, non-
 /// executable, or non-`openseek`-like engine would otherwise surface deep inside
@@ -320,27 +300,109 @@ async fn run_app(config : AppConfig, initial : String?, ui : @ui.Ui) -> Unit {
 /// plus `--help`, which is part of the engine contract: like `openseek`, any
 /// `--engine` replacement must accept `--help` as a side-effect-free no-op that
 /// exits 0 — it makes no API call, and its output is captured so it never reaches
-/// the terminal. The engine is usable only if that probe spawns and exits 0;
-/// `ENOENT`/`EACCES` (not found / not executable) or a non-zero exit both mean it
-/// is not. Any other failure is unexpected and re-raised rather than mislabeled
-/// as a bad engine.
-async fn engine_command_launchable(
+/// the terminal. For the default `moonx` engine this probe is also where the
+/// pinned release is downloaded on first launch. `ENOENT`/`EACCES` (not
+/// found / not executable) and a non-zero exit both mean unusable. Any other
+/// failure is unexpected and re-raised rather than mislabeled as a bad engine.
+async fn probe_engine(
   engine : String,
   args_prefix : Array[String],
-) -> Bool {
+) -> EngineProbe {
   try {
     let args = args_prefix.copy()
     args.push("--help")
-    let (code, _) = @process.collect_output_merged(
+    let (code, output) = @process.collect_output_merged(
       engine,
       args,
       inherit_env=true,
     )
-    code == 0
+    if code == 0 {
+      Usable
+    } else {
+      Failed(code, output_tail(output.text() catch { _ => "" }))
+    }
   } catch {
-    @os_error.OSError(_) as err if err.is_ENOENT() || err.is_EACCES() => false
+    @os_error.OSError(_) as err if err.is_ENOENT() || err.is_EACCES() =>
+      NotLaunchable
     err => raise err
   }
+}
+
+///|
+/// The last few non-blank lines of `text`, for quoting a failed probe.
+fn output_tail(text : String) -> String {
+  let lines = text
+    .split("\n")
+    .map(line => line.trim_end())
+    .filter(line => !line.is_empty())
+    .to_array()
+  let start = if lines.length() > 5 { lines.length() - 5 } else { 0 }
+  lines[start:].iter().map(line => "  \{line}").collect().join("\n")
+}
+
+///|
+/// How long the preflight runs before saying why it is slow. A cached `moonx`
+/// engine answers `--help` in well under this, so the notice appears only
+/// while the first launch downloads the pinned release.
+const SlowProbeNoticeMs : Int = 1500
+
+///|
+/// `probe_engine`, telling the user on stderr when it takes long enough to be a
+/// first-launch download rather than a cached start.
+async fn probe_engine_with_notice(config : AppConfig) -> EngineProbe {
+  @async.with_task_group(group => {
+    group.spawn_bg(no_wait=true) <| () => {
+      @async.sleep(SlowProbeNoticeMs)
+      @stdio.stderr.write(
+        "Preparing engine '\{config.engine_display()}' (the first launch downloads it)…\n",
+      ) catch {
+        _ => ()
+      }
+    }
+    probe_engine(config.engine, config.engine_args_prefix)
+  })
+}
+
+///|
+/// Explain an unusable engine, with advice that depends on whether it is the
+/// default `moonx` engine or an explicit `--engine`.
+fn engine_probe_error(config : AppConfig, probe : EngineProbe) -> String {
+  let is_default = config.engine == default_engine().0 &&
+    config.engine_args_prefix == default_engine().1
+  let lines = []
+  match probe {
+    Usable => return ""
+    NotLaunchable if is_default =>
+      lines.push(
+        "error: engine '\{config.engine_display()}' is not usable: `moonx` was not found on PATH.",
+      )
+    NotLaunchable =>
+      lines.push(
+        "error: engine '\{config.engine_display()}' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.",
+      )
+    Failed(code, tail) => {
+      lines.push(
+        "error: engine '\{config.engine_display()}' is not usable: `--help` exited with code \{code}.",
+      )
+      if !tail.is_empty() {
+        lines.push("Its output ended with:")
+        lines.push(tail)
+      }
+    }
+  }
+  if is_default {
+    lines.push(
+      "The default engine runs through moonx, part of the MoonBit toolchain; its first launch downloads the pinned openseek release, so it needs network access to mooncakes.io.",
+    )
+    lines.push(
+      "Install MoonBit, or pass --engine <path> to an openseek binary.",
+    )
+  } else {
+    lines.push(
+      "Pass --engine <path> to a working openseek binary, or omit --engine to run the pinned release through moonx.",
+    )
+  }
+  lines.join("\n")
 }
 
 ///|
@@ -353,13 +415,9 @@ pub async fn run(matches : @argparse.Matches) -> Unit {
   }
   // Fail before the terminal UI takes over the screen if the engine is unusable,
   // rather than dropping the user into a UI that dies on the first task.
-  if !engine_command_launchable(config.engine, config.engine_args_prefix) {
-    println(
-      "error: engine '\{config.engine_display()}' is not usable: it must be on PATH, executable, and accept `--help` (exit 0) the way openseek does.",
-    )
-    println(
-      "Pass --engine <path> or put the openseek binary on PATH (built from github.com/moonbitlang/openseek, package cmd/openseek).",
-    )
+  let probe = probe_engine_with_notice(config)
+  if !(probe is Usable) {
+    println(engine_probe_error(config, probe))
     @sys.exit(1)
   }
   // The UI takes over the terminal, so refuse when stdin/stdout is not a TTY (a
@@ -396,11 +454,9 @@ test "cli accepts no initial task" {
   assert_eq(config.api_key, "test-key")
   assert_true(config.api_url is None)
   assert_true(config.max_steps is None)
-  // With no --engine, the engine falls through to the sibling engine derived
-  // from the process args (`default_engine`), not a hardcoded string.
-  let (expected_engine, expected_prefix) = default_engine(@env.args())
-  assert_eq(config.engine, expected_engine)
-  @debug.assert_eq(config.engine_args_prefix, expected_prefix)
+  // With no --engine, the pinned openseek release runs through moonx.
+  assert_eq(config.engine, "moonx")
+  @debug.assert_eq(config.engine_args_prefix, ["moonbitlang/openseek@0.5.0"])
   // No --session still converses in a session: a generated per-launch id, so
   // consecutive prompts share context instead of running amnesiac one-shots.
   assert_true(config.session_id.value().has_prefix("tui-"))
@@ -581,45 +637,19 @@ test "cli accepts --continue and rejects combining it with --session" {
 }
 
 ///|
-test "default_engine never spawns this UI: unrecognized argv0 falls back to PATH" {
-  // A renamed or differently-named copy of the TUI binary must not be spawned
-  // as the engine (it cannot `serve`, and the `--help` probe would not notice).
-  @debug.assert_eq(default_engine(["/usr/local/bin/ostui"]), ("openseek", []))
-  @debug.assert_eq(default_engine(["./openseek"]), ("openseek", []))
-  @debug.assert_eq(default_engine(["src/openseek.c"]), ("openseek", []))
-  @debug.assert_eq(
-    default_engine(["target\\native\\openseek.exe"]),
-    ("openseek", []),
-  )
-  // Inside Moon's build tree (`moon run cmd/openseek_tui`) the engine is never
-  // a sibling: it is another module's executable, so PATH decides.
-  @debug.assert_eq(
-    default_engine([
-      "/repo/_build/native/debug/build/moonbitlang/openseek_tui/cmd/openseek_tui/openseek_tui.exe",
-    ]),
-    ("openseek", []),
-  )
-  @debug.assert_eq(
-    default_engine([
-      "C:\\repo\\_build\\native\\release\\build\\moonbitlang\\openseek_tui\\cmd\\openseek_tui\\openseek_tui.exe",
-    ]),
-    ("openseek", []),
-  )
-  // A bare argv0 (launched via PATH) resolves the engine via PATH too.
-  @debug.assert_eq(default_engine(["openseek_tui"]), ("openseek", []))
-  @debug.assert_eq(default_engine(["openseek"]), ("openseek", []))
-  @debug.assert_eq(default_engine([]), ("openseek", []))
-}
-
-///|
-async test "engine defaults to the openseek CLI binary; --engine overrides it" {
-  // No --engine: fall through to the sibling openseek engine binary.
-  let default_cfg = parse_config(
+test "the default engine is the pinned openseek release under moonx" {
+  let config = parse_config(
     cli_command().parse(argv=[], env={ "DEEPSEEK": "k" }),
   )
-  let (expected_engine, expected_prefix) = default_engine(@env.args())
-  assert_eq(default_cfg.engine, expected_engine)
-  @debug.assert_eq(default_cfg.engine_args_prefix, expected_prefix)
+  assert_eq(config.engine, "moonx")
+  @debug.assert_eq(config.engine_args_prefix, [
+    "moonbitlang/openseek@\{EngineModuleVersion}",
+  ])
+  // The prefix sits between `moonx` and the engine's own subcommand.
+  @debug.assert_eq(config.engine_serve_args()[:2].to_owned(), [
+    "moonbitlang/openseek@\{EngineModuleVersion}",
+    "serve",
+  ])
 }
 
 ///|
@@ -645,39 +675,47 @@ test "cli overrides the engine binary" {
 }
 
 ///|
-async test "engine_launchable rejects a binary that cannot be exec'd" {
-  assert_false(engine_command_launchable("openseek-not-a-real-binary-xyz", []))
+async test "probe_engine rejects a binary that cannot be exec'd" {
+  assert_true(
+    probe_engine("openseek-not-a-real-binary-xyz", []) is NotLaunchable,
+  )
 }
 
 ///|
-async test "engine_launchable accepts an engine whose --help exits 0" {
+async test "probe_engine accepts an engine whose --help exits 0" {
   // `moon` stands in for an engine that honors the `--help` no-op the probe
   // requires: `moon --help` exits 0 and, unlike `true`, `moon` is on PATH on
   // every platform the tests run on (including Windows native), so this stays
   // cross-platform.
-  assert_true(engine_command_launchable("moon", []))
+  assert_true(probe_engine("moon", []) is Usable)
 }
 
 ///|
-test "default_engine maps a tui argv0 to the sibling openseek engine" {
-  @debug.assert_eq(
-    default_engine(["/usr/local/bin/openseek_tui"]),
-    ("/usr/local/bin/openseek", []),
+test "output_tail keeps the last non-blank lines, indented" {
+  assert_eq(output_tail(""), "")
+  assert_eq(output_tail("a\n\n  b  \n"), "  a\n    b")
+  assert_eq(output_tail("1\n2\n3\n4\n5\n6\n7\n"), "  3\n  4\n  5\n  6\n  7")
+}
+
+///|
+test "engine_probe_error tailors its advice to the default engine" {
+  let default_config = parse_config(
+    cli_command().parse(argv=[], env={ "DEEPSEEK": "k" }),
   )
-  @debug.assert_eq(default_engine(["./openseek_tui"]), ("./openseek", []))
-  @debug.assert_eq(
-    default_engine(["target/native/openseek_tui.exe"]),
-    ("target/native/openseek.exe", []),
+  let missing = engine_probe_error(default_config, NotLaunchable)
+  assert_true(missing.contains("`moonx` was not found on PATH"))
+  assert_true(missing.contains("Install MoonBit"))
+  let offline = engine_probe_error(
+    default_config,
+    Failed(1, "  error: failed to fetch"),
   )
-  // Only the basename is rewritten: a parent directory that happens to be
-  // named `openseek_tui` is kept, so the engine is still looked up beside the
-  // UI.
-  @debug.assert_eq(
-    default_engine(["/opt/openseek_tui/openseek_tui.exe"]),
-    ("/opt/openseek_tui/openseek.exe", []),
+  assert_true(offline.contains("exited with code 1"))
+  assert_true(offline.contains("  error: failed to fetch"))
+  assert_true(offline.contains("network access"))
+  let explicit = parse_config(
+    cli_command().parse(argv=["--engine", "./fake"], env={ "DEEPSEEK": "k" }),
   )
-  @debug.assert_eq(
-    default_engine(["C:\\tools\\openseek_tui\\openseek_tui.exe"]),
-    ("C:\\tools\\openseek_tui\\openseek.exe", []),
-  )
+  let bad = engine_probe_error(explicit, NotLaunchable)
+  assert_true(bad.contains("omit --engine"))
+  assert_false(bad.contains("Install MoonBit"))
 }

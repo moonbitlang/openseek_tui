@@ -3,18 +3,15 @@
 The OpenSeek terminal UI: a scrolling transcript with a live composer, built on
 the reusable [`tui`](../../tui/README.md) controller package. It ships as a
 library launched by the dedicated `openseek_tui` binary (a thin executable
-package that builds this package's `cli_command`); the headless engine is the
-separate `openseek` binary.
+package that builds this package's `cli_command`); the headless engine comes
+from the separate `moonbitlang/openseek` module.
 
 The UI runs no agent code itself. It spawns the `openseek` engine — by default
-the `openseek` CLI binary in `serve` mode, a separate binary built from
-[moonbitlang/openseek](https://github.com/moonbitlang/openseek) (`cmd/openseek`): when launched by path, the
-sibling next to the `openseek_tui` binary (only the basename is rewritten, so
-an install that puts both binaries in one directory just works), otherwise the
-`openseek` on `PATH`; a renamed copy of the UI, or the UI running from Moon's
-build tree (`moon run cmd/openseek_tui`), also falls back to `PATH` rather than
-spawning itself. Override with `--engine`
-— **once per session** and drives it over stdin commands, rendering the engine's
+the `moonbitlang/openseek` release this module is compiled against, run through
+`moonx` (`moonx moonbitlang/openseek@<version> serve …`; the first launch
+downloads and caches its published linear-Wasm build); override it with
+`--engine`. The engine is spawned **once per session** and driven over stdin
+commands, and the UI renders the engine's
 JSONL event stream: streamed thinking and answer text move live on the activity
 line, each turn's reasoning is kept as a dim `✻` transcript aside above its
 answer, and tool results land as `⏺` blocks. Pressing Enter while a task runs
@@ -31,10 +28,10 @@ one on the same session.
 Because the UI takes over the terminal, launching it without a TTY (a pipe, CI
 log, or cron) is refused with a pointer to `openseek run` / `openseek serve`.
 
-From the source tree, `moon run cmd/openseek_tui` needs an `openseek` engine
-on `PATH` (or `--engine <path>`): the engine belongs to the `moonbitlang/openseek`
-repository and is never built here. The preflight refuses to start the UI until
-one is usable.
+From the source tree, `moon run cmd/openseek_tui` uses the same `moonx`
+default, so it needs no engine build of its own; pass `--engine <path>` to try a
+local openseek build instead. The preflight refuses to start the UI until the
+engine is usable.
 
 ## Sessions
 

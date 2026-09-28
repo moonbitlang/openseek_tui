@@ -16,31 +16,29 @@ packages, and on `moonbitlang/openseek_protocol` for the wire contract.
 
 ## Running it
 
-You need two binaries: `openseek` (the engine) and `openseek_tui` (this UI).
+You need the [MoonBit toolchain](https://www.moonbitlang.com/download), which
+provides `moon` and `moonx`. The engine is not installed separately: the UI runs
+the `moonbitlang/openseek` release it was built against through `moonx`.
 
 ```bash
-# 1. The engine, from the openseek repository.
-git clone https://github.com/moonbitlang/openseek && cd openseek
-moon build --release cmd/openseek
-cp _build/native/release/build/moonbitlang/openseek/cmd/openseek/openseek.exe ~/.moon/bin/openseek
-
-# 2. This UI.
 git clone https://github.com/moonbitlang/openseek_tui && cd openseek_tui
 moon build --release cmd/openseek_tui
 cp _build/native/release/build/moonbitlang/openseek_tui/cmd/openseek_tui/openseek_tui.exe ~/.moon/bin/openseek_tui
 
-# 3. Converse.
 export DEEPSEEK=sk-...
 openseek_tui
 ```
 
-**Engine resolution.** With no `--engine`, the UI spawns the `openseek` next to
-its own binary when launched by path (only the basename is rewritten, so an
-install that puts both binaries in one directory just works), otherwise the
-`openseek` found on `PATH`. It never spawns itself: a renamed copy, or the UI
-running from Moon's build tree (`moon run cmd/openseek_tui`), falls back to
-`PATH`. Pass `--engine <path>` to override. The engine is probed with `--help`
-before the UI takes over the terminal, so a missing engine fails fast.
+**The engine.** With no `--engine`, the UI spawns
+`moonx moonbitlang/openseek@<version> serve …`, where `<version>` is the
+`moonbitlang/openseek` release imported in `moon.mod` (a test keeps the two
+equal), so the engine always speaks the protocol and session format the UI was
+compiled against. The first launch downloads that release's published
+linear-Wasm build from mooncakes.io (so it needs the network) and caches it;
+later launches start from the cache. The engine is probed with `--help` before
+the UI takes over the terminal, so a missing `moonx` or a failed download is
+reported up front. Pass `--engine <path>` to run a different engine binary
+instead, such as a local openseek build.
 
 **Sessions.** Every launch converses in a durable session under
 `--session-root` (default `.openseek/`), interoperable with the CLI's own
@@ -96,12 +94,20 @@ The editor members are needed because `moonbitlang/openseek` itself depends on
 `moonbitlang/editor`, and the checkout's editor is the one it is developed
 against.
 
+The workspace only changes what the UI compiles against. To also *run* the
+checkout's engine, build it there (`moon build --release cmd/openseek`) and pass
+its binary with `--engine <path>`; otherwise the UI still spawns the pinned
+release through `moonx`.
+
 ## Publishing
 
 The module is published to mooncakes as `moonbitlang/openseek_tui` by the
 `publish-package` workflow (`.github/workflows/publish.yml`, run manually via
 workflow dispatch) using the organization's mooncakes token. Bump `version` in
-`moon.mod` first.
+`moon.mod` first. When bumping the `moonbitlang/openseek` import, bump
+`EngineModuleVersion` in `cmd/tui/main.mbt` with it (`moon test` fails until
+they match) and check that the release has a published linear-Wasm build, since
+that is what `moonx` downloads.
 
 ## History
 
