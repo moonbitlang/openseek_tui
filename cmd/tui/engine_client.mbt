@@ -78,6 +78,8 @@ async fn[G] EngineClient::start(
     stderr=child_stderr,
     no_wait=true,
   )
+  // On Windows the engine's children must die with it; see the helper.
+  contain_engine_tree(group, proc)
   let engine : EngineProcess = {
     writer,
     proc,
@@ -471,7 +473,9 @@ async fn EngineClient::cancel_turn(self : EngineClient) -> Unit {
 ///|
 /// Hard escalation: kill the engine process outright. The stdout reader
 /// observes the EOF and reports the in-flight run's failure; the next
-/// prompt respawns a fresh engine on the same durable session.
+/// prompt respawns a fresh engine on the same durable session. On Windows
+/// the engine's children die with it (see `contain_engine_tree`), so none is
+/// left holding the pipes that EOF depends on.
 fn EngineClient::kill(self : EngineClient) -> Unit {
   if self.live is Some(live) {
     live.proc.cancel()
@@ -501,8 +505,10 @@ async fn EngineClient::shutdown(self : EngineClient) -> Unit {
     // through the process library's own cancellation: the engine was spawned
     // with the default `graceful_cancel(timeout=5000)`, so `cancel()` sends
     // SIGTERM and, if still alive after the grace, SIGKILL — termination is
-    // guaranteed. Wait for the reader to finish observing that exit before
-    // teardown proceeds; that wait is bounded by the escalation.
+    // guaranteed (on Windows: CTRL_BREAK, then TerminateProcess, with the
+    // engine's job taking its children down too; see `contain_engine_tree`).
+    // Wait for the reader to finish observing that exit before teardown
+    // proceeds; that wait is bounded by the escalation.
     live.proc.cancel()
     reader.wait()
   }

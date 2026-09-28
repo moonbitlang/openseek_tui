@@ -18,6 +18,17 @@ answer, and tool results land as `⏺` blocks. Pressing Enter while a task runs
 steers it mid-turn; Ctrl-C cancels the turn (a second Ctrl-C kills the engine,
 and the next prompt respawns it on the same session).
 
+Killing the engine (a second Ctrl-C, or a quit that the engine does not drain
+within two seconds) first asks it to stop — SIGTERM on Unix, CTRL_BREAK on
+Windows — and force-kills it five seconds later if it is still running. On
+Unix `moonx` `exec`s `moonrun`, so the spawned process *is* the engine. On
+Windows `moonx` runs `moonrun` as a child instead, so the UI places each engine
+in its own Job Object and terminates that job as soon as the spawned process
+exits: a killed `moonx` takes `moonrun` and everything it started with it, and
+none of them keeps the engine's pipes, session lock, or log open. Containment
+is best effort; if the job cannot be created, only the spawned process is
+killed.
+
 A custom or recorded-stream engine (`--engine`) speaks the same protocol: it
 is spawned as `<engine> serve --session=<id> --session-root=<root>
 --dir=<cwd>`, reads JSONL commands on stdin and writes JSONL events on stdout.
