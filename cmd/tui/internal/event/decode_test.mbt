@@ -258,6 +258,7 @@ test "subrun lifecycle brackets decode to their display forms" {
     is Some(SubrunStarted(kind="review", label="goal review")),
   )
   // The id and token counts are wire-only: the UI shows status and steps.
+  // With no `unaccounted`, the steps are the child's own account.
   assert_true(
     @event.decode_event({
       "event": "subrun_finished",
@@ -267,10 +268,45 @@ test "subrun lifecycle brackets decode to their display forms" {
       "prompt_tokens": 34000,
       "completion_tokens": 5600,
     })
-    is Some(SubrunFinished(status="captured", steps=12)),
+    is Some(SubrunFinished(status="captured", steps=12, unaccounted=None)),
+  )
+  // An `unaccounted` reason survives decoding, so the UI can show the spend
+  // as unknown rather than as the (zero) counts beside it.
+  assert_true(
+    @event.decode_event({
+      "event": "subrun_finished",
+      "id": "sr-2",
+      "status": "cancelled",
+      "steps": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "unaccounted": "the sub-run was cancelled before its result was read",
+    })
+    is Some(
+      SubrunFinished(
+        status="cancelled",
+        steps=0,
+        unaccounted=Some("the sub-run was cancelled before its result was read")
+      )
+    ),
   )
   // A finish missing its required fields drops rather than misrendering.
   assert_true(
     @event.decode_event({ "event": "subrun_finished", "id": "sr-1" }) is None,
+  )
+}
+
+///|
+test "fleet_started is no longer an engine event and decodes to nothing" {
+  // openseek 0.5.0 removed fleet mode, and the protocol dropped its event: a
+  // line from an older engine is an unknown event, dropped like any other.
+  assert_true(
+    @event.decode_event({
+      "event": "fleet_started",
+      "id": "fleet-1",
+      "tasks": 3,
+      "concurrency": 2,
+    })
+    is None,
   )
 }

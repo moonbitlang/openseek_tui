@@ -81,7 +81,8 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // the wire; the UI shows them as ordered transcript notices, so only
     // the display fields survive decoding.
     SubrunStarted(kind~, label~, ..) => Some(SubrunStarted(kind~, label~))
-    SubrunFinished(status~, steps~, ..) => Some(SubrunFinished(status~, steps~))
+    SubrunFinished(status~, steps~, unaccounted~, ..) =>
+      Some(SubrunFinished(status~, steps~, unaccounted~))
     // MCP lifecycle diagnostics, surfaced as notices so a typo'd config or a
     // dead server is visible in the UI instead of silently yielding no tools.
     // `servers` counts the configuration's entries, not successful contributors
@@ -136,8 +137,8 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // controller-visible state — the run already reads busy. The goal and plan
     // reminders, checks, and block/unblock markers are instructions to the
     // model, not news for the user; the standing goal reaches the UI as
-    // `goal_updated`. `session_started`, `workspace_created` and `fleet_started`
-    // describe a headless run's setup, which the TUI performs itself. The
+    // `goal_updated`. `session_started` and `workspace_created` describe a
+    // headless run's setup, which the TUI performs itself. The
     // remaining MCP events are per-tool registry bookkeeping, already summarized
     // by `mcp_tools_registered`. `approval_resolved` retires a prompt this UI
     // never showed — the request arm above is a one-off notice, not a live
@@ -154,7 +155,6 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     | PlanReminder(..)
     | SessionStarted(..)
     | WorkspaceCreated(..)
-    | FleetStarted(..)
     | McpConfigIgnored(..)
     | McpToolDuplicate(..)
     | McpToolRenamed(..)

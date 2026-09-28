@@ -83,7 +83,10 @@ pub(all) enum AgentEvent {
   // `label` is a short display string, never the raw query.
   SubrunStarted(kind~ : String, label~ : String)
   // The paired completion: the child's terminal status ("captured",
-  // "failed", …) and how many model steps it spent. Non-terminal for the
-  // outer run — the parent turn continues.
-  SubrunFinished(status~ : String, steps~ : Int)
+  // "failed", …) and how many model steps it spent. `unaccounted` is the
+  // engine's reason the step count may fall short of the child's real spend
+  // (it left no result, or was cancelled before its result was read); `None`
+  // means `steps` is the child's own account. Non-terminal for the outer run
+  // — the parent turn continues.
+  SubrunFinished(status~ : String, steps~ : Int, unaccounted~ : String?)
 }
