@@ -20,16 +20,6 @@ fn handle_goal_command(
     cmds.push(AppendItem(command_notice(text)))
     return
   }
-  // The goal is durable session state on the persistent serve engine; a
-  // oneshot engine is spawned per prompt and keeps no session to anchor it.
-  if state.config.engine_mode is OneShot {
-    cmds.push(
-      AppendItem(
-        Error("The goal command is not supported by a oneshot engine."),
-      ),
-    )
-    return
-  }
   if trimmed == "clear" {
     // Always send the clear: the mirror lags the engine by one ack, so a
     // clear typed while a set is still in flight must not be dropped on the
@@ -54,8 +44,7 @@ fn handle_goal_command(
 ///|
 /// Mirror an engine-confirmed goal update into local state and the
 /// transcript. The engine's durable-append confirmation is the only writer
-/// of the mirror — both the serve path (`EngineGoalUpdated`) and the
-/// oneshot path (`GoalUpdated`) land here.
+/// of the mirror.
 fn apply_goal_update(state : State, goal : String?, cmds : Array[Cmd]) -> Unit {
   state.goal = goal
   let title = match goal {
@@ -80,7 +69,6 @@ fn goal_test_state() -> State {
     session_root: ".openseek",
     engine: "openseek",
     engine_args_prefix: [],
-    engine_mode: Serve,
   })
 }
 
@@ -175,34 +163,6 @@ test "clearing without a mirrored goal still goes to the engine" {
   )
   assert_true(update_goal_cmds(cmds) is [None])
   assert_eq(goal_error_count(cmds), 0)
-}
-
-///|
-test "goal set is rejected on a oneshot engine" {
-  let state = State::State({
-    api_key: "k",
-    api_url: None,
-    model: Deepseek(V4Pro),
-    cwd: ".",
-    max_steps: Some(10),
-    retry_attempts: None,
-    retry_backoff_ms: None,
-    thinking: Max,
-    session_id: SessionId("goal-oneshot"),
-    session_root: ".openseek",
-    engine: "replay-engine",
-    engine_args_prefix: [],
-    engine_mode: OneShot,
-  })
-  let cmds = update(
-    state,
-    UiInput(SlashCommand(name="goal", arguments="set ship it")),
-  )
-  assert_eq(goal_error_count(cmds), 1)
-  assert_eq(update_goal_cmds(cmds).length(), 0)
-  // Show still works locally.
-  let shown = update(state, UiInput(SlashCommand(name="goal", arguments="")))
-  assert_eq(goal_notice_count(shown), 1)
 }
 
 ///|

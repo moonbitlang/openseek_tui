@@ -21,13 +21,12 @@ answer, and tool results land as `⏺` blocks. Pressing Enter while a task runs
 steers it mid-turn; Ctrl-C cancels the turn (a second Ctrl-C kills the engine,
 and the next prompt respawns it on the same session).
 
-A custom or recorded-stream engine that answers one prompt per process works
-with `--engine-mode oneshot`: per prompt it spawns `<engine> serve
---session=<id> --session-root=<root> --dir=<cwd>`, writes one `prompt` command
-to its stdin and closes it, and reads the JSONL events until the engine exits.
-(`openseek run` is not used: it prints text for a person, not JSONL.)
-Steering is unavailable, and it requires an explicit `--engine` (re-launching
-the `openseek_tui` binary in oneshot would only lose steering for no gain).
+A custom or recorded-stream engine (`--engine`) speaks the same protocol: it
+is spawned as `<engine> serve --session=<id> --session-root=<root>
+--dir=<cwd>`, reads JSONL commands on stdin and writes JSONL events on stdout.
+It may exit after answering a prompt: once its turn's terminal event has
+arrived, an engine exit is not an error, and the next prompt starts a fresh
+one on the same session.
 
 Because the UI takes over the terminal, launching it without a TTY (a pipe, CI
 log, or cron) is refused with a pointer to `openseek run` / `openseek serve`.
