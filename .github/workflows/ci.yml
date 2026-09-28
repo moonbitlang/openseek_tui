@@ -54,3 +54,36 @@ jobs:
 
       - name: Verified CLI documentation (cram)
         run: moon cram test tests/cram
+
+  windows:
+    name: test (stable, native, windows)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up MSVC
+        # The native backend compiles its C output with the MSVC toolchain.
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up MoonBit (stable)
+        shell: pwsh
+        run: |
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Show MoonBit version
+        run: moon version --all
+
+      - name: Update MoonBit package registry
+        run: moon update
+
+      # Formatting, generated interfaces, and the cram suite (POSIX `sh`
+      # scripts) are platform-independent and stay on the Linux job.
+      - name: Check native target
+        run: moon check --target native --deny-warn
+
+      - name: Test native target
+        run: moon test --target native
