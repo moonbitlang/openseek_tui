@@ -14,18 +14,19 @@ import {
   "moonbit-community/displaytext",
   "moonbit-community/tty",
   "moonbitlang/async",
+  "moonbitlang/async/fs",
   "moonbitlang/async/os_error",
   "moonbitlang/async/process",
   "moonbitlang/async/stdio",
   "moonbitlang/core/argparse",
   "moonbitlang/core/debug",
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/encoding/percent",
   "moonbitlang/core/env",
   "moonbitlang/x/sys",
 }
 
 import {
-  "moonbitlang/async/fs",
   "moonbitlang/openseek/testkit/filesystem" @vfs,
 } for "wbtest"
 

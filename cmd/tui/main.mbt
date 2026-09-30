@@ -253,6 +253,10 @@ async fn run_tui(config : AppConfig, initial : String?) -> Unit {
         name="goal",
         description="standing goal: /goal | /goal set <text> | /goal clear",
       ),
+      SlashCommandSpec(
+        name="inspect",
+        description="watch this session live in the browser (starts the session viewer)",
+      ),
     ]),
     ui => run_app(config, initial, ui),
   )

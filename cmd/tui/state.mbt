@@ -219,6 +219,9 @@ priv enum Msg {
   // The persistent engine process exited (for any reason): its background
   // watchers died with it, so the loop can observe the engine boundary.
   EngineExited
+  // `/inspect` finished starting (or finding) the session viewer: the link to
+  // this session, or why there is none. Untagged: it belongs to no run.
+  ViewerOpened(Result[String, String])
   Tick
 }
 
@@ -239,6 +242,7 @@ fn Msg::run_id(self : Msg) -> Int? {
     | EngineSessionError(_)
     | EngineBackgroundNotice(_)
     | EngineExited
+    | ViewerOpened(_)
     | Tick => None
   }
 }
@@ -265,6 +269,9 @@ priv enum Cmd {
   // Set (Some) or clear (None) the standing goal on the serve engine. The
   // engine's goal_updated event — not this command — mutates local state.
   UpdateGoal(String?)
+  // `/inspect`: start or reuse the session viewer in the background and report
+  // the link as a `ViewerOpened` message.
+  OpenViewer
   CancelAgent
   // Second Ctrl-C while already interrupting: the cancel command was not
   // enough, so kill the engine process outright.
