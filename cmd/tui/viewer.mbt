@@ -15,11 +15,22 @@ const InspectWaitMs : Int = 60_000
 /// return the link to `session`. The viewer is its own detached process and
 /// outlives the TUI; it exits after an hour without a request.
 async fn open_viewer(session_root : String, session : String) -> String {
+  // `spawn_orphan` leaves the viewer in this terminal's session, so closing
+  // the terminal would hang it up; `nohup` makes it ignore that. Where there
+  // is no `nohup` (Windows, which has no hangup signal), start it directly.
   let url = start_viewer(
-    ["moonx", InspectPackage],
+    ["nohup", "moonx", InspectPackage],
     session_root,
     wait_ms=InspectWaitMs,
-  )
+  ) catch {
+    @os_error.OSError(_) as error if error.is_ENOENT() =>
+      start_viewer(
+        ["moonx", InspectPackage],
+        session_root,
+        wait_ms=InspectWaitMs,
+      )
+    error => raise error
+  }
   "\{url}#s=\{@percent.encode(session)}"
 }
 
@@ -84,7 +95,10 @@ fn viewer_output(text : String) -> ViewerOutput {
         },
       )
     }
-    if line.has_prefix("Error") || line.has_prefix("error:") {
+    // `nohup:` is how a missing `moonx` shows up behind `nohup`.
+    if line.has_prefix("Error") ||
+      line.has_prefix("error:") ||
+      line.has_prefix("nohup:") {
       return Failed(line.to_owned())
     }
   }
@@ -108,6 +122,10 @@ test "viewer_output finds the URL, an error, or nothing yet" {
   @debug.assert_eq(
     viewer_output("Error: Prebuilt wasm asset does not exist\n"),
     Failed("Error: Prebuilt wasm asset does not exist"),
+  )
+  @debug.assert_eq(
+    viewer_output("nohup: can't execute 'moonx': No such file or directory\n"),
+    Failed("nohup: can't execute 'moonx': No such file or directory"),
   )
   @debug.assert_eq(viewer_output("openseek viz: serving 1"), Pending)
 }
