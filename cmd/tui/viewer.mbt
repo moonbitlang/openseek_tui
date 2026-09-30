@@ -47,11 +47,14 @@ async fn start_viewer(
   let dir = @fs.tmpdir(prefix="openseek-tui-inspect-")
   defer (@fs.rmdir(dir, recursive=true) catch { _ => () })
   let out = "\{dir}/inspect.out"
+  // One handle for both streams, as `redirect_to_file` intends: opening the
+  // file twice gives two writers that Windows does not let share it.
+  let output = @process.redirect_to_file(out)
   let _ = @process.spawn_orphan(
     command[0],
     [..command[1:], "--ensure", "--watch", "--session-root", session_root],
-    stdout=@process.redirect_to_file(out, append=true),
-    stderr=@process.redirect_to_file(out, append=true),
+    stdout=output,
+    stderr=output,
   )
   let result = @async.with_timeout_opt(wait_ms, () => {
     while true {
@@ -67,7 +70,15 @@ async fn start_viewer(
   match result {
     Some(Ok(url)) => url
     Some(Err(message)) => fail(message)
-    None => fail("no URL after \{wait_ms}ms")
+    None => {
+      // Say what the viewer did print, if anything, so a hang is diagnosable.
+      let printed = (@fs.read_file(out).text() catch { _ => "" }).trim()
+      if printed.is_empty() {
+        fail("no URL after \{wait_ms}ms (the viewer printed nothing)")
+      } else {
+        fail("no URL after \{wait_ms}ms; the viewer printed: \{printed}")
+      }
+    }
   }
 }
 
