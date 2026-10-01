@@ -18,7 +18,7 @@ import {
   "moonbitlang/async/os_error",
   "moonbitlang/async/process",
   "moonbitlang/async/stdio",
-  "moonbitlang/async/types",
+  "bobzhang/open_in_browser",
   "moonbitlang/core/argparse",
   "moonbitlang/core/debug",
   "moonbitlang/core/encoding/utf8",

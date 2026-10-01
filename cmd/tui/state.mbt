@@ -223,7 +223,7 @@ priv enum Msg {
   // this session, or why there is none. Untagged: it belongs to no run.
   ViewerOpened(Result[String, String])
   // What `/inspect` then did about opening that link in a browser.
-  BrowserOpened(BrowserOutcome)
+  BrowserOpened(@open_in_browser.Outcome)
   Tick
 }
 

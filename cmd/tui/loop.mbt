@@ -817,7 +817,7 @@ async fn[G] run_message_loop(
             // The link is in the transcript first, so it is there to use
             // whatever happens to the browser.
             if result is Ok(url) {
-              messages.put(BrowserOpened(open_in_browser(url)))
+              messages.put(BrowserOpened(@open_in_browser.open(url)))
             }
           }
         }
