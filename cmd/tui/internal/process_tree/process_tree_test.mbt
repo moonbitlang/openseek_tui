@@ -1,5 +1,5 @@
 ///|
-/// Spawn a two-level tree shaped like the Windows `moonx` engine: `cmd.exe`
+/// Spawn a two-level tree shaped like the TUI's Windows `moonx` engine: `cmd.exe`
 /// runs `ping` as a child and waits for it, and `ping` inherits the stdout
 /// pipe. Kill only the root (as `TerminateProcess` does) once `ping` is known
 /// to be running, and report whether stdout reached EOF within `grace_ms`,
@@ -22,7 +22,7 @@ async fn root_kill_closes_stdout(
       no_wait=true,
     )
     if contain && !contain_after_child_started {
-      contain_engine_tree(group, proc)
+      @process_tree.contain(group, proc)
     }
     // Output means `ping` is running, so the kill below cannot win a race
     // against its creation.
@@ -30,7 +30,7 @@ async fn root_kill_closes_stdout(
       fail("ping produced no output")
     }
     if contain && contain_after_child_started {
-      contain_engine_tree(group, proc)
+      @process_tree.contain(group, proc)
     }
     proc.cancel()
     @async.with_timeout_opt(grace_ms, () => reader.read_all()) is Some(_)
@@ -53,7 +53,7 @@ async test "windows: killing a bare root leaves its child holding stdout" {
 
 ///|
 #cfg(platform="windows")
-async test "windows: a contained engine tree dies with its root" {
+async test "windows: a contained tree dies with its root" {
   assert_true(
     root_kill_closes_stdout(
       contain=true,

@@ -1,0 +1,18 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "moonbitlang/openseek_tui/cmd/tui/internal/process_tree"
+
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/process",
+}
+
+// Values
+pub fn[G] contain(@async.TaskGroup[G], @process.Process) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

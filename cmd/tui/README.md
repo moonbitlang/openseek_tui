@@ -27,7 +27,8 @@ in its own Job Object and terminates that job as soon as the spawned process
 exits: a killed `moonx` takes `moonrun` and everything it started with it, and
 none of them keeps the engine's pipes, session lock, or log open. Containment
 is best effort; if the job cannot be created, only the spawned process is
-killed.
+killed. The mechanism lives in
+[`internal/process_tree`](internal/process_tree/README.mbt.md).
 
 A custom or recorded-stream engine (`--engine`) speaks the same protocol: it
 is spawned as `<engine> serve --session=<id> --session-root=<root>
