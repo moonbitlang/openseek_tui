@@ -221,3 +221,152 @@ test "/inspect starts the viewer, and its answer lands in the transcript" {
   let failed = update(state, ViewerOpened(Err("Error: offline")))
   assert_eq(error_item_count(failed), 1)
 }
+
+///|
+/// What `/inspect` did about opening the link in a browser.
+priv enum BrowserOutcome {
+  /// The platform's opener was started; the browser takes it from there.
+  Launched
+  /// Deliberately not opened, and why (e.g. over SSH, where the browser would
+  /// open on the remote machine).
+  Skipped(String)
+  /// The opener could not be started.
+  Failed(String)
+}
+
+///|
+/// The command that opens `url` in the default browser on `platform`, or why
+/// not to try: over SSH the browser would open on the far machine, and a Linux
+/// session without a display has no browser to show. `open` is used only on
+/// macOS: on Linux that name can belong to a different program (`openvt`).
+/// Windows' `rundll32 url.dll,FileProtocolHandler` takes the URL as one
+/// argument with no shell in between, so `?`, `&` and `#` are safe.
+fn browser_command(
+  platform : @types.Platform,
+  url : String,
+  env : Map[String, String],
+) -> Result[Array[String], String] {
+  let set = (name : String) => env.get(name) is Some(value) && !value.is_blank()
+  if set("SSH_CONNECTION") || set("SSH_TTY") {
+    return Err("over SSH")
+  }
+  match platform {
+    MacOS => Ok(["open", url])
+    Windows => Ok(["rundll32", "url.dll,FileProtocolHandler", url])
+    Linux =>
+      if set("DISPLAY") || set("WAYLAND_DISPLAY") {
+        Ok(["xdg-open", url])
+      } else {
+        Err("without a display")
+      }
+  }
+}
+
+///|
+/// Open `url` in the default browser, best effort. The opener is started
+/// detached and not waited on (on some Linux desktops `xdg-open` runs the
+/// browser itself in the foreground), and its output is discarded so nothing
+/// lands on the terminal the UI owns.
+async fn open_in_browser(url : String) -> BrowserOutcome {
+  match browser_command(@async.platform, url, @env.get_env_vars()) {
+    Err(reason) => Skipped(reason)
+    Ok(command) => {
+      let null_device = match @async.platform {
+        Windows => "NUL"
+        _ => "/dev/null"
+      }
+      try {
+        let sink = @process.redirect_to_file(null_device)
+        let _ = @process.spawn_orphan(
+          command[0],
+          command[1:],
+          stdout=sink,
+          stderr=sink,
+        )
+        Launched
+      } catch {
+        @os_error.OSError(_) as error if error.is_ENOENT() =>
+          Failed("`\{command[0]}` not found")
+        error => Failed("\{error}")
+      }
+    }
+  }
+}
+
+///|
+/// The transcript line for a `BrowserOutcome`, under the link it is about.
+fn browser_notice(outcome : BrowserOutcome) -> String {
+  match outcome {
+    Launched => "opened it in your default browser"
+    Skipped(reason) => "not opening a browser \{reason}; use the link above"
+    Failed(error) => "could not open a browser (\{error}); use the link above"
+  }
+}
+
+///|
+test "browser_command picks each platform's opener" {
+  let url = "http://127.0.0.1:41612/?t=abc#s=s1"
+  @debug.assert_eq(browser_command(MacOS, url, {}), Ok(["open", url]))
+  @debug.assert_eq(
+    browser_command(Windows, url, {}),
+    Ok(["rundll32", "url.dll,FileProtocolHandler", url]),
+  )
+  @debug.assert_eq(
+    browser_command(Linux, url, { "DISPLAY": ":0" }),
+    Ok(["xdg-open", url]),
+  )
+  @debug.assert_eq(
+    browser_command(Linux, url, { "WAYLAND_DISPLAY": "wayland-0" }),
+    Ok(["xdg-open", url]),
+  )
+}
+
+///|
+test "browser_command declines over SSH and on a Linux without a display" {
+  let url = "http://127.0.0.1:41612/?t=abc"
+  @debug.assert_eq(
+    browser_command(MacOS, url, {
+      "SSH_CONNECTION": "10.0.0.2 52000 10.0.0.1 22",
+    }),
+    Err("over SSH"),
+  )
+  @debug.assert_eq(
+    browser_command(Linux, url, { "DISPLAY": ":0", "SSH_TTY": "/dev/pts/3" }),
+    Err("over SSH"),
+  )
+  @debug.assert_eq(browser_command(Linux, url, {}), Err("without a display"))
+  // Blank values do not count.
+  @debug.assert_eq(
+    browser_command(Linux, url, { "DISPLAY": " ", "SSH_TTY": "" }),
+    Err("without a display"),
+  )
+}
+
+///|
+test "each browser outcome lands in the transcript under the link" {
+  let state = drain_test_state()
+  assert_true(
+    update(state, BrowserOpened(Launched))
+    is [AppendItem(Input(Notice("opened it in your default browser")))],
+  )
+  assert_true(
+    update(state, BrowserOpened(Skipped("over SSH")))
+    is [
+      AppendItem(
+        Input(Notice("not opening a browser over SSH; use the link above"))
+      ),
+    ],
+  )
+  assert_true(
+    update(state, BrowserOpened(Failed("`xdg-open` not found")))
+    is [
+      AppendItem(
+        Input(
+          Notice(
+            "could not open a browser (`xdg-open` not found); use the link above"
+          )
+        )
+      ),
+    ],
+  )
+}

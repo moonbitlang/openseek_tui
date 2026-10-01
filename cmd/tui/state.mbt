@@ -222,6 +222,8 @@ priv enum Msg {
   // `/inspect` finished starting (or finding) the session viewer: the link to
   // this session, or why there is none. Untagged: it belongs to no run.
   ViewerOpened(Result[String, String])
+  // What `/inspect` then did about opening that link in a browser.
+  BrowserOpened(BrowserOutcome)
   Tick
 }
 
@@ -243,6 +245,7 @@ fn Msg::run_id(self : Msg) -> Int? {
     | EngineBackgroundNotice(_)
     | EngineExited
     | ViewerOpened(_)
+    | BrowserOpened(_)
     | Tick => None
   }
 }

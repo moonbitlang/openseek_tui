@@ -704,6 +704,8 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       cmds.push(
         AppendItem(Error("could not start the session viewer: \{error}")),
       )
+    BrowserOpened(outcome) =>
+      cmds.push(AppendItem(Input(Notice(browser_notice(outcome)))))
     // Tick is a 1s heartbeat: it keeps the message loop turning so the trailing
     // refresh_ui re-runs (the elapsed-time activity line keeps advancing during
     // quiet stretches) and steps the `/loop` countdown. Bookkeeping only — a
@@ -812,6 +814,11 @@ async fn[G] run_message_loop(
               url => Ok(url)
             }
             messages.put(ViewerOpened(result))
+            // The link is in the transcript first, so it is there to use
+            // whatever happens to the browser.
+            if result is Ok(url) {
+              messages.put(BrowserOpened(open_in_browser(url)))
+            }
           }
         }
         // Compaction is an engine operation with no local task. Clear any stale
