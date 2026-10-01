@@ -513,6 +513,13 @@ fn handle_slash_command(
     "compact" => handle_compact_command(state, arguments, cmds)
     "loop" => handle_loop_command(state, arguments, cmds)
     "goal" => handle_goal_command(state, arguments, cmds)
+    "inspect" =>
+      if arguments.is_blank() {
+        cmds.push(AppendItem(Input(Notice("starting the session viewer…"))))
+        cmds.push(OpenViewer)
+      } else {
+        cmds.push(AppendItem(Error("/inspect does not accept arguments")))
+      }
     other => cmds.push(AppendItem(Error("Unknown slash command: /\{other}")))
   }
 }
@@ -689,6 +696,14 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // mirrored goal state.
     EngineGoalUpdated(goal) => apply_goal_update(state, goal, cmds)
     EngineExited => ()
+    // The link gets a line of its own so that, on a wide enough terminal, it
+    // stays one unbroken, clickable run of text.
+    ViewerOpened(Ok(url)) =>
+      cmds.push(AppendItem(Input(Notice("watch this session live:\n\{url}"))))
+    ViewerOpened(Err(error)) =>
+      cmds.push(
+        AppendItem(Error("could not start the session viewer: \{error}")),
+      )
     // Tick is a 1s heartbeat: it keeps the message loop turning so the trailing
     // refresh_ui re-runs (the elapsed-time activity line keeps advancing during
     // quiet stretches) and steps the `/loop` countdown. Bookkeeping only — a
@@ -787,6 +802,18 @@ async fn[G] run_message_loop(
           }
         SteerAgent(input) => engine.steer(group, input)
         UpdateGoal(goal) => engine.goal(group, goal)
+        OpenViewer => {
+          let session_root = state.config.session_root
+          let session = state.config.session_id.value()
+          group.spawn_bg(no_wait=true) <| () => {
+            let result = try open_viewer(session_root, session) catch {
+              error => Err("\{error}")
+            } noraise {
+              url => Ok(url)
+            }
+            messages.put(ViewerOpened(result))
+          }
+        }
         // Compaction is an engine operation with no local task. Clear any stale
         // command handle (as a queued prompt would) so a Ctrl-C cancels this
         // compaction turn rather than a finished command task.

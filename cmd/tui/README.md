@@ -46,6 +46,14 @@ startup banner) stores the conversation under `--session-root` (default
   `--continue` is rejected.
 - `openseek sessions list` lists what is resumable.
 
+`/inspect` shows the session live in the browser. It starts (or reuses) the
+session viewer for `--session-root`, `moonx moonbitlang/inspect@0.1.0 --ensure
+--watch`, in the background, and adds its link to the transcript on a line of
+its own. The page opens on this session and follows it as the conversation
+grows. The viewer is its own process, shared with every other TUI and
+`openseek run --inspect` in the project, outlives the TUI, and exits after an
+hour without a request. If it cannot start, the transcript says why.
+
 ## Configuration
 
 `--api-key` or a provider-specific key env is required: `DEEPSEEK` for DeepSeek
