@@ -9,6 +9,7 @@ import {
   "moonbit-community/displaytext@0.1.5",
   "moonbit-community/tty@0.3.0",
   "moonbitlang/async@0.22.4",
+  "bobzhang/open_in_browser@0.1.0",
   "moonbitlang/x@0.4.50",
 }
 
