@@ -42,49 +42,58 @@ static void engine_tree_adopt_descendants(
   created[count] = root_created;
   count++;
 
-  HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (snapshot == INVALID_HANDLE_VALUE)
-    return;
-
-  // Snapshot order is not parent-before-child, so repeat passes until one
-  // adopts nothing new.
-  int grew = 1;
-  while (grew && count < ENGINE_TREE_MAX) {
-    grew = 0;
-    PROCESSENTRY32W entry;
-    entry.dwSize = sizeof(entry);
-    if (!Process32FirstW(snapshot, &entry))
-      break;
-    do {
-      int parent = -1;
-      int known = 0;
-      for (int i = 0; i < count; ++i) {
-        if (pids[i] == entry.th32ProcessID) {
-          known = 1;
-          break;
+  // An adopted child may itself have started a process before it joined the
+  // job, after the snapshot it was found in was taken. So keep taking fresh
+  // snapshots until one adopts nothing: by then every tree member is in the
+  // job, and anything they start later inherits it.
+  int adopted = 1;
+  while (adopted && count < ENGINE_TREE_MAX) {
+    adopted = 0;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+      return;
+    // Snapshot order is not parent-before-child, so repeat passes until one
+    // adopts nothing new.
+    int grew = 1;
+    while (grew && count < ENGINE_TREE_MAX) {
+      grew = 0;
+      PROCESSENTRY32W entry;
+      entry.dwSize = sizeof(entry);
+      if (!Process32FirstW(snapshot, &entry))
+        break;
+      do {
+        int parent = -1;
+        int known = 0;
+        for (int i = 0; i < count; ++i) {
+          if (pids[i] == entry.th32ProcessID) {
+            known = 1;
+            break;
+          }
+          if (pids[i] == entry.th32ParentProcessID)
+            parent = i;
         }
-        if (pids[i] == entry.th32ParentProcessID)
-          parent = i;
-      }
-      if (known || parent < 0)
-        continue;
-      HANDLE child = OpenProcess(ENGINE_TREE_ACCESS, FALSE, entry.th32ProcessID);
-      if (child == NULL)
-        continue;
-      ULONGLONG child_created = engine_tree_creation_time(child);
-      if (child_created != 0 && child_created >= created[parent]) {
-        // Best effort: a child that cannot join the job is still recorded so
-        // its own descendants are considered.
-        AssignProcessToJobObject(job, child);
-        pids[count] = entry.th32ProcessID;
-        created[count] = child_created;
-        count++;
-        grew = 1;
-      }
-      CloseHandle(child);
-    } while (count < ENGINE_TREE_MAX && Process32NextW(snapshot, &entry));
+        if (known || parent < 0)
+          continue;
+        HANDLE child =
+          OpenProcess(ENGINE_TREE_ACCESS, FALSE, entry.th32ProcessID);
+        if (child == NULL)
+          continue;
+        ULONGLONG child_created = engine_tree_creation_time(child);
+        if (child_created != 0 && child_created >= created[parent]) {
+          // Best effort: a child that cannot join the job is still recorded
+          // so its own descendants are considered.
+          AssignProcessToJobObject(job, child);
+          pids[count] = entry.th32ProcessID;
+          created[count] = child_created;
+          count++;
+          grew = 1;
+          adopted = 1;
+        }
+        CloseHandle(child);
+      } while (count < ENGINE_TREE_MAX && Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
   }
-  CloseHandle(snapshot);
 }
 
 // Create a job that kills its members when its last handle closes, assign the
