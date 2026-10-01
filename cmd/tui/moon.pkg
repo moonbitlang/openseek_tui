@@ -6,6 +6,7 @@ import {
   "moonbitlang/openseek/agent_session/store",
   "moonbitlang/openseek_tui/cmd/tui/internal/command_context",
   "moonbitlang/openseek_tui/cmd/tui/internal/event",
+  "moonbitlang/openseek_tui/cmd/tui/internal/process_tree",
   "moonbitlang/openseek/deepseek",
   "moonbitlang/openseek/cli",
   "moonbitlang/openseek_tui/tui" @ui,
