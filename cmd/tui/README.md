@@ -18,6 +18,20 @@ answer, and tool results land as `⏺` blocks. Pressing Enter while a task runs
 steers it mid-turn; Ctrl-C cancels the turn (a second Ctrl-C kills the engine,
 and the next prompt respawns it on the same session).
 
+A line that starts with `!` is a shell command the UI runs itself, beside the
+conversation: a prompt sent while it runs starts its own turn. When the
+command finishes, its output is sent the way a typed message is — steered into
+a turn that is running, otherwise as a turn of its own — and the agent answers
+it. The `⏺ $ command` card is that message's only echo, live and on resume. A
+command that could not be run, or that Ctrl-C stopped, shows its card and
+sends nothing. The status bar names the command (or counts them) while any is
+running.
+
+Ctrl-C stops whatever is running, the turn and every `!` command alike, and
+quits only when nothing is. Tab queues an input instead of sending it now; a
+`!` command taken from the queue holds the queue until its output has been
+answered, so a prompt queued behind it is asked of an agent that has read it.
+
 Killing the engine (a second Ctrl-C, or a quit that the engine does not drain
 within two seconds) first asks it to stop — SIGTERM on Unix, CTRL_BREAK on
 Windows — and force-kills it five seconds later if it is still running. On

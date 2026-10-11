@@ -51,8 +51,7 @@ test "decode maps each engine event kind" {
 test "steer wire events decode to their applied and dropped forms" {
   assert_true(
     @event.decode_event({ "event": "steer_applied", "content": "go left" })
-    is Some(SteerApplied(Prompt(content, ..))) &&
-    content.text() == "go left",
+    is Some(SteerApplied(Prompt("go left"))),
   )
   assert_true(
     @event.decode_event({
@@ -60,8 +59,7 @@ test "steer wire events decode to their applied and dropped forms" {
       "kind": "prompt",
       "content": "go right",
     })
-    is Some(SteerApplied(Prompt(content, ..))) &&
-    content.text() == "go right",
+    is Some(SteerApplied(Prompt("go right"))),
   )
   assert_true(
     @event.decode_event({
@@ -69,7 +67,7 @@ test "steer wire events decode to their applied and dropped forms" {
       "kind": "command",
       "content": "<user_shell_command>",
     })
-    is Some(SteerApplied(Command("<user_shell_command>", ..))),
+    is Some(SteerApplied(Prompt("<user_shell_command>"))),
   )
   assert_true(
     @event.decode_event({

@@ -187,12 +187,13 @@ fn engine_env(
 /// picks `sh`/`pwsh` per platform and captures merged output but skips the
 /// agent-only command policy), then posts the raw result back to the message
 /// loop, which renders it and sends it into the conversation (see
-/// `CommandResult` in `update`). A Ctrl-C cancels the child and reports the
-/// interruption like an aborted task; nothing is sent for a cancelled command.
+/// `CommandResult` in `update`). A Ctrl-C cancels the child and reports that
+/// instead; nothing is sent for a cancelled command. `id` is the command's
+/// (`ShellCommand::id`), and names it in whichever report this makes.
 async fn run_shell_command(
   command : String,
   messages : @async.Queue[Msg],
-  run_id? : Int32,
+  id~ : Int32,
 ) -> Unit {
   let outcome : Result[@command_context.ShellOutput, Error]? = @async.handle_cancellation(() => {
       try @command_context.collect_shell_output(command) catch {
@@ -203,16 +204,12 @@ async fn run_shell_command(
     },
   )
   guard outcome is Some(result) else {
-    // Cancelled (cancellation bypasses `catch`). A foreground command owns the
-    // run slot: report its cancellation so the command line survives as a
-    // "(cancelled)" card. A background command (no run id) leaves no trace —
-    // it never owned the slot and its agent turn reports its own interruption.
-    if run_id is Some(id) {
-      messages.try_put(CommandCancelled(command~, run_id=id)) |> ignore
-    }
+    // Cancelled (cancellation bypasses `catch`): report it, so the command
+    // line survives as a "(cancelled)" card.
+    messages.try_put(CommandCancelled(command~, id~)) |> ignore
     return
   }
-  messages.put(CommandResult(command~, run_id~, result))
+  messages.put(CommandResult(command~, id~, result))
 }
 
 ///|
@@ -327,14 +324,15 @@ fn handle_agent_event(
     // Prompt steering took effect at the engine's step boundary: echo the input
     // into the transcript at its true conversational position, the way the
     // model actually saw it.
-    SteerApplied(Prompt(content, ..)) => {
-      let text = content.text()
-      confirm_pending_steer(state, text)
-      cmds.push(AppendItem(Input(Prompt(text))))
-    }
-    // Command context is already rendered as a local shell result; its applied
-    // event is only a delivery acknowledgment.
-    SteerApplied(Command(_, ..)) => ()
+    //
+    // A `!` command's output is steered the same way but was already shown, as
+    // its result card, when the command finished: for it this event is only a
+    // delivery acknowledgment.
+    SteerApplied(Prompt(text)) =>
+      if @command_context.parse(text) is None {
+        confirm_pending_steer(state, text)
+        cmds.push(AppendItem(Input(Prompt(text))))
+      }
     // A notice (e.g. a background job finishing) originates in the engine, not
     // from a pending local steer, so just render it in the transcript — except
     // goal markers, whose steer path is transport: the user-facing
@@ -353,7 +351,7 @@ fn handle_agent_event(
     // Kept as defense in depth for any future in-run emitter.
     SteerDropped(text) => {
       confirm_pending_steer(state, text)
-      cmds.push(AppendItem(steer_dropped_item(text)))
+      steer_dropped(state, text, cmds)
     }
     AssistantMessage(text) => {
       state.step_response = Some(text)
@@ -410,10 +408,9 @@ fn handle_agent_event(
     // A rejected control command keeps the engine serving and carries no
     // identity for which command produced it: the engine client stamps it with
     // the mutable `latest_run`, so a delayed rejection of an earlier command
-    // (e.g. the context delivered after a `!` shell command) can arrive once a
-    // later run — including a `/compact` run — is already in flight. With no way
-    // to know whether the rejection belongs to the active run, never end a run on
-    // it; only surface it, and let the run finish on its own terminal event. The
+    // can arrive once a later run — including a `/compact` run — is already in
+    // flight. With no way to know whether the rejection belongs to the active
+    // run, never end a run on it; only surface it, and let the run finish on its own terminal event. The
     // supported serve engine answers `/compact` with `compaction_finished`/
     // `compaction_failed`, so the only command this leaves unacknowledged is one
     // sent to an engine that does not implement it — which the user can cancel.
@@ -526,6 +523,75 @@ fn handle_slash_command(
 }
 
 ///|
+/// Start running the `!` command `command` beside the conversation.
+///
+/// There is no input echo: the result card already shows `$ command` and is
+/// the only form persisted, so an echo would double the command line live and
+/// diverge from a resumed session, which only re-renders the card.
+fn launch_command(
+  state : State,
+  command : String,
+  holds_queue~ : Bool,
+  cmds : Array[Cmd],
+) -> Unit {
+  let id = state.start_command(
+    command,
+    @env.now().reinterpret_as_int64(),
+    holds_queue~,
+  )
+  cmds.push(RunCommand(id~, command))
+}
+
+///|
+/// Start the turn that answers the typed prompt `text`.
+fn start_prompt(state : State, text : String, cmds : Array[Cmd]) -> Unit {
+  let run_id = state.start_run(@env.now().reinterpret_as_int64())
+  cmds.push(AppendItem(Input(Prompt(text))))
+  cmds.push(StartAgent(run_id~, text))
+}
+
+///|
+/// Send the `envelope` of a finished `!` command into the conversation, the
+/// way a typed message goes: steered into a turn that is running, and
+/// otherwise as the prompt of a turn of its own, which the idle check at the
+/// end of `update` starts — at once when the conversation is idle, after the
+/// compaction or interrupt that is in the way when it is not.
+fn send_output(state : State, envelope : String, cmds : Array[Cmd]) -> Unit {
+  if state.run is Running(_) && !state.run_is_compaction {
+    cmds.push(SteerAgent(envelope))
+  } else {
+    state.held_outputs.push(envelope)
+  }
+}
+
+///|
+/// A steer never reached a turn. Typed text would otherwise vanish silently,
+/// so the user is told to submit it again. A `!` command's output is not
+/// theirs to retype: it waits for the conversation to be idle and starts a
+/// turn then — unless the turn it missed was one the user stopped, where
+/// starting another would undo the Ctrl-C. It is held rather than steered
+/// again because whatever refused this steer may refuse the next.
+fn steer_dropped(state : State, text : String, cmds : Array[Cmd]) -> Unit {
+  guard @command_context.parse(text) is Some(shell) else {
+    cmds.push(AppendItem(steer_dropped_item(text)))
+    return
+  }
+  if state.interrupted {
+    cmds.push(
+      AppendItem(
+        Input(
+          Notice(
+            "The output of `\{shell.command}` was not sent: the task was interrupted first.",
+          ),
+        ),
+      ),
+    )
+  } else {
+    state.held_outputs.push(text)
+  }
+}
+
+///|
 fn update(state : State, message : Msg) -> Array[Cmd] {
   let cmds : Array[Cmd] = []
   // Drop task-originated messages that do not belong to the run currently in
@@ -541,12 +607,19 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       match event {
         SlashCommand(name~, arguments~) =>
           handle_slash_command(state, name, arguments, cmds)
-        // Enter while idle submits; Enter while a task runs steers it — prompt
-        // text is folded into the running turn at its next step boundary, and
-        // `!` commands run locally before their output is steered.
-        Steer(input) =>
+        // Enter on a `!` command runs it now, whatever the conversation is
+        // doing: it runs beside the conversation, not in its run slot.
+        Steer(Command(command)) =>
+          launch_command(state, command, holds_queue=false, cmds)
+        // A notice is engine-internal, never user-submitted.
+        Steer(Notice(_)) => ()
+        // Enter while idle starts the turn; Enter while a turn runs steers it
+        // — the text is folded into that turn at its next step boundary.
+        // Neither waits behind the input queue: Enter means now, Tab means
+        // after what is queued.
+        Steer(Prompt(text)) =>
           if state.run is Idle {
-            state.queued.push(input)
+            start_prompt(state, text, cmds)
           } else if state.run is Interrupting(_) {
             // The turn is being cancelled: a steer sent now could outlive
             // the dying turn in the engine's queue and contaminate a later
@@ -555,17 +628,6 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
               AppendItem(
                 Error(
                   "The task is being interrupted and cannot be steered. Press Tab to queue this input.",
-                ),
-              ),
-            )
-          } else if state.run_is_command {
-            // The active run is a local shell command: there is no engine
-            // turn to steer, and steering the idle engine would start a
-            // phantom turn behind the command's back.
-            cmds.push(
-              AppendItem(
-                Error(
-                  "A local shell command is running and cannot be steered. Press Tab to queue this input.",
                 ),
               ),
             )
@@ -580,57 +642,40 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
                 ),
               ),
             )
-          } else {
-            match input {
-              Prompt(text) =>
-                // A blank steer would be filtered engine-side without any
-                // settling event, leaving a phantom acknowledgment; there is
-                // nothing to say to the model anyway, so drop it here.
-                if !text.is_blank() {
-                  // Acknowledge immediately: the transcript echo only comes
-                  // at the step boundary, but the user pressed Enter *now*.
-                  state.pending_steers.push(text)
-                  cmds.push(SteerAgent(prompt_steer(text)))
-                }
-              // No input echo for a `!` command: the result card already shows
-              // `$ command`, and that card is the only form persisted, so an
-              // echo here would double the command line live and diverge from a
-              // resumed session, which only re-renders the card.
-              Command(command) => {
-                // Its eventual completion hands command context to the engine;
-                // a scheduled `/loop` fire must not slip in between (the
-                // context would land in the scheduled turn instead of this
-                // conversation), so track it as busy until the result arrives.
-                state.background_commands += 1
-                cmds.push(RunCommand(run_id=None, command))
-              }
-              // A notice is engine-internal, never user-submitted steering.
-              Notice(_) => ()
-            }
+          } else if !text.is_blank() {
+            // A blank steer would be filtered engine-side without any
+            // settling event, leaving a phantom acknowledgment; there is
+            // nothing to say to the model anyway, so it is dropped here.
+            //
+            // Acknowledge immediately: the transcript echo only comes at the
+            // step boundary, but the user pressed Enter *now*.
+            state.pending_steers.push(text)
+            cmds.push(SteerAgent(text))
           }
         Queue(input) => state.queued.push(input)
-        // Ctrl+C interrupts the running task; when nothing is running it quits
-        // the TUI (the common "press Ctrl+C to get out" expectation), rather than
-        // printing a dead-end "nothing to interrupt" notice. A second Ctrl+C
-        // while already interrupting escalates from the polite cancel command
-        // to killing the engine process.
-        Interrupt =>
+        // Ctrl+C stops whatever is running — the turn and every `!` command
+        // alike — and when nothing is running it quits the TUI (the common
+        // "press Ctrl+C to get out" expectation), rather than printing a
+        // dead-end "nothing to interrupt" notice. A second Ctrl+C while a turn
+        // is already being interrupted escalates from the polite cancel
+        // command to killing the engine process; a `!` command has nothing
+        // harder than another cancel.
+        Interrupt => {
+          let stopped_commands = !state.commands.is_empty()
+          for shell in state.commands {
+            shell.interrupted = true
+            cmds.push(CancelCommand(id=shell.id))
+          }
           match state.run {
-            Idle => cmds.push(Quit)
+            Idle => if !stopped_commands { cmds.push(Quit) }
             Running(started_ms) => {
               state.run = Interrupting(started_ms)
+              state.interrupted = true
               cmds.push(CancelAgent)
             }
-            Interrupting(_) =>
-              // Escalation only makes sense for an engine turn; a stuck
-              // local shell command has nothing harder than another cancel,
-              // and killing the engine would punish an innocent bystander.
-              if state.run_is_command {
-                cmds.push(CancelAgent)
-              } else {
-                cmds.push(KillEngine)
-              }
+            Interrupting(_) => cmds.push(KillEngine)
           }
+        }
         Quit => cmds.push(Quit)
       }
     AgentProgress(event, ..) => handle_agent_event(state, event, cmds)
@@ -639,71 +684,50 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       scheduler_on_run_end(state, LoopRunFailed("was interrupted"), cmds)
       state.finish_run()
     }
-    CommandCancelled(command~, ..) => {
-      cmds.push(AppendItem(command_cancelled_item(command)))
-      state.finish_run()
-    }
+    CommandCancelled(command~, id~) =>
+      if state.finish_command(id) is Some(_) {
+        cmds.push(AppendItem(command_cancelled_item(command)))
+      }
     AgentFailed(error, ..) => {
       cmds.push(AppendItem(Error("agent failed: \{error}")))
       scheduler_on_run_end(state, LoopRunFailed("failed"), cmds)
       state.finish_run()
     }
-    CommandResult(command~, run_id~, result) => {
-      let text = @command_context.encode(command, result)
-      // The card lands here, at shell-completion time. For a background command
-      // (run alongside a live turn) that is deliberately *not* the position the
-      // engine persists the corresponding user message — it appends that at the
-      // turn's next step boundary, so assistant/tool events already in flight
-      // can sit after `$ cmd` live but before it on resume. This is intentional:
-      // the live transcript is a real-time log (entries appear when they
-      // happen), while the durable session reflects model-visible conversational
-      // order. Deferring the card to the boundary would leave the user staring
-      // at silence for the rest of a long tool call after their command already
-      // finished, which the immediate card exists to avoid.
-      cmds.push(AppendItem(command_item(command, result)))
-      match run_id {
-        // A foreground command (launched while idle) owns the run slot, and
-        // its output is sent the way a typed message is: the run goes on as
-        // the turn that answers it. The card above is that message's only
-        // echo, live and on resume alike.
+    CommandResult(command~, id~, result) =>
+      if state.finish_command(id) is Some(shell) {
+        // The card lands here, at shell-completion time. For a command that
+        // ran alongside a live turn that is deliberately *not* the position
+        // the engine persists the corresponding user message — it appends that
+        // at the turn's next step boundary, so assistant/tool events already
+        // in flight can sit after `$ cmd` live but before it on resume. This
+        // is intentional: the live transcript is a real-time log (entries
+        // appear when they happen), while the durable session reflects
+        // model-visible conversational order. Deferring the card to the
+        // boundary would leave the user staring at silence for the rest of a
+        // long tool call after their command already finished, which the
+        // immediate card exists to avoid.
+        cmds.push(AppendItem(command_item(command, result)))
+        // The output is sent the way a typed message is, and the agent
+        // answers it. The card above is that message's only echo, live and on
+        // resume alike.
         //
-        // Not when there is nothing for the agent to answer — the command
-        // could not be run, or the user is interrupting — nor when an input
-        // is already queued behind it: that input's own turn reads this
-        // output, and a turn on the output alone would only delay it.
-        Some(id) if result is Ok(_) &&
-          state.run is Running(_) &&
-          state.queued.is_empty() => {
-          state.run_is_command = false
-          cmds.push(StartAgent(run_id=id, text))
-        }
-        // Otherwise the output is handed over as context only: the engine
-        // appends it as a durable user message without starting a turn.
-        Some(_) => {
-          state.finish_run()
-          cmds.push(SteerAgent(Command(text, submission_id=None)))
-        }
-        // A background command ran alongside a live agent turn and never owned
-        // the run slot — it only releases its hold on the `/loop` fire gate.
-        // The engine folds its output into that turn at the next step
-        // boundary, where the agent reads it.
-        None => {
-          state.background_commands = (state.background_commands - 1).max(0)
-          cmds.push(SteerAgent(Command(text, submission_id=None)))
+        // Not when there is nothing to answer: the command could not be run,
+        // or Ctrl-C reached it as it finished. Its card is then all there is —
+        // the conversation never hears of it.
+        if result is Ok(_) && !shell.interrupted {
+          send_output(state, @command_context.encode(command, result), cmds)
         }
       }
-    }
-    // The steer never reached a turn; the text would otherwise vanish
-    // silently. Run state is untouched — the run's own death report (or
-    // terminal event) settles it.
+    // The steer never reached a turn. Run state is untouched — the run's own
+    // death report (or terminal event) settles it.
     SteerDropped(text) => {
       confirm_pending_steer(state, text)
-      cmds.push(AppendItem(steer_dropped_item(text)))
+      steer_dropped(state, text, cmds)
     }
     // Settles nothing by construction: the rejecting turn's terminal already
     // swept its acknowledgments, and a text match here could only steal a
     // fresh identical-text steer's entry from the next turn.
-    EngineSteerDropped(text) => cmds.push(AppendItem(steer_dropped_item(text)))
+    EngineSteerDropped(text) => steer_dropped(state, text, cmds)
     EngineSessionError(error) => cmds.push(AppendItem(Error(error)))
     // Goal markers are filtered for the same reason as on the steer path:
     // their notice leg is transport, and goal_updated carries the
@@ -733,28 +757,31 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // due schedule is dispatched at the post-update choke point.
     Tick => scheduler_tick(state)
   }
-  // One input runs at a time: whenever the TUI is idle and inputs are waiting,
-  // start the next one. A prompt is dispatched to the agent engine; a `!` shell
-  // command is run locally instead. Only submissions and run-ending events can
-  // reach "idle with a non-empty queue", so this never fires spuriously.
-  if state.run is Idle && state.queued.length() > 0 {
-    let input = state.queued.remove(0)
-    let run_id = state.start_run(@env.now().reinterpret_as_int64())
-    match input {
-      Prompt(text) => {
-        cmds.push(AppendItem(Input(Prompt(text))))
-        cmds.push(StartAgent(run_id~, text))
+  // One turn runs at a time: whenever the conversation is idle and something
+  // is waiting, start the next turn. A `!` command's output that could not be
+  // sent when it was ready goes first — it is older than anything still
+  // queued — and has no input echo, its card being on screen already.
+  //
+  // Then the input queue, unless a command taken from it is still running:
+  // the queue waits for that command's output (see `ShellCommand`). A queued
+  // prompt starts its turn; a queued `!` command starts running, and leaves
+  // the conversation idle. Only submissions and events that end a run or a
+  // command can reach "idle with something waiting", so this never fires
+  // spuriously.
+  if state.run is Idle {
+    if state.held_outputs.length() > 0 {
+      let envelope = state.held_outputs.remove(0)
+      let run_id = state.start_run(@env.now().reinterpret_as_int64())
+      cmds.push(StartAgent(run_id~, envelope))
+    } else if state.queued.length() > 0 &&
+      !state.commands.any(shell => shell.holds_queue) {
+      match state.queued.remove(0) {
+        Prompt(text) => start_prompt(state, text, cmds)
+        Command(command) =>
+          launch_command(state, command, holds_queue=true, cmds)
+        // A notice is engine-internal, never a user-submitted queued input.
+        Notice(_) => ()
       }
-      // No input echo for a `!` command: the result card (command_item) already
-      // shows `$ command` and is the only form persisted to the session, so
-      // echoing here too would show the command twice live and diverge from
-      // resume, which only re-renders that card.
-      Command(command) => {
-        state.run_is_command = true
-        cmds.push(RunCommand(run_id=Some(run_id), command))
-      }
-      // A notice is engine-internal, never a user-submitted queued input.
-      Notice(_) => ()
     }
   }
   cmds
@@ -769,10 +796,10 @@ async fn[G] run_message_loop(
 ) -> Unit {
   // The persistent serve-mode engine connection: one process serves every
   // prompt of this TUI session. Prompts, steers, and cancels are commands on
-  // its stdin; a `!` shell command remains a local task, tracked by
-  // `running_task` so an interrupt can cancel it directly.
+  // its stdin; a `!` shell command is a local task, kept in `command_tasks`
+  // under its id so an interrupt can cancel it directly.
   let engine = EngineClient(state.config, messages)
-  let mut running_task : @async.Task[Unit]? = None
+  let command_tasks : Map[Int32, @async.Task[Unit]] = Map([])
   outer~: for ;; {
     // Apply every message already enqueued before deciding anything further:
     // `read_event` resets the composer before its UiInput reaches this queue,
@@ -792,38 +819,23 @@ async fn[G] run_message_loop(
     // The `/loop` dispatch choke point: runs once per drained batch, after
     // lifecycle changes are applied and queued input has drained, with the one
     // gate `update` cannot see — whether the user has draft text in the
-    // composer. A due fire appends its StartAgent here, after any
-    // command-context steer the updates produced.
+    // composer. A due fire appends its StartAgent here.
     scheduler_maybe_fire(state, input_idle=ui.input_idle(), cmds)
     for cmd in cmds {
       match cmd {
         AppendItem(item) => ui.append_item(item)
-        StartAgent(run_id~, task) => {
-          // An engine turn has no local task. A queued prompt can start in
-          // the same update that finished a `!` command (state never passes
-          // through Idle, so the cleanup below never runs); clear the stale
-          // handle here or the next Ctrl-C would cancel a dead command task
-          // instead of the engine turn.
-          running_task = None
-          engine.prompt(group, run_id, task)
-        }
-        // A foreground command (run_id present) owns the cancellable run slot:
-        // spawn it and stash the task so Cancel/Kill can reach it. A background
-        // command (run_id absent) runs alongside a live agent turn and must stay
-        // fire-and-forget, never displacing the turn as the cancel target.
-        RunCommand(run_id~, command) =>
-          if run_id is Some(_) {
-            running_task = Some(
-              group.spawn(no_wait=true) <| () => {
-                run_shell_command(command, messages, run_id?)
-              },
-            )
-          } else {
-            group.spawn_bg(no_wait=true) <| () => {
-              run_shell_command(command, messages, run_id?)
-            }
+        StartAgent(run_id~, task) => engine.prompt(group, run_id, task)
+        RunCommand(id~, command) =>
+          command_tasks[id] = group.spawn(no_wait=true) <| () => {
+            run_shell_command(command, messages, id~)
           }
-        SteerAgent(input) => engine.steer(group, input)
+        // Absent once the command has reported: a repeated Ctrl-C then has
+        // nothing left to cancel.
+        CancelCommand(id~) =>
+          if command_tasks.get(id) is Some(task) {
+            task.cancel()
+          }
+        SteerAgent(text) => engine.steer(text)
         UpdateGoal(goal) => engine.goal(group, goal)
         OpenViewer => {
           let session_root = state.config.session_root
@@ -842,40 +854,21 @@ async fn[G] run_message_loop(
             }
           }
         }
-        // Compaction is an engine operation with no local task. Clear any stale
-        // command handle (as a queued prompt would) so a Ctrl-C cancels this
-        // compaction turn rather than a finished command task.
-        CompactSession(run_id~) => {
-          running_task = None
-          engine.compact(group, run_id)
-        }
-        CancelAgent =>
-          match running_task {
-            // A local shell command (or a one-shot engine run) in flight:
-            // cancel its task directly.
-            Some(task) => task.cancel()
-            None => engine.cancel_turn()
-          }
-        KillEngine =>
-          match running_task {
-            // One-shot runs and local commands have no separate process to
-            // escalate to beyond cancelling the task again.
-            Some(task) => task.cancel()
-            None => engine.kill()
-          }
+        CompactSession(run_id~) => engine.compact(group, run_id)
+        CancelAgent => engine.cancel_turn()
+        KillEngine => engine.kill()
         Quit => {
           // Close the engine's stdin (the serve protocol's shutdown signal) and
-          // give it a bounded moment to drain any already-delivered command
-          // context to the store and exit, so quitting right after a `!` does
-          // not lose output the user already saw carded.
+          // give it a bounded moment to finish writing what it was already
+          // sent to the store and exit.
           engine.shutdown()
-          // If the engine actually failed to persist a delivered `!` context (or
-          // could not be written to), it emitted a `session_error` the reader
-          // turned into an `EngineSessionError`; one may be sitting in the queue
-          // as we break, so drain and surface it. Everything else queued is
-          // dropped on purpose: a `!` that only finished after we began quitting
-          // never had its card rendered (shell output is carded on completion,
-          // not streamed), so dropping it is consistent with resume and a
+          // If the engine failed to persist something (or could not be
+          // written to), it emitted a `session_error` the reader turned into
+          // an `EngineSessionError`; one may be sitting in the queue as we
+          // break, so drain and surface it. Everything else queued is dropped
+          // on purpose: a `!` that only finished after we began quitting never
+          // had its card rendered (shell output is carded on completion, not
+          // streamed), so dropping it is consistent with resume and a
           // deliberate quit has no next turn that needs the output.
           while messages.try_get() is Some(pending) {
             if pending is EngineSessionError(error) {
@@ -886,12 +879,12 @@ async fn[G] run_message_loop(
         }
       }
     }
-    // A terminal event for the active run leaves `state` idle (unless the
-    // queue drain in `update` immediately started the next run); drop the
-    // stale local task handle so an interrupt cannot cancel a command that
-    // already finished.
-    if state.run is Idle {
-      running_task = None
+    // A command that has reported is no longer tracked by `state`; drop its
+    // task handle with it.
+    for id in command_tasks.keys().to_array() {
+      if !state.commands.any(shell => shell.id == id) {
+        command_tasks.remove(id)
+      }
     }
     refresh_ui(ui, state)
   }
@@ -926,15 +919,28 @@ fn error_item_count(cmds : Array[Cmd]) -> Int32 {
 }
 
 ///|
-/// Foreground `!` commands: those that own a run slot (run_id present).
 fn run_command_count(cmds : Array[Cmd]) -> Int32 {
-  cmds.count_if(cmd => cmd is RunCommand(run_id=Some(_), _))
+  cmds.count_if(cmd => cmd is RunCommand(_, ..))
 }
 
 ///|
-/// Background `!` commands launched alongside a live turn (run_id absent).
-fn run_background_command_count(cmds : Array[Cmd]) -> Int32 {
-  cmds.count_if(cmd => cmd is RunCommand(run_id=None, _))
+/// The envelope a `!` command that printed `output` and exited 0 is sent as.
+fn test_envelope(command : String, output : String) -> String {
+  @command_context.encode(command, Ok(test_output(output)))
+}
+
+///|
+fn test_output(text : String) -> @command_context.ShellOutput {
+  { exit_code: Some(0), text, output_limit_reached: false, }
+}
+
+///|
+/// Submit `!command` with Enter and return the id it runs under.
+fn enter_command(state : State, command : String) -> Int32 raise {
+  guard update(state, UiInput(Steer(Command(command)))) is [RunCommand(id~, _)] else {
+    fail("expected the command to start running")
+  }
+  id
 }
 
 ///|
@@ -1163,14 +1169,15 @@ test "unknown slash command reports an error" {
 }
 
 ///|
-test "a submitted shell command runs locally, not via the agent" {
+test "a submitted shell command runs locally, beside the conversation" {
   let state = drain_test_state()
-  // A `!` command submitted while idle drains to a local RunCommand, never to
-  // the agent engine.
+  // A `!` command is a local RunCommand, never the agent engine's, and it does
+  // not take the run slot: the conversation stays idle while it runs.
   let cmds = update(state, UiInput(Steer(Command("ls"))))
-  assert_true(state.run is Running(_))
   assert_eq(run_command_count(cmds), 1)
   assert_eq(start_agent_count(cmds), 0)
+  assert_true(state.run is Idle)
+  assert_eq(state.commands.length(), 1)
 }
 
 ///|
@@ -1302,18 +1309,14 @@ test "steering a running agent sends a steer command" {
   assert_eq(state.queued.length(), 0)
   assert_eq(start_agent_count(cmds), 0)
   assert_eq(error_item_count(cmds), 0)
-  guard cmds is [SteerAgent(Prompt(content, ..))] else {
-    fail("expected a steer command")
-  }
-  assert_eq(content.text(), "b")
+  guard cmds is [SteerAgent("b")] else { fail("expected a steer command") }
   assert_true(state.run is Running(_))
 
-  // A shell command runs locally in the background; its output is sent as
-  // command context after the command finishes.
+  // A shell command runs locally alongside the turn; its output is steered in
+  // after the command finishes.
   let cmds = update(state, UiInput(Steer(Command("ls"))))
   assert_eq(error_item_count(cmds), 0)
-  assert_eq(run_background_command_count(cmds), 1)
-  assert_eq(run_command_count(cmds), 0)
+  assert_eq(run_command_count(cmds), 1)
   assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
   assert_true(state.run is Running(_))
 
@@ -1324,118 +1327,133 @@ test "steering a running agent sends a steer command" {
 }
 
 ///|
-test "a background shell command result sends command context" {
+/// A `!` command's output is a message like any other: with a turn running it
+/// is steered into that turn, the way text typed mid-turn is.
+test "a shell command's output is steered into the running turn" {
   let state = drain_test_state()
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
-  assert_true(state.run is Running(_))
-
+  let id = enter_command(state, "ls")
   let cmds = update(
     state,
-    CommandResult(command="ls", run_id=None, Err(Failure::Failure("boom"))),
+    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
   )
-  guard cmds is [AppendItem(_), SteerAgent(Command(text, ..))] else {
-    fail("expected command transcript item and command steer")
+  guard cmds is [AppendItem(ToolCall(_)), SteerAgent(text)] else {
+    fail("expected the command card and its output steered in")
   }
-  assert_true(text.contains("<user_shell_command>"))
-  assert_true(text.contains("<command>\nls\n</command>"))
-  assert_true(text.contains("error running shell:"))
+  assert_eq(text, test_envelope("ls", "a.txt"))
+  // It is not typed text: nothing is acknowledged on the activity line.
   assert_eq(state.pending_steers.length(), 0)
   assert_true(state.run is Running(_))
-}
-
-///|
-test "a running shell command is never steered and never kills the engine" {
-  let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Command("sleep 5"))))
-  assert_true(state.run is Running(_))
-  assert_true(state.run_is_command)
-
-  // Steering a local command run errors instead of poking the idle engine.
-  let cmds = update(state, UiInput(Steer(Prompt("change of plan"))))
-  assert_eq(error_item_count(cmds), 1)
-  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
-
-  // Interrupt escalation stays on the local task: a second Ctrl-C cancels
-  // again rather than killing the bystander engine process.
-  let _ = update(state, UiInput(Interrupt))
-  assert_true(state.run is Interrupting(_))
-  let cmds = update(state, UiInput(Interrupt))
-  assert_true(cmds.any(cmd => cmd is CancelAgent))
-  assert_true(cmds.all(cmd => !(cmd is KillEngine)))
-
-  // Finishing the command clears the flag.
-  let _ = update(
-    state,
-    CommandResult(
-      run_id=Some(state.run_id),
-      command="sleep 5",
-      Err(Failure::Failure("interrupted")),
-    ),
-  )
-  assert_false(state.run_is_command)
-}
-
-///|
-test "a cancelled foreground shell command survives as a card, not a lost line" {
-  let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Command("sleep 100"))))
-  let command_run = state.run_id
-  assert_true(state.run_is_command)
-
-  // Ctrl-C moves the command into Interrupting and cancels its local task.
-  let _ = update(state, UiInput(Interrupt))
-  assert_true(state.run is Interrupting(_))
-
-  // The cancelled task reports back with no result. The command line must still
-  // appear — as a "(cancelled)" card, since the live input echo was dropped —
-  // and the run settles without handing anything to the engine.
+  assert_eq(state.commands.length(), 0)
+  // The card was its echo; the engine's receipt adds nothing.
   let cmds = update(
     state,
-    CommandCancelled(command="sleep 100", run_id=command_run),
+    AgentProgress(run_id=state.run_id, SteerApplied(Prompt(text))),
   )
+  assert_eq(cmds.length(), 0)
+}
+
+///|
+/// A running `!` command does not hold the conversation: Enter on a prompt
+/// starts its turn at once, and that turn is steered like any other.
+test "a prompt sent while a shell command runs starts its own turn" {
+  let state = drain_test_state()
+  let id = enter_command(state, "sleep 5")
+  let cmds = update(state, UiInput(Steer(Prompt("meanwhile"))))
+  guard cmds is [AppendItem(Input(Prompt("meanwhile"))), StartAgent(text, ..)] else {
+    fail("expected the prompt's turn")
+  }
+  assert_eq(text, "meanwhile")
+  assert_true(state.run is Running(_))
+  assert_true(state.commands.any(shell => shell.id == id))
+  let cmds = update(state, UiInput(Steer(Prompt("change of plan"))))
+  assert_true(cmds is [SteerAgent("change of plan")])
+}
+
+///|
+/// Ctrl-C stops whatever is running. A `!` command has no engine behind it,
+/// so a second Ctrl-C cancels it again rather than killing anything, and the
+/// TUI only quits once nothing is left to stop.
+test "Ctrl+C stops running shell commands instead of quitting" {
+  let state = drain_test_state()
+  let first = enter_command(state, "sleep 100")
+  let second = enter_command(state, "sleep 200")
+  let cmds = update(state, UiInput(Interrupt))
+  assert_true(
+    cmds is [CancelCommand(id=a), CancelCommand(id=b)] &&
+    a == first &&
+    b == second,
+  )
+  assert_true(state.run is Idle)
+  // Until the tasks report, the commands are still there to stop.
+  let cmds = update(state, UiInput(Interrupt))
+  assert_eq(quit_count(cmds), 0)
+  assert_true(cmds.all(cmd => cmd is CancelCommand(..)))
+  let _ = update(state, CommandCancelled(command="sleep 100", id=first))
+  let _ = update(state, CommandCancelled(command="sleep 200", id=second))
+  assert_eq(quit_count(update(state, UiInput(Interrupt))), 1)
+}
+
+///|
+test "Ctrl+C stops the turn and the shell commands running beside it" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let id = enter_command(state, "sleep 100")
+  let cmds = update(state, UiInput(Interrupt))
+  assert_true(cmds is [CancelCommand(id=stopped), CancelAgent] && stopped == id)
+  assert_true(state.run is Interrupting(_))
+  // The second one escalates on the turn; the command just gets cancelled
+  // again.
+  let cmds = update(state, UiInput(Interrupt))
+  assert_true(cmds is [CancelCommand(..), KillEngine])
+}
+
+///|
+test "a cancelled shell command survives as a card, not a lost line" {
+  let state = drain_test_state()
+  let id = enter_command(state, "sleep 100")
+  let _ = update(state, UiInput(Interrupt))
+
+  // The cancelled task reports back with no result. The command line must still
+  // appear — as a "(cancelled)" card, since it has no input echo — and nothing
+  // is sent into the conversation.
+  let cmds = update(state, CommandCancelled(command="sleep 100", id~))
   guard cmds is [AppendItem(ToolCall(_))] else {
     fail("expected exactly one cancelled command card, not a lost line")
   }
-  assert_true(cmds.all(cmd => !(cmd is SteerAgent(_))))
   assert_true(state.run is Idle)
-  assert_false(state.run_is_command)
+  assert_eq(state.commands.length(), 0)
+  // A second report for the same command is nobody's.
+  assert_eq(
+    update(state, CommandCancelled(command="sleep 100", id~)).length(),
+    0,
+  )
 }
 
 ///|
-test "a shell command that could not run is persisted as an idle user message" {
+/// There is nothing for the agent to answer in a command that never ran: its
+/// card is all there is, and the conversation never hears of it.
+test "a shell command that could not run leaves only its card" {
   let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Command("ls"))))
-  let command_run = state.run_id
+  let id = enter_command(state, "ls")
   let cmds = update(
     state,
-    CommandResult(
-      run_id=Some(command_run),
-      command="ls",
-      Err(Failure::Failure("boom")),
-    ),
+    CommandResult(command="ls", id~, Err(Failure::Failure("boom"))),
   )
   // A spawn failure still renders a command card (not a bare error), so the
-  // `$ ls` line survives now that the live input echo is gone — matching the
-  // `$ ls (failed)` card resume reconstructs from the persisted context.
-  guard cmds is [AppendItem(ToolCall(_)), SteerAgent(Command(text, ..))] else {
-    fail("expected a command card and command steer")
+  // `$ ls` line survives without an input echo.
+  guard cmds is [AppendItem(ToolCall(_))] else {
+    fail("expected only the command card")
   }
-  assert_true(text.contains("<user_shell_command>"))
-  assert_true(text.contains("<command>\nls\n</command>"))
-  assert_true(text.contains("error running shell:"))
   assert_true(state.run is Idle)
-  assert_true(cmds.all(cmd => !(cmd is StartAgent(_, ..))))
-  assert_false(state.run_is_command)
+  assert_eq(state.held_outputs.length(), 0)
 
   let cmds = update(state, UiInput(Steer(Prompt("what changed?"))))
   guard cmds
-    is [AppendItem(Input(Prompt("what changed?"))), StartAgent(run_id~, text)] else {
+    is [AppendItem(Input(Prompt("what changed?"))), StartAgent(text, ..)] else {
     fail("expected prompt transcript item and agent start")
   }
-  assert_true(run_id != command_run)
   assert_eq(text, "what changed?")
-  assert_true(state.run is Running(_))
-  assert_false(state.run_is_command)
 }
 
 ///|
@@ -1443,93 +1461,163 @@ test "a shell command that could not run is persisted as an idle user message" {
 /// going on, the agent answers it.
 async test "a finished shell command starts the turn that answers it" {
   let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Command("echo hello"))))
-  let command_run = state.run_id
-  assert_true(state.run_is_command)
+  let id = enter_command(state, "echo hello")
   let messages = @async.Queue(kind=Unbounded)
-  run_shell_command("echo hello", messages, run_id=command_run)
+  run_shell_command("echo hello", messages, id~)
   let cmds = update(state, messages.get())
-  // The card is the message's only echo; the same run carries on as the turn.
-  guard cmds is [AppendItem(ToolCall(_)), StartAgent(run_id~, text)] else {
+  // The card is the message's only echo: the prompt itself is not shown.
+  guard cmds is [AppendItem(ToolCall(_)), StartAgent(text, ..)] else {
     fail("expected a command card and the turn on its output")
   }
-  assert_eq(run_id, command_run)
   assert_true(text.contains("<command>\necho hello\n</command>"))
   assert_true(text.contains("hello"))
   assert_true(state.run is Running(_))
-  assert_false(state.run_is_command)
-  // It is an engine turn now: steering reaches it.
+  assert_eq(state.commands.length(), 0)
+  // It is an engine turn: steering reaches it.
   let cmds = update(state, UiInput(Steer(Prompt("and then?"))))
-  assert_true(cmds.any(cmd => cmd is SteerAgent(Prompt(_, ..))))
+  assert_true(cmds is [SteerAgent("and then?")])
 }
 
 ///|
-/// An input queued behind the command is what the user wants answered: its
-/// turn reads the output, so the output alone starts none.
-async test "a shell command with an input queued behind it only hands over context" {
+/// Tab means "after this". A `!` command taken from the queue holds the queue
+/// until its output has been answered, so the prompt queued behind it is asked
+/// of an agent that has read that output.
+test "a queued shell command holds the queue until its output is answered" {
   let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Command("echo hello"))))
-  let command_run = state.run_id
-  let _ = update(state, UiInput(Queue(Prompt("what changed?"))))
-  let messages = @async.Queue(kind=Unbounded)
-  run_shell_command("echo hello", messages, run_id=command_run)
-  let cmds = update(state, messages.get())
+  guard update(state, UiInput(Queue(Command("make")))) is [RunCommand(id~, _)] else {
+    fail("expected the queued command to start running")
+  }
+  assert_true(state.run is Idle)
+  let cmds = update(state, UiInput(Queue(Prompt("did it pass?"))))
+  assert_eq(cmds.length(), 0)
+  assert_eq(state.queued.length(), 1)
+  // Its output starts a turn; the queued prompt waits for that turn too.
+  let cmds = update(
+    state,
+    CommandResult(command="make", id~, Ok(test_output("ok"))),
+  )
+  guard cmds is [AppendItem(ToolCall(_)), StartAgent(run_id~, text)] else {
+    fail("expected the command card and the turn on its output")
+  }
+  assert_eq(text, test_envelope("make", "ok"))
+  assert_eq(state.queued.length(), 1)
+  let cmds = update(state, AgentProgress(run_id~, AgentFinished("built")))
   guard cmds
     is [
-      AppendItem(ToolCall(_)),
-      SteerAgent(Command(_, ..)),
-      AppendItem(Input(Prompt("what changed?"))),
-      StartAgent(run_id~, text),
+      AppendItem(Response("built")),
+      AppendItem(Input(Prompt("did it pass?"))),
+      StartAgent(text, ..),
     ] else {
-    fail("expected context for the command, then the queued prompt's turn")
+    fail("expected the queued prompt's turn")
   }
-  assert_true(run_id != command_run)
-  assert_eq(text, "what changed?")
+  assert_eq(text, "did it pass?")
+}
+
+///|
+/// Only a command the queue itself started holds it: one run with Enter is
+/// beside the conversation, and what is queued goes ahead.
+test "a shell command run with Enter does not hold the queue" {
+  let state = drain_test_state()
+  let _ = enter_command(state, "sleep 100")
+  let cmds = update(state, UiInput(Queue(Prompt("meanwhile"))))
+  assert_eq(start_agent_count(cmds), 1)
+  assert_eq(state.queued.length(), 0)
 }
 
 ///|
 /// Ctrl-C says the user does not want this to go on. A command that finishes
-/// in the same moment still leaves its output behind, but answers to nobody.
+/// in the same moment still shows its output, but answers to nobody.
 async test "a shell command that finishes while being interrupted starts no turn" {
   let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Command("echo hello"))))
-  let command_run = state.run_id
+  let id = enter_command(state, "echo hello")
   let _ = update(state, UiInput(Interrupt))
-  assert_true(state.run is Interrupting(_))
   let messages = @async.Queue(kind=Unbounded)
-  run_shell_command("echo hello", messages, run_id=command_run)
+  run_shell_command("echo hello", messages, id~)
   let cmds = update(state, messages.get())
-  guard cmds is [AppendItem(ToolCall(_)), SteerAgent(Command(_, ..))] else {
-    fail("expected a command card and context only")
+  guard cmds is [AppendItem(ToolCall(_))] else {
+    fail("expected only the command card")
   }
+  assert_true(state.run is Idle)
+  assert_eq(state.held_outputs.length(), 0)
+}
+
+///|
+/// A steer can miss its turn: the turn ends as the output arrives. Typed text
+/// is handed back to be submitted again; a command's output is not the user's
+/// to retype, so it starts the turn that answers it instead.
+test "a shell command's output that misses its turn starts one of its own" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let id = enter_command(state, "ls")
+  let _ = update(
+    state,
+    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+  )
+  let _ = update(
+    state,
+    AgentProgress(run_id=state.run_id, AgentFinished("done")),
+  )
+  assert_true(state.run is Idle)
+  let envelope = test_envelope("ls", "a.txt")
+  let cmds = update(state, EngineSteerDropped(envelope))
+  guard cmds is [StartAgent(text, ..)] else {
+    fail("expected the turn on the dropped output, and no resubmit notice")
+  }
+  assert_eq(text, envelope)
+
+  // The same drop arriving once the next turn is under way waits for it
+  // rather than being steered again: whatever refused it once may again.
+  let cmds = update(state, EngineSteerDropped(envelope))
+  assert_eq(cmds.length(), 0)
+  let cmds = update(
+    state,
+    AgentProgress(run_id=state.run_id, AgentFinished("ok")),
+  )
+  assert_true(cmds.any(cmd => cmd is StartAgent(_, ..)))
+}
+
+///|
+/// Not after Ctrl-C: the turn the output missed is one the user stopped, and
+/// starting another on their behalf would undo that.
+test "a shell command's output dropped by an interrupted turn is not sent again" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let _ = update(state, UiInput(Interrupt))
+  let _ = update(
+    state,
+    AgentProgress(run_id=state.run_id, AgentAborted("interrupted")),
+  )
+  assert_true(state.run is Idle)
+  let cmds = update(state, EngineSteerDropped(test_envelope("ls", "a.txt")))
+  guard cmds is [AppendItem(Input(Notice(notice)))] else {
+    fail("expected a notice and no turn")
+  }
+  assert_true(notice.contains("`ls`"))
   assert_true(state.run is Idle)
 }
 
 ///|
-test "a command context delivery failure reports without prompt fallback" {
+/// A compaction cannot be steered, so an output that is ready during one waits
+/// for it and then starts its turn.
+test "a shell command's output waits out a compaction" {
   let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Command("ls"))))
-  let command_run = state.run_id
+  let _ = update(state, UiInput(SlashCommand(name="compact", arguments="")))
+  let id = enter_command(state, "ls")
   let cmds = update(
     state,
-    CommandResult(
-      run_id=Some(command_run),
-      command="ls",
-      Err(Failure::Failure("boom")),
-    ),
+    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
   )
-  guard cmds is [AppendItem(_), SteerAgent(Command(_))] else {
-    fail("expected command steer")
+  guard cmds is [AppendItem(ToolCall(_))] else {
+    fail("expected only the command card while compacting")
   }
-  let cmds = update(state, EngineSessionError("store unavailable"))
-  assert_eq(error_item_count(cmds), 1)
-
-  let cmds = update(state, UiInput(Steer(Prompt("what changed?"))))
-  guard cmds
-    is [AppendItem(Input(Prompt("what changed?"))), StartAgent(run_id=_, text)] else {
-    fail("expected prompt transcript item and agent start")
+  let cmds = update(
+    state,
+    AgentProgress(run_id=state.run_id, CompactionFinished("summary")),
+  )
+  guard cmds is [AppendItem(_), StartAgent(text, ..)] else {
+    fail("expected the compaction notice, then the turn on the output")
   }
-  assert_eq(text, "what changed?")
+  assert_eq(text, test_envelope("ls", "a.txt"))
 }
 
 ///|
@@ -1549,10 +1637,7 @@ test "a sent steer is acknowledged until the engine settles it" {
   // The engine confirms: acknowledgment clears, transcript echo appends.
   let _ = update(
     state,
-    AgentProgress(
-      run_id=state.run_id,
-      SteerApplied(prompt_steer("make it rhyme")),
-    ),
+    AgentProgress(run_id=state.run_id, SteerApplied(Prompt("make it rhyme"))),
   )
   assert_eq(state.pending_steers.length(), 0)
   assert_eq(pending_steer_segment(state.pending_steers).length(), 0)
@@ -1614,31 +1699,13 @@ test "a steer_applied event echoes the input into the transcript" {
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
   let cmds = update(
     state,
-    AgentProgress(
-      run_id=state.run_id,
-      SteerApplied(prompt_steer("make it rhyme")),
-    ),
+    AgentProgress(run_id=state.run_id, SteerApplied(Prompt("make it rhyme"))),
   )
   guard cmds is [AppendItem(Input(Prompt(text)))] else {
     fail("expected the steered input echoed as a transcript item")
   }
   assert_eq(text, "make it rhyme")
   // The run keeps going: a steer is not a terminal event.
-  assert_true(state.run is Running(_))
-}
-
-///|
-test "a command steer_applied event is only a delivery acknowledgment" {
-  let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Prompt("do it"))))
-  let cmds = update(
-    state,
-    AgentProgress(
-      run_id=state.run_id,
-      SteerApplied(Command("<user_shell_command>", submission_id=None)),
-    ),
-  )
-  assert_eq(cmds.length(), 0)
   assert_true(state.run is Running(_))
 }
 
@@ -1712,16 +1779,14 @@ fn append_items(
 ///|
 /// Cancellation bypasses `catch` under async 0.22, so these two check that a
 /// Ctrl-C is still reported: the handlers moved to `handle_cancellation`.
-async test "a cancelled foreground shell command reports its cancellation" {
+async test "a cancelled shell command reports its cancellation" {
   let messages : @async.Queue[Msg] = Queue(kind=Unbounded)
   @async.with_task_group(group => {
-    let task = group.spawn(() => {
-      run_shell_command("sleep 10", messages, run_id=7)
-    })
+    let task = group.spawn(() => run_shell_command("sleep 10", messages, id=7))
     @async.sleep(200)
     task.cancel()
   })
-  guard messages.try_get() is Some(CommandCancelled(command~, run_id=7)) else {
+  guard messages.try_get() is Some(CommandCancelled(command~, id=7)) else {
     fail("expected CommandCancelled")
   }
   assert_eq(command, "sleep 10")
@@ -1732,7 +1797,7 @@ async test "a shell command runs locally and posts its output" {
   let messages = @async.Queue(kind=Unbounded)
   // `echo` is the same on POSIX `sh` and Windows `pwsh`, so the platform shell
   // `@command_context.collect_shell_output` picks runs this on either.
-  run_shell_command("echo hello", messages, run_id=1)
+  run_shell_command("echo hello", messages, id=1)
   // The only message is the local command result: a completed tool item titled
   // with the command, its stdout as a dimmed detail line. Nothing is sent to the
   // engine.

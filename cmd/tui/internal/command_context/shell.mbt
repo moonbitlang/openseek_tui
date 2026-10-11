@@ -7,7 +7,7 @@ let default_max_output_chars : Int32 = 12000
 /// command was cut off at the output cap before it exited), the merged
 /// stdout+stderr `text` (truncated to the character budget), and whether that
 /// truncation happened.
-pub struct ShellOutput {
+pub(all) struct ShellOutput {
   exit_code : Int32?
   text : String
   output_limit_reached : Bool

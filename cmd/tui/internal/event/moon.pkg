@@ -1,5 +1,4 @@
 import {
-  "moonbitlang/openseek/agent_runtime",
   "moonbitlang/openseek/cli",
   "moonbitlang/openseek_protocol" @protocol,
 }
