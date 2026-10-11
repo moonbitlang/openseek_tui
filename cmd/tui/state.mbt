@@ -95,6 +95,19 @@ priv struct SteeredOutput {
   // Carried over from the command (`ShellCommand::holds_queue`): the queue
   // goes on waiting until the output is known to have reached a turn.
   holds_queue : Bool
+  // Ctrl-C came while the receipt was still out. If the output turns out to
+  // have missed its turn, it is not sent again: the user asked for everything
+  // to stop. The mark is the output's own, so it outlives whatever run starts
+  // next.
+  mut interrupted : Bool
+}
+
+///|
+/// The output of a finished `!` command that is waiting for the conversation
+/// to be idle, to start a turn of its own.
+priv struct HeldOutput {
+  command : String
+  envelope : String
 }
 
 ///|
@@ -144,14 +157,11 @@ priv struct State {
   mut next_command_id : Int32
   // Outputs steered into a turn whose receipt has not come back yet.
   steered_outputs : Array[SteeredOutput]
-  // Envelopes of finished `!` commands that could not be sent when they were
+  // Outputs of finished `!` commands that could not be sent when they were
   // ready (a compaction or an interrupt was in the way, or the turn they were
   // steered into ended first). Each starts a turn once the conversation is
   // idle, ahead of queued input.
-  held_outputs : Array[String]
-  // Ctrl-C ended the last turn and nothing has started since. An output that
-  // turn dropped is then not sent again: the user asked for everything to stop.
-  mut interrupted : Bool
+  held_outputs : Array[HeldOutput]
 }
 
 ///|
@@ -172,7 +182,6 @@ fn State::State(config : AppConfig) -> State {
     next_command_id: 0,
     steered_outputs: [],
     held_outputs: [],
-    interrupted: false,
   }
 }
 
@@ -183,7 +192,6 @@ fn State::State(config : AppConfig) -> State {
 fn State::start_run(self : State, started_ms : Int64) -> Int32 {
   self.run_id += 1
   self.run = Running(started_ms)
-  self.interrupted = false
   self.step_response = None
   self.streaming_preview = None
   self.run_id

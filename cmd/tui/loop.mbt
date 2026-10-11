@@ -573,29 +573,61 @@ fn send_output(
       command: shell.command,
       envelope,
       holds_queue: shell.holds_queue,
+      interrupted: false,
     })
     cmds.push(SteerOutput(submission_id~, envelope))
   } else {
-    state.held_outputs.push(envelope)
+    state.held_outputs.push({ command: shell.command, envelope, })
   }
+}
+
+///|
+/// Ctrl-C: give up every `!` output that has not reached the agent. The user
+/// asked for everything to stop, and an output that started a turn afterwards
+/// would undo that.
+///
+/// One that is waiting to start a turn is dropped here and now. One that was
+/// steered is only marked: its receipt is still to come, and may yet say it
+/// reached the turn after all (see `steer_dropped`).
+fn abandon_outputs(state : State, cmds : Array[Cmd]) -> Unit {
+  for output in state.steered_outputs {
+    output.interrupted = true
+  }
+  for output in state.held_outputs {
+    cmds.push(
+      AppendItem(output_not_sent_item(output.command, InterruptedFirst)),
+    )
+  }
+  state.held_outputs.clear()
+}
+
+///|
+/// Why a `!` command's output was given up before it reached the agent.
+priv enum NotSent {
+  InterruptedFirst
+  EngineExitedFirst
 }
 
 ///|
 /// The notice that the output of `command` never reached the agent and will
 /// not be sent again. Its card stays on screen either way; this is what says
 /// the agent did not read it.
-fn output_not_sent_item(command : String, why : String) -> @ui.TranscriptItem {
-  Input(Notice("The output of `\{command}` was not sent: \{why}."))
+fn output_not_sent_item(command : String, why : NotSent) -> @ui.TranscriptItem {
+  let reason = match why {
+    InterruptedFirst => "the task was interrupted first"
+    EngineExitedFirst => "the engine exited first"
+  }
+  Input(Notice("The output of `\{command}` was not sent: \{reason}."))
 }
 
 ///|
 /// A steer never reached a turn. Typed text would otherwise vanish silently,
 /// so the user is told to submit it again. A `!` command's output — a steer
 /// whose tag is one this client is waiting on — is not theirs to retype: it
-/// waits for the conversation to be idle and starts a turn then, unless the
-/// turn it missed was one the user stopped, where starting another would undo
-/// the Ctrl-C. It is held rather than steered again because whatever refused
-/// this steer may refuse the next.
+/// waits for the conversation to be idle and starts a turn then, unless
+/// Ctrl-C came while it was out (see `abandon_outputs`). It is held rather
+/// than steered again because whatever refused this steer may refuse the
+/// next.
 fn steer_dropped(
   state : State,
   text : String,
@@ -606,14 +638,15 @@ fn steer_dropped(
     cmds.push(AppendItem(steer_dropped_item(text)))
     return
   }
-  if state.interrupted {
+  if output.interrupted {
     cmds.push(
-      AppendItem(
-        output_not_sent_item(output.command, "the task was interrupted first"),
-      ),
+      AppendItem(output_not_sent_item(output.command, InterruptedFirst)),
     )
   } else {
-    state.held_outputs.push(output.envelope)
+    state.held_outputs.push({
+      command: output.command,
+      envelope: output.envelope,
+    })
   }
 }
 
@@ -680,23 +713,24 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
           }
         Queue(input) => state.queued.push(input)
         // Ctrl+C stops whatever is running — the turn and every `!` command
-        // alike — and when nothing is running it quits the TUI (the common
-        // "press Ctrl+C to get out" expectation), rather than printing a
-        // dead-end "nothing to interrupt" notice. A second Ctrl+C while a turn
-        // is already being interrupted escalates from the polite cancel
-        // command to killing the engine process; a `!` command has nothing
-        // harder than another cancel.
+        // alike — and gives up every `!` output that has not reached the
+        // agent. When nothing is running it quits the TUI (the common "press
+        // Ctrl+C to get out" expectation), rather than printing a dead-end
+        // "nothing to interrupt" notice. A second Ctrl+C while a turn is
+        // already being interrupted escalates from the polite cancel command
+        // to killing the engine process; a `!` command has nothing harder
+        // than another cancel.
         Interrupt => {
           let stopped_commands = !state.commands.is_empty()
           for shell in state.commands {
             shell.interrupted = true
             cmds.push(CancelCommand(id=shell.id))
           }
+          abandon_outputs(state, cmds)
           match state.run {
             Idle => if !stopped_commands { cmds.push(Quit) }
             Running(started_ms) => {
               state.run = Interrupting(started_ms)
-              state.interrupted = true
               cmds.push(CancelAgent)
             }
             Interrupting(_) => cmds.push(KillEngine)
@@ -778,9 +812,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     EngineExited =>
       while state.steered_outputs.pop() is Some(output) {
         cmds.push(
-          AppendItem(
-            output_not_sent_item(output.command, "the engine exited first"),
-          ),
+          AppendItem(output_not_sent_item(output.command, EngineExitedFirst)),
         )
       }
     // The link gets a line of its own so that, on a wide enough terminal, it
@@ -813,9 +845,9 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
   // spuriously.
   if state.run is Idle {
     if state.held_outputs.length() > 0 {
-      let envelope = state.held_outputs.remove(0)
+      let output = state.held_outputs.remove(0)
       let run_id = state.start_run(@env.now().reinterpret_as_int64())
-      cmds.push(StartAgent(run_id~, envelope))
+      cmds.push(StartAgent(run_id~, output.envelope))
     } else if state.queued.length() > 0 &&
       !state.commands.any(shell => shell.holds_queue) &&
       !state.steered_outputs.any(output => output.holds_queue) {
@@ -1801,6 +1833,102 @@ test "a shell command's output dropped by an interrupted turn is not sent again"
   assert_true(notice.contains("`ls`"))
   assert_true(state.run is Idle)
   assert_eq(state.held_outputs.length(), 0)
+}
+
+///|
+/// The mark is the output's own. A prompt queued behind the interrupted turn
+/// starts as soon as that turn ends, before the drop arrives; the output must
+/// still be recognized as one the user stopped, and not get a turn after it.
+test "an interrupted output stays given up when a queued prompt runs next" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let turn = state.run_id
+  let id = enter_command(state, "ls")
+  guard update(
+      state,
+      CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+    )
+    is [_, SteerOutput(submission_id~, envelope)] else {
+    fail("expected the output steered in")
+  }
+  let _ = update(state, UiInput(Queue(Prompt("next"))))
+  let _ = update(state, UiInput(Interrupt))
+  let cmds = update(
+    state,
+    AgentProgress(run_id=turn, AgentAborted("interrupted")),
+  )
+  assert_eq(start_agent_count(cmds), 1)
+  let next = state.run_id
+  let cmds = update(
+    state,
+    EngineSteerDropped(envelope, submission_id=Some(submission_id)),
+  )
+  guard cmds is [AppendItem(Input(Notice(_)))] else {
+    fail("expected only the not-sent notice")
+  }
+  assert_eq(state.held_outputs.length(), 0)
+  // Nothing of it is left to start once the queued prompt's turn ends.
+  let cmds = update(state, AgentProgress(run_id=next, AgentFinished("ok")))
+  assert_eq(start_agent_count(cmds), 0)
+  assert_true(state.run is Idle)
+}
+
+///|
+/// Ctrl-C only marks a steered output: its receipt is still to come, and an
+/// applied one means the output did reach the turn. That is settled quietly.
+test "an output that reached its turn before Ctrl-C is not reported lost" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let id = enter_command(state, "ls")
+  guard update(
+      state,
+      CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+    )
+    is [_, SteerOutput(submission_id~, envelope)] else {
+    fail("expected the output steered in")
+  }
+  let _ = update(state, UiInput(Interrupt))
+  let cmds = update(
+    state,
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(Prompt(envelope, submission_id=Some(submission_id))),
+    ),
+  )
+  assert_eq(cmds.length(), 0)
+  assert_eq(state.steered_outputs.length(), 0)
+}
+
+///|
+/// An output waiting out a compaction has not reached the agent either. Ctrl-C
+/// on the compaction gives it up there and then, rather than leaving it to
+/// start a turn the moment the compaction is out of the way.
+test "Ctrl+C on a compaction gives up the output waiting behind it" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(SlashCommand(name="compact", arguments="")))
+  let compaction = state.run_id
+  let id = enter_command(state, "ls")
+  let _ = update(
+    state,
+    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+  )
+  assert_eq(state.held_outputs.length(), 1)
+  let cmds = update(state, UiInput(Interrupt))
+  guard cmds is [AppendItem(Input(Notice(notice))), CancelAgent] else {
+    fail("expected the not-sent notice and the cancel")
+  }
+  assert_true(notice.contains("`ls`"))
+  assert_eq(state.held_outputs.length(), 0)
+  let cmds = update(state, AgentCancelled(run_id=compaction))
+  assert_eq(start_agent_count(cmds), 0)
+  assert_true(state.run is Idle)
+  // A command run after the Ctrl-C is new business: its output is sent.
+  let id = enter_command(state, "pwd")
+  let cmds = update(
+    state,
+    CommandResult(command="pwd", id~, Ok(test_output("/tmp"))),
+  )
+  assert_eq(start_agent_count(cmds), 1)
 }
 
 ///|
