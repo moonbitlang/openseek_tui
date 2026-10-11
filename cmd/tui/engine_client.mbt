@@ -18,6 +18,24 @@ priv struct EngineProcess {
   // bookkeeping: a replaced engine's EOF must not clear — or falsely warn
   // about — a successor's outstanding ack.
   pending_goal_acks : Array[String?]
+  // Tags of the `!` outputs steered to THIS engine and not yet answered by
+  // its steer_applied or steer_dropped. Owned by the process for the same
+  // reason: when it exits, exactly these are lost — not one the loop has
+  // recorded but not yet sent, and not a successor's.
+  unanswered_outputs : Array[String]
+}
+
+///|
+/// The engine answered for the steer tagged `submission_id`, applied or
+/// dropped. Untagged steers — typed text — are not tracked.
+fn EngineProcess::output_answered(
+  self : EngineProcess,
+  submission_id : String?,
+) -> Unit {
+  if submission_id is Some(id) &&
+    self.unanswered_outputs.search(id) is Some(index) {
+    self.unanswered_outputs.remove(index) |> ignore
+  }
 }
 
 ///|
@@ -88,6 +106,7 @@ async fn[G] EngineClient::start(
     run_open: false,
     reader: None,
     pending_goal_acks: [],
+    unanswered_outputs: [],
   }
   self.live = Some(engine)
   let reader_task = group.spawn(no_wait=true) <| () => {
@@ -102,9 +121,18 @@ async fn[G] EngineClient::start(
           // run-tagged message would arrive after finish_run and be eaten
           // by the stale-run guard. Post it untagged so the resubmit notice
           // always reaches the user.
-          SteerDropped(text, submission_id~) =>
+          SteerDropped(text, submission_id~) => {
+            engine.output_answered(submission_id)
             self.messages.try_put(EngineSteerDropped(text, submission_id~))
             |> ignore
+          }
+          SteerApplied(Prompt(_, submission_id~)) as applied => {
+            engine.output_answered(submission_id)
+            self.messages.try_put(
+              AgentProgress(run_id=engine.latest_run, applied),
+            )
+            |> ignore
+          }
           // A rejection can answer an idle command (e.g. /goal sent to an
           // engine that does not implement it), where no run owns it and a
           // tagged message would be eaten by the stale-run guard. Rejections
@@ -220,6 +248,13 @@ async fn[G] EngineClient::start(
       )
       |> ignore
     }
+    // A `!` output steered to this engine and never answered for died with
+    // it too. Name each one, so the loop stops waiting for a receipt that
+    // cannot come.
+    for submission_id in engine.unanswered_outputs {
+      self.messages.put(EngineSteerLost(submission_id~))
+    }
+    engine.unanswered_outputs.clear()
     // The watchers this engine owned died with it: let the loop observe the
     // engine boundary, whatever the exit reason.
     self.messages.put(EngineExited)
@@ -339,11 +374,15 @@ async fn EngineClient::steer(
 ) -> Unit {
   let content : @protocol.Content = Content([Text(text)])
   match self.live {
-    Some(live) if live.run_open =>
+    Some(live) if live.run_open => {
+      if submission_id is Some(id) {
+        live.unanswered_outputs.push(id)
+      }
       self.send(
         live.latest_run,
         (Steer(kind=Prompt, content~, submission_id~) : @protocol.Command).to_json(),
       )
+    }
     _ => self.messages.put(SteerDropped(text, submission_id~))
   }
 }

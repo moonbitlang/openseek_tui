@@ -806,15 +806,16 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // The engine's durable-append confirmation is the only writer of the
     // mirrored goal state.
     EngineGoalUpdated(goal) => apply_goal_update(state, goal, cmds)
-    // No receipt can come from an engine that is gone. An output still
-    // waiting for one is given up, so it cannot hold the queue forever, and
-    // the user is told the agent never read it.
-    EngineExited =>
-      while state.steered_outputs.pop() is Some(output) {
+    // No receipt can come from an engine that is gone. The output it was
+    // sent is given up, so it cannot hold the queue forever, and the user is
+    // told the agent never read it.
+    EngineSteerLost(submission_id~) =>
+      if state.settle_output(Some(submission_id)) is Some(output) {
         cmds.push(
           AppendItem(output_not_sent_item(output.command, EngineExitedFirst)),
         )
       }
+    EngineExited => ()
     // The link gets a line of its own so that, on a wide enough terminal, it
     // stays one unbroken, clickable run of text.
     ViewerOpened(Ok(url)) =>
@@ -1774,9 +1775,9 @@ test "a queued shell command holds the queue until its steered output settles" {
 }
 
 ///|
-/// An engine that is gone sends no receipt. What was waiting for one is given
+/// An engine that is gone sends no receipt. The output it was sent is given
 /// up — said, not silent — and stops holding the queue.
-test "a steered output is given up when the engine exits" {
+test "a steered output is given up when the engine it was sent to exits" {
   let state = drain_test_state()
   guard update(state, UiInput(Queue(Command("make")))) is [RunCommand(id~, _)] else {
     fail("expected the queued command to start running")
@@ -1784,13 +1785,13 @@ test "a steered output is given up when the engine exits" {
   let _ = update(state, UiInput(Queue(Prompt("did it pass?"))))
   let _ = update(state, UiInput(Steer(Prompt("meanwhile"))))
   let turn = state.run_id
-  let _ = update(
-    state,
-    CommandResult(command="make", id~, Ok(test_output("ok"))),
-  )
+  guard update(state, CommandResult(command="make", id~, Ok(test_output("ok"))))
+    is [_, SteerOutput(submission_id~, _)] else {
+    fail("expected the output steered into the turn in progress")
+  }
   let _ = update(state, AgentProgress(run_id=turn, AgentError("engine exited")))
   assert_eq(state.queued.length(), 1)
-  let cmds = update(state, EngineExited)
+  let cmds = update(state, EngineSteerLost(submission_id~))
   guard cmds
     is [
       AppendItem(Input(Notice(notice))),
@@ -1801,6 +1802,40 @@ test "a steered output is given up when the engine exits" {
   }
   assert_true(notice.contains("`make`"))
   assert_eq(state.steered_outputs.length(), 0)
+  // The loss is reported once per steer; a repeat answers for nothing.
+  assert_eq(update(state, EngineSteerLost(submission_id~)).length(), 0)
+}
+
+///|
+/// An engine's exit, by itself, says nothing about a steered output: only the
+/// process it was written to can lose it. One the loop recorded in the same
+/// batch as the exit has not been sent yet — its steer then finds no engine,
+/// comes back as a local drop, and is sent again like any other. Giving it up
+/// at the exit would leave that drop with nothing to match, and report the
+/// envelope as typed text.
+test "an engine exit alone does not give up an output not yet sent to it" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let turn = state.run_id
+  let id = enter_command(state, "ls")
+  guard update(
+      state,
+      CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+    )
+    is [_, SteerOutput(submission_id~, envelope)] else {
+    fail("expected the output steered in")
+  }
+  assert_eq(update(state, EngineExited).length(), 0)
+  assert_eq(state.steered_outputs.length(), 1)
+  let _ = update(state, AgentProgress(run_id=turn, AgentError("engine exited")))
+  let cmds = update(
+    state,
+    SteerDropped(envelope, submission_id=Some(submission_id)),
+  )
+  guard cmds is [StartAgent(text, ..)] else {
+    fail("expected the turn on the output, and no resubmit error")
+  }
+  assert_eq(text, envelope)
 }
 
 ///|

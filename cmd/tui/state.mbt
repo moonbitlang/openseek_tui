@@ -253,6 +253,12 @@ priv enum Msg {
   // nothing — a fresh identical-text steer of the next turn keeps its own
   // acknowledgment.
   EngineSteerDropped(String, submission_id~ : String?)
+  // The engine exited without answering for the steer tagged `submission_id`,
+  // a `!` command's output written to that very process. Reported per steer
+  // rather than inferred from `EngineExited`: an exit says nothing about an
+  // output the loop has recorded but not yet sent, or one sent to the engine
+  // spawned since.
+  EngineSteerLost(submission_id~ : String)
   // Session errors are not tied to a model turn, so they are reported without a
   // run id and never affect run lifecycle.
   EngineSessionError(String)
@@ -288,6 +294,7 @@ fn Msg::run_id(self : Msg) -> Int32? {
     | SteerDropped(_, ..)
     | EngineGoalUpdated(_)
     | EngineSteerDropped(_, ..)
+    | EngineSteerLost(..)
     | EngineSessionError(_)
     | EngineBackgroundNotice(_)
     | EngineExited
