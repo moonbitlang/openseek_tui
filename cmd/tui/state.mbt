@@ -83,6 +83,21 @@ priv struct ShellCommand {
 }
 
 ///|
+/// The output of a finished `!` command, steered into the running turn and
+/// not yet answered for: the engine reports every steer applied or dropped,
+/// under the tag it was sent with.
+priv struct SteeredOutput {
+  // The tag, unique to this output. Receipts are matched by it and never by
+  // text: the same command run twice sends the same envelope twice.
+  submission_id : String
+  command : String
+  envelope : String
+  // Carried over from the command (`ShellCommand::holds_queue`): the queue
+  // goes on waiting until the output is known to have reached a turn.
+  holds_queue : Bool
+}
+
+///|
 priv struct State {
   config : AppConfig
   queued : Array[@ui.Input]
@@ -127,6 +142,8 @@ priv struct State {
   commands : Array[ShellCommand]
   // The id the next `!` command takes.
   mut next_command_id : Int32
+  // Outputs steered into a turn whose receipt has not come back yet.
+  steered_outputs : Array[SteeredOutput]
   // Envelopes of finished `!` commands that could not be sent when they were
   // ready (a compaction or an interrupt was in the way, or the turn they were
   // steered into ended first). Each starts a turn once the conversation is
@@ -153,6 +170,7 @@ fn State::State(config : AppConfig) -> State {
     goal: None,
     commands: [],
     next_command_id: 0,
+    steered_outputs: [],
     held_outputs: [],
     interrupted: false,
   }
@@ -218,14 +236,15 @@ priv enum Msg {
   CommandCancelled(command~ : String, id~ : Int32)
   // A steer the client could not deliver (no live engine/turn): show the
   // resubmit notice and settle its acknowledgment — the entry was created an
-  // instant ago and cannot have been swept.
-  SteerDropped(String)
+  // instant ago and cannot have been swept. Carries the tag the steer was
+  // sent with, as the engine's own drop does.
+  SteerDropped(String, submission_id~ : String?)
   // A steer the engine rejected on the wire. Its turn's terminal event
   // always precedes it in the stream, so by the time this is processed the
   // acknowledgment it belonged to is already swept: notice only, settling
   // nothing — a fresh identical-text steer of the next turn keeps its own
   // acknowledgment.
-  EngineSteerDropped(String)
+  EngineSteerDropped(String, submission_id~ : String?)
   // Session errors are not tied to a model turn, so they are reported without a
   // run id and never affect run lifecycle.
   EngineSessionError(String)
@@ -258,9 +277,9 @@ fn Msg::run_id(self : Msg) -> Int32? {
     UiInput(_)
     | CommandResult(_, ..)
     | CommandCancelled(..)
-    | SteerDropped(_)
+    | SteerDropped(_, ..)
     | EngineGoalUpdated(_)
-    | EngineSteerDropped(_)
+    | EngineSteerDropped(_, ..)
     | EngineSessionError(_)
     | EngineBackgroundNotice(_)
     | EngineExited
@@ -281,9 +300,14 @@ priv enum Cmd {
   RunCommand(id~ : Int32, String)
   // Stop the `!` command `id`. Its task answers with `CommandCancelled`.
   CancelCommand(id~ : Int32)
-  // Steer the running turn with user text — typed, or a `!` command's output.
-  // It lands at the turn's next step boundary.
+  // Steer the running turn with text the user typed. It lands at the turn's
+  // next step boundary. Untagged: its receipt is matched by text, against the
+  // acknowledgment shown for it (`pending_steers`).
   SteerAgent(String)
+  // Steer the running turn with a `!` command's output, tagged so its receipt
+  // can be told from typed text's and from another output's
+  // (`SteeredOutput::submission_id`).
+  SteerOutput(submission_id~ : String, String)
   // Ask the serve engine to summarize and compact the conversation; carries the
   // run id so the compaction's wire events are tagged to the run that requested
   // it, exactly like a prompt.
@@ -320,6 +344,22 @@ fn State::start_command(
     interrupted: false,
   })
   id
+}
+
+///|
+/// The steered output a receipt tagged `submission_id` answers for, no longer
+/// awaited. `None` for an untagged receipt — typed text — and for a tag
+/// nothing is waiting on.
+fn State::settle_output(
+  self : State,
+  submission_id : String?,
+) -> SteeredOutput? {
+  guard submission_id is Some(id) &&
+    self.steered_outputs.search_by(output => output.submission_id == id)
+    is Some(index) else {
+    return None
+  }
+  Some(self.steered_outputs.remove(index))
 }
 
 ///|

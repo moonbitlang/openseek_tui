@@ -327,9 +327,9 @@ fn handle_agent_event(
     //
     // A `!` command's output is steered the same way but was already shown, as
     // its result card, when the command finished: for it this event is only a
-    // delivery acknowledgment.
-    SteerApplied(Prompt(text)) =>
-      if @command_context.parse(text) is None {
+    // delivery acknowledgment, recognized by the tag it was sent with.
+    SteerApplied(Prompt(text, submission_id~)) =>
+      if state.settle_output(submission_id) is None {
         confirm_pending_steer(state, text)
         cmds.push(AppendItem(Input(Prompt(text))))
       }
@@ -349,9 +349,9 @@ fn handle_agent_event(
     // steer_dropped events to the untagged message (they always trail the
     // racing turn's terminal, so a run-tagged copy would be stale-filtered).
     // Kept as defense in depth for any future in-run emitter.
-    SteerDropped(text) => {
+    SteerDropped(text, submission_id~) => {
       confirm_pending_steer(state, text)
-      steer_dropped(state, text, cmds)
+      steer_dropped(state, text, submission_id, cmds)
     }
     AssistantMessage(text) => {
       state.step_response = Some(text)
@@ -551,43 +551,69 @@ fn start_prompt(state : State, text : String, cmds : Array[Cmd]) -> Unit {
 }
 
 ///|
-/// Send the `envelope` of a finished `!` command into the conversation, the
-/// way a typed message goes: steered into a turn that is running, and
+/// Send the output of the finished `!` command `shell` into the conversation,
+/// the way a typed message goes: steered into a turn that is running, and
 /// otherwise as the prompt of a turn of its own, which the idle check at the
 /// end of `update` starts — at once when the conversation is idle, after the
 /// compaction or interrupt that is in the way when it is not.
-fn send_output(state : State, envelope : String, cmds : Array[Cmd]) -> Unit {
+///
+/// A steer is tagged and remembered until the engine answers for it: the
+/// receipt says whether the output reached the turn, and until it does the
+/// output keeps the command's hold on the input queue.
+fn send_output(
+  state : State,
+  shell : ShellCommand,
+  envelope : String,
+  cmds : Array[Cmd],
+) -> Unit {
   if state.run is Running(_) && !state.run_is_compaction {
-    cmds.push(SteerAgent(envelope))
+    let submission_id = "shell-\{shell.id}"
+    state.steered_outputs.push({
+      submission_id,
+      command: shell.command,
+      envelope,
+      holds_queue: shell.holds_queue,
+    })
+    cmds.push(SteerOutput(submission_id~, envelope))
   } else {
     state.held_outputs.push(envelope)
   }
 }
 
 ///|
+/// The notice that the output of `command` never reached the agent and will
+/// not be sent again. Its card stays on screen either way; this is what says
+/// the agent did not read it.
+fn output_not_sent_item(command : String, why : String) -> @ui.TranscriptItem {
+  Input(Notice("The output of `\{command}` was not sent: \{why}."))
+}
+
+///|
 /// A steer never reached a turn. Typed text would otherwise vanish silently,
-/// so the user is told to submit it again. A `!` command's output is not
-/// theirs to retype: it waits for the conversation to be idle and starts a
-/// turn then — unless the turn it missed was one the user stopped, where
-/// starting another would undo the Ctrl-C. It is held rather than steered
-/// again because whatever refused this steer may refuse the next.
-fn steer_dropped(state : State, text : String, cmds : Array[Cmd]) -> Unit {
-  guard @command_context.parse(text) is Some(shell) else {
+/// so the user is told to submit it again. A `!` command's output — a steer
+/// whose tag is one this client is waiting on — is not theirs to retype: it
+/// waits for the conversation to be idle and starts a turn then, unless the
+/// turn it missed was one the user stopped, where starting another would undo
+/// the Ctrl-C. It is held rather than steered again because whatever refused
+/// this steer may refuse the next.
+fn steer_dropped(
+  state : State,
+  text : String,
+  submission_id : String?,
+  cmds : Array[Cmd],
+) -> Unit {
+  guard state.settle_output(submission_id) is Some(output) else {
     cmds.push(AppendItem(steer_dropped_item(text)))
     return
   }
   if state.interrupted {
     cmds.push(
       AppendItem(
-        Input(
-          Notice(
-            "The output of `\{shell.command}` was not sent: the task was interrupted first.",
-          ),
-        ),
+        output_not_sent_item(output.command, "the task was interrupted first"),
       ),
     )
   } else {
-    state.held_outputs.push(text)
+    state.held_outputs.push(output.envelope)
   }
 }
 
@@ -715,19 +741,25 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
         // or Ctrl-C reached it as it finished. Its card is then all there is —
         // the conversation never hears of it.
         if result is Ok(_) && !shell.interrupted {
-          send_output(state, @command_context.encode(command, result), cmds)
+          send_output(
+            state,
+            shell,
+            @command_context.encode(command, result),
+            cmds,
+          )
         }
       }
     // The steer never reached a turn. Run state is untouched — the run's own
     // death report (or terminal event) settles it.
-    SteerDropped(text) => {
+    SteerDropped(text, submission_id~) => {
       confirm_pending_steer(state, text)
-      steer_dropped(state, text, cmds)
+      steer_dropped(state, text, submission_id, cmds)
     }
-    // Settles nothing by construction: the rejecting turn's terminal already
+    // Settles no typed steer's acknowledgment by construction: the rejecting turn's terminal already
     // swept its acknowledgments, and a text match here could only steal a
     // fresh identical-text steer's entry from the next turn.
-    EngineSteerDropped(text) => steer_dropped(state, text, cmds)
+    EngineSteerDropped(text, submission_id~) =>
+      steer_dropped(state, text, submission_id, cmds)
     EngineSessionError(error) => cmds.push(AppendItem(Error(error)))
     // Goal markers are filtered for the same reason as on the steer path:
     // their notice leg is transport, and goal_updated carries the
@@ -740,7 +772,17 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     // The engine's durable-append confirmation is the only writer of the
     // mirrored goal state.
     EngineGoalUpdated(goal) => apply_goal_update(state, goal, cmds)
-    EngineExited => ()
+    // No receipt can come from an engine that is gone. An output still
+    // waiting for one is given up, so it cannot hold the queue forever, and
+    // the user is told the agent never read it.
+    EngineExited =>
+      while state.steered_outputs.pop() is Some(output) {
+        cmds.push(
+          AppendItem(
+            output_not_sent_item(output.command, "the engine exited first"),
+          ),
+        )
+      }
     // The link gets a line of its own so that, on a wide enough terminal, it
     // stays one unbroken, clickable run of text.
     ViewerOpened(Ok(url)) =>
@@ -762,8 +804,9 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
   // sent when it was ready goes first — it is older than anything still
   // queued — and has no input echo, its card being on screen already.
   //
-  // Then the input queue, unless a command taken from it is still running:
-  // the queue waits for that command's output (see `ShellCommand`). A queued
+  // Then the input queue, unless a command taken from it is still running or
+  // its steered output is still unanswered for: the queue waits for that
+  // command's output to reach a turn (see `ShellCommand`). A queued
   // prompt starts its turn; a queued `!` command starts running, and leaves
   // the conversation idle. Only submissions and events that end a run or a
   // command can reach "idle with something waiting", so this never fires
@@ -774,7 +817,8 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       let run_id = state.start_run(@env.now().reinterpret_as_int64())
       cmds.push(StartAgent(run_id~, envelope))
     } else if state.queued.length() > 0 &&
-      !state.commands.any(shell => shell.holds_queue) {
+      !state.commands.any(shell => shell.holds_queue) &&
+      !state.steered_outputs.any(output => output.holds_queue) {
       match state.queued.remove(0) {
         Prompt(text) => start_prompt(state, text, cmds)
         Command(command) =>
@@ -836,6 +880,8 @@ async fn[G] run_message_loop(
             task.cancel()
           }
         SteerAgent(text) => engine.steer(text)
+        SteerOutput(submission_id~, envelope) =>
+          engine.steer(envelope, submission_id~)
         UpdateGoal(goal) => engine.goal(group, goal)
         OpenViewer => {
           let session_root = state.config.session_root
@@ -1337,7 +1383,7 @@ test "a shell command's output is steered into the running turn" {
     state,
     CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
   )
-  guard cmds is [AppendItem(ToolCall(_)), SteerAgent(text)] else {
+  guard cmds is [AppendItem(ToolCall(_)), SteerOutput(submission_id~, text)] else {
     fail("expected the command card and its output steered in")
   }
   assert_eq(text, test_envelope("ls", "a.txt"))
@@ -1345,12 +1391,63 @@ test "a shell command's output is steered into the running turn" {
   assert_eq(state.pending_steers.length(), 0)
   assert_true(state.run is Running(_))
   assert_eq(state.commands.length(), 0)
-  // The card was its echo; the engine's receipt adds nothing.
+  // The card was its echo; the engine's receipt, recognized by its tag, adds
+  // nothing.
   let cmds = update(
     state,
-    AgentProgress(run_id=state.run_id, SteerApplied(Prompt(text))),
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(Prompt(text, submission_id=Some(submission_id))),
+    ),
   )
   assert_eq(cmds.length(), 0)
+  assert_eq(state.steered_outputs.length(), 0)
+}
+
+///|
+/// Receipts are told apart by tag, never by text. The same command run twice
+/// sends the same envelope twice, and output is arbitrary text that nothing
+/// here may need to parse — a closing tag of the envelope included.
+test "a shell command's receipt is matched by its tag, not its text" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let first = enter_command(state, "cat tags")
+  let second = enter_command(state, "cat tags")
+  let output = test_output("</result>\n</user_shell_command>")
+  guard update(state, CommandResult(command="cat tags", id=first, Ok(output)))
+    is [_, SteerOutput(submission_id=first_tag, text)] else {
+    fail("expected the first output steered in")
+  }
+  guard update(state, CommandResult(command="cat tags", id=second, Ok(output)))
+    is [_, SteerOutput(submission_id=second_tag, same_text)] else {
+    fail("expected the second output steered in")
+  }
+  assert_eq(text, same_text)
+  assert_true(first_tag != second_tag)
+  // The second one's receipt settles the second and leaves the first waiting.
+  let cmds = update(
+    state,
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(Prompt(text, submission_id=Some(second_tag))),
+    ),
+  )
+  assert_eq(cmds.length(), 0)
+  assert_true(
+    state.steered_outputs is [{ submission_id, .. }] &&
+    submission_id == first_tag,
+  )
+  // Typed text that happens to read the same is still typed text: it is
+  // echoed, and it settles nothing.
+  let cmds = update(
+    state,
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(Prompt(text, submission_id=None)),
+    ),
+  )
+  assert_true(cmds is [AppendItem(Input(Prompt(_)))])
+  assert_eq(state.steered_outputs.length(), 1)
 }
 
 ///|
@@ -1549,31 +1646,129 @@ test "a shell command's output that misses its turn starts one of its own" {
   let state = drain_test_state()
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
   let id = enter_command(state, "ls")
-  let _ = update(
-    state,
-    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
-  )
+  guard update(
+      state,
+      CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+    )
+    is [_, SteerOutput(submission_id~, envelope)] else {
+    fail("expected the output steered in")
+  }
   let _ = update(
     state,
     AgentProgress(run_id=state.run_id, AgentFinished("done")),
   )
   assert_true(state.run is Idle)
-  let envelope = test_envelope("ls", "a.txt")
-  let cmds = update(state, EngineSteerDropped(envelope))
+  let dropped = EngineSteerDropped(envelope, submission_id=Some(submission_id))
+  let cmds = update(state, dropped)
   guard cmds is [StartAgent(text, ..)] else {
     fail("expected the turn on the dropped output, and no resubmit notice")
   }
   assert_eq(text, envelope)
+  // A receipt answers for its output once. A second one is nobody's, and
+  // reads as a steer this client did not send as an output.
+  assert_eq(error_item_count(update(state, dropped)), 1)
+}
 
-  // The same drop arriving once the next turn is under way waits for it
-  // rather than being steered again: whatever refused it once may again.
-  let cmds = update(state, EngineSteerDropped(envelope))
+///|
+/// The drop can also arrive once the next turn is under way. The output then
+/// waits for that turn rather than being steered again: whatever refused it
+/// once may again.
+test "a shell command's output dropped into the next turn waits for it" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let id = enter_command(state, "ls")
+  guard update(
+      state,
+      CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+    )
+    is [_, SteerOutput(submission_id~, envelope)] else {
+    fail("expected the output steered in")
+  }
+  let _ = update(
+    state,
+    AgentProgress(run_id=state.run_id, AgentFinished("done")),
+  )
+  let _ = update(state, UiInput(Steer(Prompt("next"))))
+  let cmds = update(
+    state,
+    EngineSteerDropped(envelope, submission_id=Some(submission_id)),
+  )
   assert_eq(cmds.length(), 0)
   let cmds = update(
     state,
     AgentProgress(run_id=state.run_id, AgentFinished("ok")),
   )
-  assert_true(cmds.any(cmd => cmd is StartAgent(_, ..)))
+  guard cmds is [AppendItem(Response("ok")), StartAgent(text, ..)] else {
+    fail("expected the turn on the held output")
+  }
+  assert_eq(text, envelope)
+}
+
+///|
+/// A command taken from the queue holds the queue until its output has
+/// reached a turn — not merely until it has been steered. Steered into a turn
+/// the user started meanwhile, the output can still miss it, and the drop only
+/// arrives after that turn's end: the prompt queued behind the command must
+/// not slip in between.
+test "a queued shell command holds the queue until its steered output settles" {
+  let state = drain_test_state()
+  guard update(state, UiInput(Queue(Command("make")))) is [RunCommand(id~, _)] else {
+    fail("expected the queued command to start running")
+  }
+  let _ = update(state, UiInput(Queue(Prompt("did it pass?"))))
+  let _ = update(state, UiInput(Steer(Prompt("meanwhile"))))
+  let turn = state.run_id
+  guard update(state, CommandResult(command="make", id~, Ok(test_output("ok"))))
+    is [_, SteerOutput(submission_id~, envelope)] else {
+    fail("expected the output steered into the turn in progress")
+  }
+  // The turn ends before the steer lands. The queued prompt stays put.
+  let cmds = update(state, AgentProgress(run_id=turn, AgentFinished("done")))
+  assert_eq(start_agent_count(cmds), 0)
+  assert_eq(state.queued.length(), 1)
+  // The drop brings the output back; it goes first, and the prompt follows it.
+  let cmds = update(
+    state,
+    EngineSteerDropped(envelope, submission_id=Some(submission_id)),
+  )
+  guard cmds is [StartAgent(run_id~, text)] else {
+    fail("expected the turn on the output")
+  }
+  assert_eq(text, envelope)
+  let cmds = update(state, AgentProgress(run_id~, AgentFinished("built")))
+  assert_true(
+    cmds is [_, AppendItem(Input(Prompt("did it pass?"))), StartAgent(_, ..)],
+  )
+}
+
+///|
+/// An engine that is gone sends no receipt. What was waiting for one is given
+/// up — said, not silent — and stops holding the queue.
+test "a steered output is given up when the engine exits" {
+  let state = drain_test_state()
+  guard update(state, UiInput(Queue(Command("make")))) is [RunCommand(id~, _)] else {
+    fail("expected the queued command to start running")
+  }
+  let _ = update(state, UiInput(Queue(Prompt("did it pass?"))))
+  let _ = update(state, UiInput(Steer(Prompt("meanwhile"))))
+  let turn = state.run_id
+  let _ = update(
+    state,
+    CommandResult(command="make", id~, Ok(test_output("ok"))),
+  )
+  let _ = update(state, AgentProgress(run_id=turn, AgentError("engine exited")))
+  assert_eq(state.queued.length(), 1)
+  let cmds = update(state, EngineExited)
+  guard cmds
+    is [
+      AppendItem(Input(Notice(notice))),
+      AppendItem(Input(Prompt("did it pass?"))),
+      StartAgent(_, ..),
+    ] else {
+    fail("expected the notice, then the queue to go on")
+  }
+  assert_true(notice.contains("`make`"))
+  assert_eq(state.steered_outputs.length(), 0)
 }
 
 ///|
@@ -1582,18 +1777,30 @@ test "a shell command's output that misses its turn starts one of its own" {
 test "a shell command's output dropped by an interrupted turn is not sent again" {
   let state = drain_test_state()
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let id = enter_command(state, "ls")
+  guard update(
+      state,
+      CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+    )
+    is [_, SteerOutput(submission_id~, envelope)] else {
+    fail("expected the output steered in")
+  }
   let _ = update(state, UiInput(Interrupt))
   let _ = update(
     state,
     AgentProgress(run_id=state.run_id, AgentAborted("interrupted")),
   )
   assert_true(state.run is Idle)
-  let cmds = update(state, EngineSteerDropped(test_envelope("ls", "a.txt")))
+  let cmds = update(
+    state,
+    EngineSteerDropped(envelope, submission_id=Some(submission_id)),
+  )
   guard cmds is [AppendItem(Input(Notice(notice)))] else {
     fail("expected a notice and no turn")
   }
   assert_true(notice.contains("`ls`"))
   assert_true(state.run is Idle)
+  assert_eq(state.held_outputs.length(), 0)
 }
 
 ///|
@@ -1637,7 +1844,10 @@ test "a sent steer is acknowledged until the engine settles it" {
   // The engine confirms: acknowledgment clears, transcript echo appends.
   let _ = update(
     state,
-    AgentProgress(run_id=state.run_id, SteerApplied(Prompt("make it rhyme"))),
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(Prompt("make it rhyme", submission_id=None)),
+    ),
   )
   assert_eq(state.pending_steers.length(), 0)
   assert_eq(pending_steer_segment(state.pending_steers).length(), 0)
@@ -1645,7 +1855,7 @@ test "a sent steer is acknowledged until the engine settles it" {
   // A dropped steer also clears the acknowledgment (and shows its notice).
   let _ = update(state, UiInput(Steer(Prompt("too late"))))
   assert_eq(state.pending_steers.length(), 1)
-  let _ = update(state, SteerDropped("too late"))
+  let _ = update(state, SteerDropped("too late", submission_id=None))
   assert_eq(state.pending_steers.length(), 0)
 
   // A turn ending sweeps anything still unconfirmed.
@@ -1675,9 +1885,9 @@ test "a trailing drop from a dead turn never steals a fresh acknowledgment" {
   assert_eq(state.pending_steers.length(), 1)
   // The old turn's wire drop settles nothing of B's — even with identical
   // text, a wire drop's own entries are swept before it is processed.
-  let _ = update(state, EngineSteerDropped("old steer"))
+  let _ = update(state, EngineSteerDropped("old steer", submission_id=None))
   assert_eq(state.pending_steers.length(), 1)
-  let _ = update(state, EngineSteerDropped("fresh steer"))
+  let _ = update(state, EngineSteerDropped("fresh steer", submission_id=None))
   assert_eq(state.pending_steers.length(), 1)
   assert_eq(state.pending_steers[0], "fresh steer")
 }
@@ -1699,7 +1909,10 @@ test "a steer_applied event echoes the input into the transcript" {
   let _ = update(state, UiInput(Steer(Prompt("do it"))))
   let cmds = update(
     state,
-    AgentProgress(run_id=state.run_id, SteerApplied(Prompt("make it rhyme"))),
+    AgentProgress(
+      run_id=state.run_id,
+      SteerApplied(Prompt("make it rhyme", submission_id=None)),
+    ),
   )
   guard cmds is [AppendItem(Input(Prompt(text)))] else {
     fail("expected the steered input echoed as a transcript item")

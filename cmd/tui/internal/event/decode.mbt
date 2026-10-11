@@ -28,14 +28,16 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     AssistantDelta(content~) => Some(AssistantDelta(content))
     ReasoningMessage(content~) => Some(ReasoningMessage(content))
     // The TUI renders a steer as text; images have no terminal form. Every
-    // kind but the engine's own notice is something the user sent — an older
-    // engine's `"command"` kind included, which carried a `!` command's
-    // output and is told apart from typed text by its envelope, not its kind.
+    // kind but the engine's own notice is something the user sent. Which of
+    // the user's steers it was — typed text, or a `!` command's output — is
+    // told by the tag the steer was sent with, not by its kind or its text.
     SteerApplied(kind="notice", content~, ..) =>
       Some(SteerApplied(Notice(content.text())))
-    SteerApplied(content~, ..) => Some(SteerApplied(Prompt(content.text())))
+    SteerApplied(content~, submission_id~, ..) =>
+      Some(SteerApplied(Prompt(content.text(), submission_id~)))
     // Likewise for a dropped steer.
-    SteerDropped(content~, ..) => Some(SteerDropped(content.text()))
+    SteerDropped(content~, submission_id~) =>
+      Some(SteerDropped(content.text(), submission_id~))
     BackgroundNotice(content~) => Some(BackgroundNotice(content))
     AssistantMessage(content~) => Some(AssistantMessage(content))
     SessionError(error~) => Some(SessionError(error))

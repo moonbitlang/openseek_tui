@@ -134,8 +134,9 @@ fn scheduler_on_run_end(
 /// queue are private to the UI; the caller passes `ui.input_idle()`.
 ///
 /// A due schedule fires only at a fully idle moment: no run in flight, nothing
-/// queued, no unconfirmed steers, no `!` command whose output is still owed
-/// to the conversation, and no user interaction on the input surface
+/// queued, no unconfirmed steers, no `!` command still running or whose
+/// steered output is still unanswered for, and no user interaction on the
+/// input surface
 /// (draft text, shell mode, or a just-submitted event still in flight).
 /// Anything less defers — the fire stays due and dispatches at the next idle
 /// boundary.
@@ -153,6 +154,7 @@ fn scheduler_maybe_fire(
   guard state.run is Idle &&
     state.queued.is_empty() &&
     state.pending_steers.is_empty() &&
+    state.steered_outputs.is_empty() &&
     state.commands.is_empty() &&
     input_idle else {
     return
@@ -169,7 +171,8 @@ fn scheduler_maybe_fire(
   // loop's run in front of what the user sent first. Either way the fire
   // stays due for the next batch.
   for cmd in cmds {
-    if cmd is (CancelAgent | KillEngine | Quit | SteerAgent(_)) {
+    if cmd
+      is (CancelAgent | KillEngine | Quit | SteerAgent(_) | SteerOutput(_, ..)) {
       return
     }
   }

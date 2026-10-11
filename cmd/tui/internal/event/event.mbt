@@ -23,9 +23,9 @@ pub(all) struct ToolResultEvent {
 ///|
 /// Input the engine folded into the running turn at a step boundary: text the
 /// user sent, or a notice the engine raised itself (a background job
-/// finishing).
+/// finishing). `submission_id` is the tag the steer was sent with, if any.
 pub(all) enum AppliedSteer {
-  Prompt(String)
+  Prompt(String, submission_id~ : String?)
   Notice(String)
 }
 
@@ -50,7 +50,7 @@ pub(all) enum AgentEvent {
   AssistantDelta(String)
   ReasoningMessage(String)
   SteerApplied(AppliedSteer)
-  SteerDropped(String)
+  SteerDropped(String, submission_id~ : String?)
   // A background job finished while the engine was idle. Emitted untagged (no
   // run id) so it survives the TUI's stale-run guard between turns.
   BackgroundNotice(String)

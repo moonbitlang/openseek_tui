@@ -102,8 +102,9 @@ async fn[G] EngineClient::start(
           // run-tagged message would arrive after finish_run and be eaten
           // by the stale-run guard. Post it untagged so the resubmit notice
           // always reaches the user.
-          SteerDropped(text) =>
-            self.messages.try_put(EngineSteerDropped(text)) |> ignore
+          SteerDropped(text, submission_id~) =>
+            self.messages.try_put(EngineSteerDropped(text, submission_id~))
+            |> ignore
           // A rejection can answer an idle command (e.g. /goal sent to an
           // engine that does not implement it), where no run owns it and a
           // tagged message would be eaten by the stale-run guard. Rejections
@@ -329,17 +330,21 @@ async fn[G] EngineClient::live_for(
 
 ///|
 /// Steer the open run with user text — typed, or a `!` command's output — or
-/// report it dropped when no run is open to take it. Untagged, since the TUI
-/// never reconciles a delivery by id.
-async fn EngineClient::steer(self : EngineClient, text : String) -> Unit {
+/// report it dropped when no run is open to take it. `submission_id` tags the
+/// steer and comes back on its receipt, from the engine or from here.
+async fn EngineClient::steer(
+  self : EngineClient,
+  text : String,
+  submission_id? : String,
+) -> Unit {
   let content : @protocol.Content = Content([Text(text)])
   match self.live {
     Some(live) if live.run_open =>
       self.send(
         live.latest_run,
-        (Steer(kind=Prompt, content~, submission_id=None) : @protocol.Command).to_json(),
+        (Steer(kind=Prompt, content~, submission_id~) : @protocol.Command).to_json(),
       )
-    _ => self.messages.put(SteerDropped(text))
+    _ => self.messages.put(SteerDropped(text, submission_id~))
   }
 }
 

@@ -14,7 +14,7 @@ pub(all) enum AgentEvent {
   AssistantDelta(String)
   ReasoningMessage(String)
   SteerApplied(AppliedSteer)
-  SteerDropped(String)
+  SteerDropped(String, submission_id~ : String?)
   BackgroundNotice(String)
   AssistantMessage(String)
   SessionError(String)
@@ -35,7 +35,7 @@ pub(all) enum AgentEvent {
 }
 
 pub(all) enum AppliedSteer {
-  Prompt(String)
+  Prompt(String, submission_id~ : String?)
   Notice(String)
 }
 
