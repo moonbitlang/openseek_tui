@@ -2,16 +2,21 @@
 
 This is the **text editor** behind the input box — the readline-like editing
 core that turns keystrokes into the text the user submits. If you've wired up
-emacs-style editing before, the model is familiar: it owns the buffer and a
-cursor, soft-wraps each logical line to the current width, and exposes editing
-and motion operations (insert, kill-line, word motion, vertical movement across
-wrapped rows).
+emacs-style editing before, the model is familiar: a buffer and a cursor, each
+logical line soft-wrapped to the current width, and editing and motion
+operations (insert, kill-line, word motion, vertical movement across wrapped
+rows).
 
-The central type, `Model`, deliberately knows nothing about colors, surfaces, or
-the terminal. It only produces plain text plus a cursor offset; the
-[`render`](../render/) layer turns that into a styled surface and the `Ui`
-draws it. That split is what keeps editing logic
-testable without a terminal in the loop.
+The buffer, the cursor, the wrapping and the operations themselves are the
+`Editor` from `moonbit-community/tui`. `Model` is a thin layer over it that adds
+what is particular to this prompt: the input/shell mode with its `! ` marker,
+the two-column prompt prefix that narrows the editable width, and the cap on
+how many rows the composer shows before it scrolls.
+
+`Model` deliberately knows nothing about colors, surfaces, or the terminal. It
+only produces plain text plus a cursor offset; the [`render`](../render/) layer
+turns that into a styled surface and the `Ui` draws it. That split is what
+keeps editing logic testable without a terminal in the loop.
 
 ## Usage
 
