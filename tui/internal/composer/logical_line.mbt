@@ -1,8 +1,8 @@
 ///|
 priv struct LogicLine {
   display : @displaytext.DisplayText
-  mut row_start : Int
-  mut row_end : Int
+  mut row_start : Int32
+  mut row_end : Int32
 }
 
 ///|
@@ -30,7 +30,7 @@ fn LogicLine::is_empty(self : LogicLine) -> Bool {
 ///|
 fn LogicLine::position_at_display_column(
   self : LogicLine,
-  column~ : Int,
+  column~ : Int32,
 ) -> @displaytext.TextualPosition {
   self.display.textual_position_at_or_before(
     @displaytext.DisplayPosition::new(column~),
@@ -41,7 +41,7 @@ fn LogicLine::position_at_display_column(
 fn LogicLine::display_column(
   self : LogicLine,
   position~ : @displaytext.TextualPosition,
-) -> Int {
+) -> Int32 {
   self.display.display_position(position).column()
 }
 
@@ -84,8 +84,8 @@ fn join_logical_lines(logical_lines : Array[LogicLine]) -> String {
 ///|
 fn splice_logical_lines(
   lines : Array[LogicLine],
-  start~ : Int,
-  delete_count~ : Int,
+  start~ : Int32,
+  delete_count~ : Int32,
   inserted~ : Array[LogicLine],
 ) -> Array[LogicLine] {
   let start = start.clamp(min=0, max=lines.length())

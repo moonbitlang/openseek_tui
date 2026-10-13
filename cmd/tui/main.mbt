@@ -293,7 +293,7 @@ priv enum EngineProbe {
   NotLaunchable
   /// It ran but exited non-zero; carries the exit code and the tail of its
   /// merged output, which is where `moonx` explains a failed download.
-  Failed(Int, String)
+  Failed(Int32, String)
 }
 
 ///|
@@ -348,7 +348,7 @@ fn output_tail(text : String) -> String {
 /// How long the preflight runs before saying why it is slow. A cached `moonx`
 /// engine answers `--help` in well under this, so the notice appears only
 /// while the first launch downloads the pinned release.
-const SlowProbeNoticeMs : Int = 1500
+const SlowProbeNoticeMs : Int32 = 1500
 
 ///|
 /// `probe_engine`, telling the user on stderr when it takes long enough to be a

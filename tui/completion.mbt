@@ -10,7 +10,7 @@ priv struct CompletionMenu {
 /// is the highlighted item index, and `dismissed` records an Esc dismissal.
 priv struct CompletionState {
   mut key : String
-  mut selected : Int
+  mut selected : Int32
   mut dismissed : Bool
 }
 
@@ -136,7 +136,7 @@ async fn Ui::redraw_after_completion_selection(self : Self) -> Unit {
 }
 
 ///|
-async fn Ui::move_completion_selection(self : Self, delta : Int) -> Unit {
+async fn Ui::move_completion_selection(self : Self, delta : Int32) -> Unit {
   let len = match self.completion_menu() {
     Some(menu) => menu.items.length()
     None => 0
@@ -199,7 +199,10 @@ async fn Ui::submit_slash_command(
 /// (e.g. an unknown command), so there is nothing to accept. The candidates are
 /// command names from the configured spec — trusted text, so no sanitization is
 /// needed here.
-fn completion_acceptance_text(menu : CompletionMenu, selected : Int) -> String? {
+fn completion_acceptance_text(
+  menu : CompletionMenu,
+  selected : Int32,
+) -> String? {
   guard menu.items.get(selected) is Some(item) else { return None }
   Some("/\{item.insert_text()}")
 }

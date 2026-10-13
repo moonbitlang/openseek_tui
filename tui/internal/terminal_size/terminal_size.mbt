@@ -1,8 +1,8 @@
 ///|
-const DefaultTerminalRows : Int = 24
+const DefaultTerminalRows : Int32 = 24
 
 ///|
-const DefaultTerminalCols : Int = 80
+const DefaultTerminalCols : Int32 = 80
 
 ///|
 /// On-screen terminal dimensions, guaranteed positive.
@@ -13,13 +13,13 @@ const DefaultTerminalCols : Int = 80
 /// sane defaults. Consumers can therefore treat `rows`/`cols` as always `>= 1`
 /// without re-validating.
 struct TerminalSize {
-  rows : Int
-  cols : Int
+  rows : Int32
+  cols : Int32
 }
 
 ///|
 /// Build a terminal size, replacing any non-positive dimension with its default.
-pub fn TerminalSize::TerminalSize(rows~ : Int, cols~ : Int) -> TerminalSize {
+pub fn TerminalSize::TerminalSize(rows~ : Int32, cols~ : Int32) -> TerminalSize {
   {
     rows: if rows < 1 {
       DefaultTerminalRows
@@ -43,12 +43,12 @@ pub let default : TerminalSize = {
 
 ///|
 /// Number of on-screen rows.
-pub fn TerminalSize::rows(self : TerminalSize) -> Int {
+pub fn TerminalSize::rows(self : TerminalSize) -> Int32 {
   self.rows
 }
 
 ///|
 /// Number of on-screen columns.
-pub fn TerminalSize::cols(self : TerminalSize) -> Int {
+pub fn TerminalSize::cols(self : TerminalSize) -> Int32 {
   self.cols
 }

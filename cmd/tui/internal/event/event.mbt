@@ -9,7 +9,7 @@
 /// The engine reports prompt/completion/cache counts; only the derived total
 /// (`prompt + completion`) is shown in the status line, so that is all we keep.
 pub struct UsageInfo {
-  total_tokens : Int
+  total_tokens : Int32
 }
 
 ///|
@@ -71,7 +71,7 @@ pub(all) enum AgentEvent {
   // The engine is starting an auto-continuation turn toward the standing
   // goal (headless auto mode); carries the remaining turn budget. Posted
   // untagged: it always lands between runs.
-  GoalContinue(Int)
+  GoalContinue(Int32)
   // The auto-continue budget ran out with the goal still standing; the
   // engine paused for input. Posted untagged for the same reason.
   GoalBudgetExhausted
@@ -88,5 +88,5 @@ pub(all) enum AgentEvent {
   // (it left no result, or was cancelled before its result was read); `None`
   // means `steps` is the child's own account. Non-terminal for the outer run
   // — the parent turn continues.
-  SubrunFinished(status~ : String, steps~ : Int, unaccounted~ : String?)
+  SubrunFinished(status~ : String, steps~ : Int32, unaccounted~ : String?)
 }

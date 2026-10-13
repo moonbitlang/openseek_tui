@@ -10,7 +10,7 @@
 // queued.mbt); the editing model and the doc vocabulary cover the rest.
 
 ///|
-fn separator_line(cols~ : Int) -> @surface.Line {
+fn separator_line(cols~ : Int32) -> @surface.Line {
   Line([Span(DisplayText(String::make(cols, '─')), style=@style.dim)])
 }
 
@@ -18,7 +18,7 @@ fn separator_line(cols~ : Int) -> @surface.Line {
 fn prompt_line(
   prefix~ : @displaytext.DisplayText,
   line~ : @displaytext.DisplayText,
-  cols~ : Int,
+  cols~ : Int32,
 ) -> @surface.Line {
   let prefix_width = prefix.width()
   let content = @displaytext.DisplayText(line.truncate(cols - prefix_width))
@@ -36,16 +36,16 @@ fn prompt_line(
 fn status_line(
   status : @doc.Text,
   notice : @doc.Text?,
-  cols~ : Int,
+  cols~ : Int32,
 ) -> @surface.Line {
   notice.unwrap_or(status).first_line(width=cols)
 }
 
 ///|
-const MaxCompletionMenuRows : Int = 6
+const MaxCompletionMenuRows : Int32 = 6
 
 ///|
-fn padded_line(spans : Array[@surface.Span], cols~ : Int) -> @surface.Line {
+fn padded_line(spans : Array[@surface.Span], cols~ : Int32) -> @surface.Line {
   let used = for span in spans; width = 0 {
     continue width + @displaytext.DisplayText(span.text()).width()
   } nobreak {
@@ -62,10 +62,10 @@ fn padded_line(spans : Array[@surface.Span], cols~ : Int) -> @surface.Line {
 ///|
 fn completion_menu_rows(
   items : Array[@completion.CompletionItem],
-  selected : Int,
-  cols~ : Int,
-  indent~ : Int,
-  max_rows~ : Int,
+  selected : Int32,
+  cols~ : Int32,
+  indent~ : Int32,
+  max_rows~ : Int32,
 ) -> Array[@surface.Line] {
   if max_rows <= 0 {
     return []
@@ -125,7 +125,7 @@ fn completion_menu_rows(
 ///|
 /// Prepend `indent` blank columns to a line so it lines up with the composer's
 /// editable text (which starts after the prompt prefix), not the left edge.
-fn indent_line(line : @surface.Line, indent~ : Int) -> @surface.Line {
+fn indent_line(line : @surface.Line, indent~ : Int32) -> @surface.Line {
   if indent <= 0 {
     return line
   }
@@ -136,7 +136,7 @@ fn indent_line(line : @surface.Line, indent~ : Int) -> @surface.Line {
 ///|
 /// The shortest terminal the live area fits in without clipping: a spacer, two
 /// separators, one composer row, and the status line.
-const MinLiveRows : Int = 5
+const MinLiveRows : Int32 = 5
 
 ///|
 /// Whether a terminal `max_rows` tall has room to draw at least one completion
@@ -144,14 +144,14 @@ const MinLiveRows : Int = 5
 /// composer and its chrome. The input layer gates completion key handling on
 /// this so a menu that is logically open but too short to render does not
 /// silently capture Enter/Up/Down.
-pub fn completion_menu_fits(max_rows~ : Int) -> Bool {
+pub fn completion_menu_fits(max_rows~ : Int32) -> Bool {
   max_rows - MinLiveRows >= 1
 }
 
 ///|
 /// A one-line notice shown in place of the composer when the terminal is too
 /// short to render it without clipping the prompt or status.
-fn too_small_surface(cols~ : Int) -> @surface.Surface {
+fn too_small_surface(cols~ : Int32) -> @surface.Surface {
   Surface(
     width=cols,
     rows=[
@@ -187,11 +187,11 @@ pub fn composer_surface(
   composer : @composer.Model,
   activity~ : @doc.Text?,
   queued_inputs~ : Array[@core.Input],
-  completion? : @completion.Model = @completion.Model::closed(),
+  completion~ : @completion.Model = @completion.Model::closed(),
   status~ : @doc.Text,
   notice~ : @doc.Text?,
-  cols~ : Int,
-  max_rows~ : Int,
+  cols~ : Int32,
+  max_rows~ : Int32,
 ) -> @surface.Surface {
   // Below the minimum the prompt or status would be clipped, so show a notice
   // instead of a broken frame. This runs on every redraw, so it also covers a

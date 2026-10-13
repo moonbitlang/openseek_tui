@@ -7,7 +7,7 @@
 /// the surface's row 0 is drawn; height comes from the surface itself.
 priv struct PlacedSurface {
   surface : @surface.Surface
-  top : Int
+  top : Int32
 }
 
 ///|
@@ -15,7 +15,7 @@ priv struct PlacedSurface {
 /// outside the placed surface's own rows.
 fn PlacedSurface::line_at_terminal_row(
   self : PlacedSurface,
-  row~ : Int,
+  row~ : Int32,
 ) -> @surface.Line? {
   let index = row - self.top
   if index >= 0 && index < self.surface.height() {
@@ -54,12 +54,12 @@ test "terminal cursor comparison includes viewport top" {
 
 ///|
 /// The cursor row in 1-based terminal coordinates.
-fn PlacedSurface::cursor_terminal_row(self : PlacedSurface) -> Int {
+fn PlacedSurface::cursor_terminal_row(self : PlacedSurface) -> Int32 {
   self.top + self.surface.cursor().row()
 }
 
 ///|
 /// The cursor column in 1-based terminal coordinates.
-fn PlacedSurface::cursor_terminal_col(self : PlacedSurface) -> Int {
+fn PlacedSurface::cursor_terminal_col(self : PlacedSurface) -> Int32 {
   1 + self.surface.cursor().col()
 }

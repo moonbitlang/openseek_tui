@@ -24,7 +24,7 @@ fn VisualRow::VisualRow(
 /// Soft-wrap cached logical lines to `content_width` display columns.
 fn wrap_visual_rows(
   logical_lines : Array[LogicLine],
-  content_width~ : Int,
+  content_width~ : Int32,
 ) -> Array[VisualRow] {
   let width = content_width.max(1)
   let rows : Array[VisualRow] = []
@@ -52,7 +52,10 @@ fn wrap_visual_rows(
 }
 
 ///|
-fn logic_line_at_row(logical_lines : Array[LogicLine], row_index~ : Int) -> Int {
+fn logic_line_at_row(
+  logical_lines : Array[LogicLine],
+  row_index~ : Int32,
+) -> Int32 {
   let last = logical_lines[logical_lines.length() - 1]
   let row_index = row_index.clamp(min=0, max=last.row_end - 1)
   for line_index, line in logical_lines {
@@ -69,7 +72,7 @@ fn find_cursor_visual_row(
   logical_lines : Array[LogicLine],
   rows~ : Array[VisualRow],
   cursor~ : TextCursor,
-) -> Int {
+) -> Int32 {
   let line = logical_lines[cursor.line]
   let mut result = line.row_start
   let cursor_column = line.display_column(position=cursor.position)
@@ -100,7 +103,7 @@ fn resolve_cursor(
   rows~ : Array[VisualRow],
   cursor~ : TextCursor,
   at_wrap_end~ : Bool,
-) -> Int {
+) -> Int32 {
   let index = find_cursor_visual_row(logical_lines, rows~, cursor~)
   let line = logical_lines[cursor.line]
   if at_wrap_end &&

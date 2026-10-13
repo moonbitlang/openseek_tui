@@ -31,13 +31,13 @@ async fn tick_ui(messages : @async.Queue[Msg]) -> Unit {
 /// We still read past it so the child can never block writing to a full stderr
 /// pipe (which would deadlock the `proc.wait()` below), but only this many bytes
 /// are held in memory and rendered; the overflow is counted and dropped.
-const StderrCaptureLimitBytes : Int = 8192
+const StderrCaptureLimitBytes : Int32 = 8192
 
 ///|
 /// Per-read size while draining stderr past the cap. The retained bytes are
 /// bounded by the remaining budget so the buffer never overshoots; once full we
 /// keep reading in blocks this size only to drain the pipe, discarding them.
-const StderrDrainChunkBytes : Int = 4096
+const StderrDrainChunkBytes : Int32 = 4096
 
 ///|
 /// Drain an engine's stderr `reader` to EOF, retaining at most
@@ -134,7 +134,7 @@ fn is_terminal_event(event : @event.AgentEvent) -> Bool {
 /// event: the exit `code` plus the captured stderr `diagnostics` (already
 /// trimmed) as detail, or no detail when there were none.
 fn engine_exit_without_result(
-  code : Int,
+  code : Int32,
   diagnostics : StringView,
 ) -> @event.AgentEvent {
   let detail = if diagnostics.is_empty() { "" } else { ":\n\{diagnostics}" }
@@ -192,7 +192,7 @@ fn engine_env(
 async fn run_shell_command(
   command : String,
   messages : @async.Queue[Msg],
-  run_id? : Int,
+  run_id? : Int32,
 ) -> Unit {
   let outcome : Result[@command_context.ShellOutput, Error]? = @async.handle_cancellation(() => {
       try @command_context.collect_shell_output(command) catch {
@@ -222,13 +222,13 @@ async fn run_shell_command(
 // `assistant_message`, so the buffer only needs to cover the widest plausible
 // terminal row; the bound keeps per-delta work constant during long
 // code-generation streams.
-const StreamingPreviewMaxColumns : Int = 240
+const StreamingPreviewMaxColumns : Int32 = 240
 
 ///|
 /// Keep the last `max_cols` display columns of `text`, marking an elided front
 /// with a leading `…`. The inverse of `DisplayText::truncate`, which keeps the
 /// front — a streaming preview must keep the end, where the new text arrives.
-fn tail_columns(text : String, max_cols : Int) -> String {
+fn tail_columns(text : String, max_cols : Int32) -> String {
   let display = @displaytext.DisplayText(text)
   if display.width() <= max_cols {
     return text
@@ -916,29 +916,29 @@ fn drain_test_state() -> State {
 }
 
 ///|
-fn start_agent_count(cmds : Array[Cmd]) -> Int {
+fn start_agent_count(cmds : Array[Cmd]) -> Int32 {
   cmds.count_if(cmd => cmd is StartAgent(_, ..))
 }
 
 ///|
-fn error_item_count(cmds : Array[Cmd]) -> Int {
+fn error_item_count(cmds : Array[Cmd]) -> Int32 {
   cmds.count_if(cmd => cmd is AppendItem(Error(_)))
 }
 
 ///|
 /// Foreground `!` commands: those that own a run slot (run_id present).
-fn run_command_count(cmds : Array[Cmd]) -> Int {
+fn run_command_count(cmds : Array[Cmd]) -> Int32 {
   cmds.count_if(cmd => cmd is RunCommand(run_id=Some(_), _))
 }
 
 ///|
 /// Background `!` commands launched alongside a live turn (run_id absent).
-fn run_background_command_count(cmds : Array[Cmd]) -> Int {
+fn run_background_command_count(cmds : Array[Cmd]) -> Int32 {
   cmds.count_if(cmd => cmd is RunCommand(run_id=None, _))
 }
 
 ///|
-fn compact_session_count(cmds : Array[Cmd]) -> Int {
+fn compact_session_count(cmds : Array[Cmd]) -> Int32 {
   cmds.count_if(cmd => cmd is CompactSession(_))
 }
 
@@ -1242,7 +1242,7 @@ test "a stale terminal event from a superseded run is ignored" {
 }
 
 ///|
-fn quit_count(cmds : Array[Cmd]) -> Int {
+fn quit_count(cmds : Array[Cmd]) -> Int32 {
   cmds.count_if(cmd => cmd is Quit)
 }
 

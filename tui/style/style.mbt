@@ -17,9 +17,9 @@ pub let default : Style = Style()
 /// Build a style; omitted fields keep the terminal default. Pass only what
 /// the span should change, e.g. `Style(foreground=Basic(Yellow))`.
 pub fn Style::Style(
-  foreground? : @tty/color.Color = Default,
-  background? : @tty/color.Color = Default,
-  underline? : Bool = false,
+  foreground~ : @tty/color.Color = Default,
+  background~ : @tty/color.Color = Default,
+  underline~ : Bool = false,
 ) -> Style {
   { foreground, background, underline, }
 }

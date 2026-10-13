@@ -1,6 +1,6 @@
 ///|
 /// Terminal tab stop width: tabs expand to the next multiple of this.
-pub const TabWidth : Int = 8
+pub const TabWidth : Int32 = 8
 
 ///|
 /// Whether a display-safe text unit is a C0 control character or DEL.
@@ -20,7 +20,7 @@ pub fn unit_width(
   line : @displaytext.DisplayText,
   start~ : @displaytext.TextualPosition,
   end~ : @displaytext.TextualPosition,
-) -> Int {
+) -> Int32 {
   line.display_position(end).column() - line.display_position(start).column()
 }
 

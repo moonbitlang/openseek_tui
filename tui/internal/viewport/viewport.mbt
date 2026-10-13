@@ -34,37 +34,37 @@ priv enum SizeSource {
 ///|
 priv struct EnterGeometry {
   size : @terminal_size.TerminalSize
-  cursor_row : Int
+  cursor_row : Int32
   source : SizeSource
 }
 
 ///|
 /// The live area's start row.
-fn Viewport::top(self : Viewport) -> Int {
+fn Viewport::top(self : Viewport) -> Int32 {
   self.geometry.top()
 }
 
 ///|
 /// The live area's height in rows.
-fn Viewport::height(self : Viewport) -> Int {
+fn Viewport::height(self : Viewport) -> Int32 {
   self.geometry.height()
 }
 
 ///|
 /// Current trusted terminal width in columns.
-pub fn Viewport::cols(self : Viewport) -> Int {
+pub fn Viewport::cols(self : Viewport) -> Int32 {
   self.size.cols()
 }
 
 ///|
 /// Current trusted terminal height in rows. The live area can never exceed this,
 /// so the composer view uses it to bound previews.
-pub fn Viewport::rows(self : Viewport) -> Int {
+pub fn Viewport::rows(self : Viewport) -> Int32 {
   self.size.rows()
 }
 
 ///|
-fn Viewport::bottom(self : Viewport) -> Int {
+fn Viewport::bottom(self : Viewport) -> Int32 {
   self.geometry.bottom()
 }
 
@@ -84,7 +84,11 @@ fn Viewport::set_size(
 }
 
 ///|
-fn Viewport::set_geometry(self : Viewport, top~ : Int, height~ : Int) -> Unit {
+fn Viewport::set_geometry(
+  self : Viewport,
+  top~ : Int32,
+  height~ : Int32,
+) -> Unit {
   // Store the clamped values, never the caller's desired ones: a desired
   // `top`/`height` that no longer fits (terminal shrank, composer grew near the
   // bottom) is raised/shrunk to fit, so `bottom()` stays within `size.rows()`.
@@ -108,8 +112,8 @@ pub fn read_terminal_size(tty : @tty.Tty) -> @terminal_size.TerminalSize {
 ///|
 fn cursor_position_fits_size(
   size : @terminal_size.TerminalSize,
-  row~ : Int,
-  col~ : Int,
+  row~ : Int32,
+  col~ : Int32,
 ) -> Bool {
   row >= 1 && row <= size.rows() && col >= 1 && col <= size.cols()
 }
@@ -117,8 +121,8 @@ fn cursor_position_fits_size(
 ///|
 fn terminal_geometry_error_message(
   ioctl_size : @terminal_size.TerminalSize,
-  cursor_row~ : Int,
-  cursor_col~ : Int,
+  cursor_row~ : Int32,
+  cursor_col~ : Int32,
   protocol_size? : @terminal_size.TerminalSize,
 ) -> String {
   let ioctl_rows = ioctl_size.rows()
@@ -135,8 +139,8 @@ fn terminal_geometry_error_message(
 ///|
 fn choose_enter_geometry_for_cursor(
   ioctl_size : @terminal_size.TerminalSize,
-  cursor_row~ : Int,
-  cursor_col~ : Int,
+  cursor_row~ : Int32,
+  cursor_col~ : Int32,
   protocol_size? : @terminal_size.TerminalSize,
 ) -> EnterGeometry raise {
   if cursor_position_fits_size(ioctl_size, row=cursor_row, col=cursor_col) {
@@ -238,15 +242,15 @@ const SaveCursor : String = "\u{1b}7"
 const RestoreCursor : String = "\u{1b}8"
 
 ///|
-const ProtocolProbeRow : Int = 9999
+const ProtocolProbeRow : Int32 = 9999
 
 ///|
-const ProtocolProbeCol : Int = 9999
+const ProtocolProbeCol : Int32 = 9999
 
 ///|
 async fn probe_terminal_protocol_size(
   tty : @tty.Tty,
-  timeout_ms~ : Int,
+  timeout_ms~ : Int32,
 ) -> @terminal_size.TerminalSize? {
   tty.write(SaveCursor)
   defer tty.write(RestoreCursor)
@@ -263,7 +267,7 @@ async fn probe_terminal_protocol_size(
 async fn resolve_enter_geometry(
   tty : @tty.Tty,
   ioctl_size : @terminal_size.TerminalSize,
-  timeout_ms~ : Int,
+  timeout_ms~ : Int32,
 ) -> EnterGeometry {
   if tty.query_cursor_position(timeout_ms~) is Some(position) {
     if cursor_position_fits_size(ioctl_size, row=position.row, col=position.col) {
@@ -308,9 +312,9 @@ pub fn Viewport::refresh_size(self : Viewport, tty : @tty.Tty) -> Unit {
 pub async fn Viewport::refresh_size_after_resize(
   self : Viewport,
   tty : @tty.Tty,
-  rows~ : Int,
-  cols~ : Int,
-  timeout_ms~ : Int,
+  rows~ : Int32,
+  cols~ : Int32,
+  timeout_ms~ : Int32,
 ) -> Unit {
   match self.size_source {
     Ioctl => self.set_size(TerminalSize(rows~, cols~))
@@ -395,7 +399,7 @@ async fn draw_surface_line_at_cursor(
 ///|
 async fn draw_surface_line_at(
   tty : @tty.Tty,
-  row : Int,
+  row : Int32,
   line : @surface.Line?,
 ) -> Unit {
   tty.set_cursor_position(row, 1)
@@ -409,8 +413,8 @@ async fn draw_surface_line_at(
 async fn draw_frame_rows(
   tty : @tty.Tty,
   frame : PlacedSurface,
-  top~ : Int,
-  bottom~ : Int,
+  top~ : Int32,
+  bottom~ : Int32,
 ) -> Unit {
   for row in top..<=bottom {
     draw_surface_line_at(tty, row, frame.line_at_terminal_row(row~))
@@ -428,8 +432,8 @@ async fn draw_frame_rows(
 /// scroll region.
 async fn with_scroll_region(
   tty : @tty.Tty,
-  top : Int,
-  bottom : Int,
+  top : Int32,
+  bottom : Int32,
   body : async () -> Unit,
 ) -> Unit {
   tty.set_top_bottom_margins(top, bottom)
@@ -452,8 +456,8 @@ async fn with_scroll_region(
 async fn scroll_scrollback_up_for_growth(
   tty : @tty.Tty,
   old : @geometry.Geometry,
-  new_top~ : Int,
-  screen_bottom~ : Int,
+  new_top~ : Int32,
+  screen_bottom~ : Int32,
 ) -> Bool {
   // old:                                     new:
   //
@@ -639,8 +643,8 @@ pub async fn Viewport::replay_scrollback(
 pub async fn Viewport::enter(
   tty : @tty.Tty,
   size~ : @terminal_size.TerminalSize,
-  surface~ : (Int, Int) -> @surface.Surface,
-  timeout_ms~ : Int,
+  surface~ : (Int32, Int32) -> @surface.Surface,
+  timeout_ms~ : Int32,
 ) -> Viewport {
   let enter_geometry = resolve_enter_geometry(tty, size, timeout_ms~)
   let size = enter_geometry.size
@@ -729,8 +733,8 @@ pub async fn Viewport::redraw(
 async fn Viewport::shift_down_for_insert(
   self : Viewport,
   tty : @tty.Tty,
-  lines~ : Int,
-) -> Int {
+  lines~ : Int32,
+) -> Int32 {
   let top = self.top()
   let space = self.size.rows() - self.bottom()
   let available = space.max(0)
@@ -758,7 +762,7 @@ async fn Viewport::insert_lines_before(
   self : Viewport,
   tty : @tty.Tty,
   lines : Array[@surface.Line],
-  cursor_row~ : Int,
+  cursor_row~ : Int32,
 ) -> Unit {
   guard lines.length() > 0 else { return }
   tty.enable_auto_wrap()

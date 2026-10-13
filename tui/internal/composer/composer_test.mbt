@@ -1,5 +1,5 @@
 ///|
-fn visible_row_text(model : @composer.Model, row : Int) -> String {
+fn visible_row_text(model : @composer.Model, row : Int32) -> String {
   if model.visible_line(row) is Some(line) {
     line.text()
   } else {

@@ -43,7 +43,7 @@ struct History {
   // Cursor is in the inclusive range [0, entries.length()].
   // entries.length() means the user is editing the fresh, not-yet-submitted
   // draft rather than a stored history entry.
-  mut cursor : Int
+  mut cursor : Int32
   mut draft : Entry?
 }
 

@@ -8,7 +8,7 @@
 async fn root_kill_closes_stdout(
   contain~ : Bool,
   contain_after_child_started~ : Bool,
-  grace_ms~ : Int,
+  grace_ms~ : Int32,
 ) -> Bool {
   @async.with_task_group(group => {
     let (reader, child_stdout) = @process.read_from_process()

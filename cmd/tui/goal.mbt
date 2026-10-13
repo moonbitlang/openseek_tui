@@ -82,12 +82,12 @@ fn update_goal_cmds(cmds : Array[Cmd]) -> Array[String?] {
 ///|
 /// Local copies of the scheduler_wbtest counters: whitebox test files do not
 /// reliably share definitions across files on release toolchains.
-fn goal_notice_count(cmds : Array[Cmd]) -> Int {
+fn goal_notice_count(cmds : Array[Cmd]) -> Int32 {
   [ for cmd in cmds if cmd is AppendItem(Notice(_)) => cmd ].length()
 }
 
 ///|
-fn goal_error_count(cmds : Array[Cmd]) -> Int {
+fn goal_error_count(cmds : Array[Cmd]) -> Int32 {
   [ for cmd in cmds if cmd is AppendItem(Error(_)) => cmd ].length()
 }
 
@@ -177,6 +177,6 @@ test "goal_updated events write the mirror and confirm in the transcript" {
 }
 
 ///|
-fn goal_input_notice_count(cmds : Array[Cmd]) -> Int {
+fn goal_input_notice_count(cmds : Array[Cmd]) -> Int32 {
   [ for cmd in cmds if cmd is AppendItem(Input(Notice(_))) => cmd ].length()
 }

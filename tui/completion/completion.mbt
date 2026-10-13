@@ -12,7 +12,7 @@ struct CompletionItem {
 pub fn CompletionItem::CompletionItem(
   label~ : String,
   insert_text? : String,
-  description? : String = "",
+  description~ : String = "",
 ) -> CompletionItem {
   { label, insert_text: insert_text.unwrap_or(label), description, }
 }
@@ -69,7 +69,7 @@ pub fn completion_item_matches(
 struct Model {
   open : Bool
   items : Array[CompletionItem]
-  selected : Int
+  selected : Int32
 } derive(Eq, Debug)
 
 ///|
@@ -82,7 +82,7 @@ pub fn Model::closed() -> Model {
 /// An open completion menu. `selected` is clamped to the available item range.
 pub fn Model::open(
   items~ : Array[CompletionItem],
-  selected? : Int = 0,
+  selected~ : Int32 = 0,
 ) -> Model {
   let selected = if items.length() == 0 {
     0
@@ -106,7 +106,7 @@ pub fn Model::items(self : Model) -> Array[CompletionItem] {
 
 ///|
 /// Selected item index, clamped when the model is built.
-pub fn Model::selected(self : Model) -> Int {
+pub fn Model::selected(self : Model) -> Int32 {
   self.selected
 }
 
