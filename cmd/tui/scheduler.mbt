@@ -27,7 +27,7 @@ const MaxLoopIntervalSecs = 604_800
 ///|
 /// A parsed `/loop` invocation.
 priv enum LoopCommand {
-  Arm(interval_secs~ : Int, max_fires~ : Int, prompt~ : String)
+  Arm(interval_secs~ : Int32, max_fires~ : Int32, prompt~ : String)
   Off
   Status
   Pause
@@ -41,14 +41,14 @@ priv enum LoopCommand {
 /// `scheduler_maybe_fire`.
 priv struct Schedule {
   prompt : String
-  interval_secs : Int
-  max_fires : Int
+  interval_secs : Int32
+  max_fires : Int32
   // Seconds until due; 0 means due (and possibly deferred while busy). Held
   // un-counted while the loop's own run is in flight — re-armed to a full
   // interval when that run finishes, so cadence is fixed-delay-from-completion
   // and a run longer than the interval never overlaps the next fire.
-  mut remaining_secs : Int
-  mut fires : Int
+  mut remaining_secs : Int32
+  mut fires : Int32
   // Armed but not counting: set by `/loop pause` or automatically when a
   // loop-fired run ends in anything but success (repeating a failing task
   // unattended helps nobody). `/loop resume` restarts a full interval.
@@ -56,7 +56,7 @@ priv struct Schedule {
   // The `run_id` of the loop's own run in flight, if any — the key that ties
   // scheduler bookkeeping to the existing monotonic run-ownership scheme, so
   // user-initiated runs never re-arm or pause the loop.
-  mut fired_run_id : Int?
+  mut fired_run_id : Int32?
 }
 
 ///|
@@ -194,7 +194,7 @@ fn scheduler_maybe_fire(
 ///|
 /// Render seconds in the interval grammar's own units — `45s`, `5m`, `2h` —
 /// composing where needed (`1m30s`, `2h5m`).
-fn format_loop_interval(seconds : Int) -> String {
+fn format_loop_interval(seconds : Int32) -> String {
   let hours = seconds / 3600
   let minutes = seconds % 3600 / 60
   let secs = seconds % 60
@@ -315,11 +315,11 @@ fn handle_loop_command(
 ///|
 /// Parse a bare positive decimal, bounded by `MaxLoopIntervalSecs` (which also
 /// keeps the accumulator far from overflow). `None` for anything else.
-fn parse_loop_number(digits : StringView) -> Int? {
+fn parse_loop_number(digits : StringView) -> Int32? {
   guard !digits.is_empty() else { return None }
   let mut value = 0
   for ch in digits {
-    guard ch is ('0'..='9') else { return None }
+    guard ch is ('0'..<='9') else { return None }
     value = value * 10 + (ch.to_int() - '0'.to_int())
     if value > MaxLoopIntervalSecs {
       return None
@@ -337,7 +337,7 @@ fn parse_loop_number(digits : StringView) -> Int? {
 /// suffix (`30s`, `5m`, `2h`). `None` for anything else, zero, or beyond
 /// `MaxLoopIntervalSecs`. The `MinLoopIntervalSecs` floor is enforced by the
 /// caller so it can name the limit in its error message.
-fn parse_loop_interval(text : StringView) -> Int? {
+fn parse_loop_interval(text : StringView) -> Int32? {
   let (digits, unit) = match text {
     [.. digits, 's'] => (digits, 1)
     [.. digits, 'm'] => (digits, 60)
@@ -477,7 +477,7 @@ fn armed_state(arguments : String) -> State {
 }
 
 ///|
-fn notice_count(cmds : Array[Cmd]) -> Int {
+fn notice_count(cmds : Array[Cmd]) -> Int32 {
   cmds.count_if(cmd => cmd is AppendItem(Notice(_)))
 }
 

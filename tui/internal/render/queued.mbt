@@ -5,9 +5,9 @@
 ///|
 fn queued_input_line(
   input : @core.Input,
-  index~ : Int,
-  cols~ : Int,
-  indent~ : Int,
+  index~ : Int32,
+  cols~ : Int32,
+  indent~ : Int32,
 ) -> @surface.Line {
   let marker = @displaytext.DisplayText(
     "\{String::make(indent, ' ')}\{index + 1}. ",
@@ -35,8 +35,8 @@ fn queued_input_line(
 ///|
 fn indented_dim_line(
   line : @displaytext.DisplayText,
-  cols~ : Int,
-  indent~ : Int,
+  cols~ : Int32,
+  indent~ : Int32,
 ) -> @surface.Line {
   Line([
     Span(
@@ -55,9 +55,9 @@ fn indented_dim_line(
 /// small for even a header and one row drops the block entirely.
 fn queued_input_rows(
   inputs : Array[@core.Input],
-  cols~ : Int,
-  indent~ : Int,
-  max_rows~ : Int,
+  cols~ : Int32,
+  indent~ : Int32,
+  max_rows~ : Int32,
 ) -> Array[@surface.Line] {
   let rows : Array[@surface.Line] = []
   let count = inputs.length()

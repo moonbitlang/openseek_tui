@@ -7,7 +7,7 @@ priv struct EngineProcess {
   // Run bookkeeping is owned by the process whose stream produced it: a
   // reader at EOF must report the run that was open on *its* engine, never
   // one a respawned successor has since started.
-  mut latest_run : Int
+  mut latest_run : Int32
   mut run_open : Bool
   // The stdout reader task for this engine, so a graceful shutdown can wait for
   // the engine to drain its stdin and exit before teardown kills it.
@@ -238,7 +238,7 @@ async fn[G] EngineClient::start(
 /// respawn and the error is reported against `run_id`.
 async fn EngineClient::send(
   self : EngineClient,
-  run_id : Int,
+  run_id : Int32,
   command : Json,
 ) -> Unit {
   guard self.live is Some(live) else {
@@ -262,7 +262,7 @@ async fn EngineClient::send(
 /// failure to the right run.
 async fn EngineClient::open_run(
   self : EngineClient,
-  run_id : Int,
+  run_id : Int32,
   command : Json,
 ) -> Unit {
   guard self.live is Some(live) else {
@@ -280,7 +280,7 @@ async fn EngineClient::open_run(
 async fn[G] EngineClient::prompt(
   self : EngineClient,
   group : @async.TaskGroup[G],
-  run_id : Int,
+  run_id : Int32,
   text : String,
 ) -> Unit {
   if self.live is None {
@@ -449,7 +449,7 @@ async fn[G] EngineClient::goal(
 async fn[G] EngineClient::compact(
   self : EngineClient,
   group : @async.TaskGroup[G],
-  run_id : Int,
+  run_id : Int32,
 ) -> Unit {
   if self.live is None {
     self.start(group) catch {
@@ -487,7 +487,7 @@ fn EngineClient::kill(self : EngineClient) -> Unit {
 /// Grace period for the serve engine to drain a freshly delivered command
 /// context to the store and exit after its stdin is closed, before a hard
 /// teardown. Bounded so a stuck or mid-turn engine cannot hang TUI exit.
-const EngineDrainGraceMs : Int = 2000
+const EngineDrainGraceMs : Int32 = 2000
 
 ///|
 /// Graceful shutdown for TUI exit: closing the engine's stdin is the serve

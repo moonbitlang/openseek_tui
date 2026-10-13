@@ -87,7 +87,7 @@ pub fn parse(content : String) -> ShellCommand? {
 }
 
 ///|
-fn exit_header(exit_code : Int?) -> String {
+fn exit_header(exit_code : Int32?) -> String {
   if exit_code is Some(code) {
     "exit=\{code}"
   } else {

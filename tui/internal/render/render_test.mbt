@@ -1,10 +1,10 @@
 ///|
-fn display_width(text : String) -> Int {
+fn display_width(text : String) -> Int32 {
   @displaytext.DisplayText(text).width()
 }
 
 ///|
-fn display_prefix(text : String, units : Int) -> String {
+fn display_prefix(text : String, units : Int32) -> String {
   let line = @displaytext.DisplayText(text)
   let mut end = line.start()
   let mut remaining = units.max(0)

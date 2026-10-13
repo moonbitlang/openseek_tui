@@ -30,37 +30,40 @@
 /// for a previous frame's footprint, which is the same shape but may predate a
 /// resize. The type itself enforces no invariant; it is just a row region.
 struct Geometry {
-  top : Int
-  height : Int
+  top : Int32
+  height : Int32
 }
 
 ///|
 /// Build a row region from a start row and a height.
-pub fn Geometry::Geometry(top~ : Int, height~ : Int) -> Geometry {
+pub fn Geometry::Geometry(top~ : Int32, height~ : Int32) -> Geometry {
   { top, height, }
 }
 
 ///|
 /// 1-based start row of the region.
-pub fn Geometry::top(self : Geometry) -> Int {
+pub fn Geometry::top(self : Geometry) -> Int32 {
   self.top
 }
 
 ///|
 /// Number of rows the region spans.
-pub fn Geometry::height(self : Geometry) -> Int {
+pub fn Geometry::height(self : Geometry) -> Int32 {
   self.height
 }
 
 ///|
 /// Bottom-most row the region occupies (`top + height - 1`).
-pub fn Geometry::bottom(self : Geometry) -> Int {
+pub fn Geometry::bottom(self : Geometry) -> Int32 {
   self.top + self.height - 1
 }
 
 ///|
 /// Clamp a desired live-area height into `1 ..= size.rows()`.
-pub fn clamp_height(size : @terminal_size.TerminalSize, height~ : Int) -> Int {
+pub fn clamp_height(
+  size : @terminal_size.TerminalSize,
+  height~ : Int32,
+) -> Int32 {
   height.clamp(min=1, max=size.rows())
 }
 
@@ -79,7 +82,10 @@ pub fn clamp_height(size : @terminal_size.TerminalSize, height~ : Int) -> Int {
 /// - 1 = 24` sits exactly on the screen bottom. `height` is pre-clamped to
 /// `<= rows` by `clamp_height`, so the bound is always `>= 1` and the clamp
 /// range stays non-empty.
-fn calculate_max_top(size : @terminal_size.TerminalSize, height : Int) -> Int {
+fn calculate_max_top(
+  size : @terminal_size.TerminalSize,
+  height : Int32,
+) -> Int32 {
   (size.rows() - height + 1).max(1)
 }
 
@@ -91,9 +97,9 @@ fn calculate_max_top(size : @terminal_size.TerminalSize, height : Int) -> Int {
 /// sit too low to fit the live area below it; clamping raises it just enough.
 pub fn clamp_top(
   size : @terminal_size.TerminalSize,
-  height~ : Int,
-  top~ : Int,
-) -> Int {
+  height~ : Int32,
+  top~ : Int32,
+) -> Int32 {
   top.clamp(min=1, max=calculate_max_top(size, height))
 }
 

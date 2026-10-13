@@ -21,8 +21,8 @@ struct Line {
 ///|
 /// A cursor position within a surface, as a 0-based (row, col) cell offset.
 struct Cursor {
-  row : Int
-  col : Int
+  row : Int32
+  col : Int32
 }
 
 ///|
@@ -41,7 +41,7 @@ struct Cursor {
 /// and `cursor.col` is inside `width`. Construction normalizes these values so
 /// terminal drawing does not need to defensively adjust them again.
 struct Surface {
-  width : Int
+  width : Int32
   rows : Array[Line]
   cursor : Cursor
 }
@@ -50,7 +50,7 @@ struct Surface {
 /// Build a span from text and an optional style (default: unstyled).
 pub fn Span::Span(
   text : @displaytext.DisplayText,
-  style? : @style.Style = @style.default,
+  style~ : @style.Style = @style.default,
 ) -> Span {
   { text, style, }
 }
@@ -81,26 +81,26 @@ pub fn Line::spans(self : Line) -> Array[Span] {
 
 ///|
 /// Build a cursor at a 0-based (row, col) cell offset.
-pub fn Cursor::Cursor(row~ : Int, col~ : Int) -> Cursor {
+pub fn Cursor::Cursor(row~ : Int32, col~ : Int32) -> Cursor {
   { row, col, }
 }
 
 ///|
 /// The cursor's 0-based row offset.
-pub fn Cursor::row(self : Cursor) -> Int {
+pub fn Cursor::row(self : Cursor) -> Int32 {
   self.row
 }
 
 ///|
 /// The cursor's 0-based column offset.
-pub fn Cursor::col(self : Cursor) -> Int {
+pub fn Cursor::col(self : Cursor) -> Int32 {
   self.col
 }
 
 ///|
 fn normalize_surface_cursor(
   rows : Array[Line],
-  width : Int,
+  width : Int32,
   cursor : Cursor,
 ) -> Cursor {
   {
@@ -114,7 +114,7 @@ fn normalize_surface_cursor(
 /// and the cursor is clamped inside the rows and width so the renderer never
 /// has to re-validate.
 pub fn Surface::Surface(
-  width~ : Int,
+  width~ : Int32,
   rows~ : Array[Line],
   cursor~ : Cursor,
 ) -> Surface {
@@ -125,7 +125,7 @@ pub fn Surface::Surface(
 
 ///|
 /// Number of rows in the surface.
-pub fn Surface::height(self : Surface) -> Int {
+pub fn Surface::height(self : Surface) -> Int32 {
   self.rows.length()
 }
 
@@ -139,7 +139,7 @@ pub fn Surface::cursor(self : Surface) -> Cursor {
 /// Return the first `max_rows` rows of the surface as a new surface, preserving
 /// width and cursor. Used to fit a surface into a bounded terminal region; the
 /// caller decides the bound.
-pub fn Surface::with_max_rows(self : Surface, max_rows : Int) -> Surface {
+pub fn Surface::with_max_rows(self : Surface, max_rows : Int32) -> Surface {
   let row_count = max_rows.clamp(min=0, max=self.rows.length())
   let rows = self.rows[:row_count].to_owned()
   Surface(width=self.width, rows~, cursor=self.cursor)
@@ -147,7 +147,7 @@ pub fn Surface::with_max_rows(self : Surface, max_rows : Int) -> Surface {
 
 ///|
 /// The line at `row`, or an empty line when `row` is out of range.
-pub fn Surface::line_at(self : Surface, row : Int) -> Line {
+pub fn Surface::line_at(self : Surface, row : Int32) -> Line {
   if self.rows.get(row) is Some(line) {
     line
   } else {

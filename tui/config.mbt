@@ -1,13 +1,13 @@
 ///|
-const DefaultEscTimeoutMs : Int = 50
+const DefaultEscTimeoutMs : Int32 = 50
 
 ///|
-const DefaultComposerMaxRows : Int = @composer.DefaultMaxTextRows
+const DefaultComposerMaxRows : Int32 = @composer.DefaultMaxTextRows
 
 ///|
 struct Config {
-  esc_timeout_ms : Int
-  composer_max_rows : Int
+  esc_timeout_ms : Int32
+  composer_max_rows : Int32
   slash_commands : @slash.SlashCommands
 }
 
@@ -18,9 +18,9 @@ struct Config {
 /// optional slash-command completion menu. Non-positive numeric values fall back
 /// to the defaults (`50` ms and `@composer.DefaultMaxTextRows`).
 pub fn Config::Config(
-  esc_timeout_ms? : Int = DefaultEscTimeoutMs,
-  composer_max_rows? : Int = DefaultComposerMaxRows,
-  slash_commands? : Array[@slash.SlashCommandSpec] = [],
+  esc_timeout_ms~ : Int32 = DefaultEscTimeoutMs,
+  composer_max_rows~ : Int32 = DefaultComposerMaxRows,
+  slash_commands~ : Array[@slash.SlashCommandSpec] = [],
 ) -> Config {
   let esc_timeout_ms = if esc_timeout_ms < 1 {
     DefaultEscTimeoutMs

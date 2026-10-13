@@ -15,7 +15,7 @@
 ///     occupied is remembered so the next redraw clears any rows it vacates.
 priv enum FrameCache {
   Drawn(@surface.Surface)
-  Stale(top~ : Int, height~ : Int)
+  Stale(top~ : Int32, height~ : Int32)
 }
 
 ///|
@@ -26,7 +26,7 @@ priv enum FrameCache {
 /// diff against, so the next redraw rewrites every covered row.
 fn FrameCache::placed_surface(
   self : FrameCache,
-  live_top~ : Int,
+  live_top~ : Int32,
 ) -> PlacedSurface? {
   match self {
     Drawn(surface) => Some({ surface, top: live_top, })
@@ -41,7 +41,7 @@ fn FrameCache::placed_surface(
 ///
 /// Only `Drawn` has a footprint worth remembering; `Stale` already holds no live
 /// surface, so it is left unchanged.
-fn FrameCache::invalidate(self : FrameCache, live_top~ : Int) -> FrameCache {
+fn FrameCache::invalidate(self : FrameCache, live_top~ : Int32) -> FrameCache {
   match self {
     Drawn(surface) => Stale(top=live_top, height=surface.height())
     Stale(top=_, height=_) => self

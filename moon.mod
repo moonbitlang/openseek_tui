@@ -4,9 +4,9 @@ version = "0.4.2"
 
 import {
   "moonbitlang/jsonl@0.2.0",
-  "moonbitlang/openseek@0.6.0",
-  "moonbitlang/openseek_protocol@0.3.0",
-  "moonbit-community/displaytext@0.1.5",
+  "moonbitlang/openseek@0.6.2",
+  "moonbitlang/openseek_protocol@0.3.1",
+  "moonbit-community/displaytext@0.1.6",
   "moonbit-community/tty@0.3.0",
   "moonbitlang/async@0.22.4",
   "bobzhang/open_in_browser@0.1.0",

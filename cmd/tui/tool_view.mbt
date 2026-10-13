@@ -1,5 +1,5 @@
 ///|
-const ToolOutputLineLimit : Int = 6
+const ToolOutputLineLimit : Int32 = 6
 
 ///|
 /// Split `source` into trimmed display lines: drop surrounding blank space, then
@@ -16,7 +16,7 @@ fn split_output_lines(source : String) -> Array[String] {
 }
 
 ///|
-fn compact_lines(source : String, limit : Int) -> Array[String] {
+fn compact_lines(source : String, limit : Int32) -> Array[String] {
   let lines = split_output_lines(source)
   if lines.length() <= limit {
     return lines
@@ -73,7 +73,7 @@ fn reasoning_item(text : String) -> @ui.TranscriptItem {
 /// Lines of the post-compaction context preview shown in the transcript. The
 /// summary becomes the conversation's entire context, so a fuller preview than a
 /// tool's clipped output earns its space.
-const CompactionPreviewLineLimit : Int = 12
+const CompactionPreviewLineLimit : Int32 = 12
 
 ///|
 /// Render a completed compaction as a `↻` notice whose detail lines preview the

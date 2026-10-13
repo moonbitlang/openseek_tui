@@ -4,11 +4,11 @@ priv struct AppConfig {
   api_url : String?
   model : @deepseek.Model
   cwd : String
-  max_steps : Int?
+  max_steps : Int32?
   // Model-request retry overrides, forwarded to the engine. `None` leaves the
   // engine's own default (or an inherited `OPENSEEK_RETRY_*` value) in place.
-  retry_attempts : Int?
-  retry_backoff_ms : Int?
+  retry_attempts : Int32?
+  retry_backoff_ms : Int32?
   thinking : @deepseek.ThinkingMode
   // The durable session every prompt of this TUI run converses in. The engine
   // process may exit between prompts (and is respawned on the next one), so
@@ -74,7 +74,7 @@ priv struct State {
   // dispatched. Task-originated messages carry the id of the run that produced
   // them; a message whose id is not the active run's is stale (it came from a
   // task that has since been superseded) and is dropped. See `State::owns_run`.
-  mut run_id : Int
+  mut run_id : Int32
   // Whether the active run is a local `!` shell command rather than an
   // engine turn. Steering and interrupt escalation must not touch the
   // persistent engine while the work in flight is a local task.
@@ -112,7 +112,7 @@ priv struct State {
   // turn, `run_id=None`). Their completion hands command context to the engine,
   // so a scheduled fire must wait for them or that context would leak into the
   // scheduled turn instead of the conversation it belongs to.
-  mut background_commands : Int
+  mut background_commands : Int32
 }
 
 ///|
@@ -138,7 +138,7 @@ fn State::State(config : AppConfig) -> State {
 /// Begin tracking a freshly dispatched run: allocate the next run id and mark the
 /// agent running. Returns the new run id so the caller can tag the spawned task's
 /// messages with it.
-fn State::start_run(self : State, started_ms : Int64) -> Int {
+fn State::start_run(self : State, started_ms : Int64) -> Int32 {
   self.run_id += 1
   self.run = Running(started_ms)
   self.step_response = None
@@ -150,7 +150,7 @@ fn State::start_run(self : State, started_ms : Int64) -> Int {
 /// Whether `id` identifies the run currently in flight. False once that run has
 /// ended (back to `Idle`) or been replaced by a newer one, so a late or stale
 /// message from a superseded task is recognizable and can be ignored.
-fn State::owns_run(self : State, id : Int) -> Bool {
+fn State::owns_run(self : State, id : Int32) -> Bool {
   !(self.run is Idle) && id == self.run_id
 }
 
@@ -176,9 +176,9 @@ fn State::finish_run(self : State) -> Unit {
 /// untagged.
 priv enum Msg {
   UiInput(@ui.Event)
-  AgentProgress(run_id~ : Int, @event.AgentEvent)
-  AgentCancelled(run_id~ : Int)
-  AgentFailed(run_id~ : Int, Error)
+  AgentProgress(run_id~ : Int32, @event.AgentEvent)
+  AgentCancelled(run_id~ : Int32)
+  AgentFailed(run_id~ : Int32, Error)
   // A `!` shell command the TUI ran locally finished; carries the original
   // command and raw result so the loop can render the transcript and produce the
   // shell-style text handed back to the engine. `run_id` is present when the
@@ -187,7 +187,7 @@ priv enum Msg {
   // run, the background case must not.
   CommandResult(
     command~ : String,
-    run_id~ : Int?,
+    run_id~ : Int32?,
     Result[@command_context.ShellOutput, Error]
   )
   // A foreground `!` command cancelled by Ctrl-C before it produced a result.
@@ -195,7 +195,7 @@ priv enum Msg {
   // still survive in the transcript (the live input echo was dropped), so it
   // settles the run with a "(cancelled)" command card. Only a foreground
   // command reaches here, so `run_id` is always present.
-  CommandCancelled(command~ : String, run_id~ : Int)
+  CommandCancelled(command~ : String, run_id~ : Int32)
   // A steer the client could not deliver (no live engine/turn): show the
   // resubmit notice and settle its acknowledgment — the entry was created an
   // instant ago and cannot have been swept.
@@ -230,7 +230,7 @@ priv enum Msg {
 ///|
 /// The run id carried by a task-originated message, or `None` for the
 /// loop-intrinsic `UiInput`/`Tick` messages that belong to no particular run.
-fn Msg::run_id(self : Msg) -> Int? {
+fn Msg::run_id(self : Msg) -> Int32? {
   match self {
     AgentProgress(run_id~, _)
     | AgentCancelled(run_id~)
@@ -255,12 +255,12 @@ priv enum Cmd {
   AppendItem(@ui.TranscriptItem)
   // Start the agent / a local command for a run; carries the run id to tag that
   // task's messages with.
-  StartAgent(run_id~ : Int, String)
+  StartAgent(run_id~ : Int32, String)
   // Run a `!` shell command. `run_id` is present for a foreground command
   // launched while idle — it owns the cancellable run slot — and absent for a
   // background command running alongside a live agent turn, which is dispatched
   // fire-and-forget and must not become the cancel target.
-  RunCommand(run_id~ : Int?, String)
+  RunCommand(run_id~ : Int32?, String)
   // Send typed model-visible input into the persistent serve engine. Prompt
   // steering lands at the running turn's next step boundary; command context
   // may also append into an idle engine session without starting a turn.
@@ -268,7 +268,7 @@ priv enum Cmd {
   // Ask the serve engine to summarize and compact the conversation; carries the
   // run id so the compaction's wire events are tagged to the run that requested
   // it, exactly like a prompt.
-  CompactSession(run_id~ : Int)
+  CompactSession(run_id~ : Int32)
   // Set (Some) or clear (None) the standing goal on the serve engine. The
   // engine's goal_updated event — not this command — mutates local state.
   UpdateGoal(String?)

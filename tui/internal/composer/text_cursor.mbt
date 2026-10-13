@@ -13,14 +13,14 @@ fn is_word_unit(unit : StringView) -> Bool {
 
 ///|
 priv struct TextCursor {
-  line : Int
+  line : Int32
   position : @displaytext.TextualPosition
 }
 
 ///|
 fn TextCursor::TextCursor(
   logical_lines : Array[LogicLine],
-  line~ : Int,
+  line~ : Int32,
   position~ : @displaytext.TextualPosition,
 ) -> TextCursor {
   let line = line.clamp(min=0, max=logical_lines.length() - 1)
@@ -33,7 +33,7 @@ fn TextCursor::TextCursor(
 ///|
 fn TextCursor::line_start(
   logical_lines : Array[LogicLine],
-  line~ : Int,
+  line~ : Int32,
 ) -> TextCursor {
   let line = line.clamp(min=0, max=logical_lines.length() - 1)
   TextCursor(logical_lines, line~, position=logical_lines[line].display.start())
@@ -42,7 +42,7 @@ fn TextCursor::line_start(
 ///|
 fn TextCursor::line_end(
   logical_lines : Array[LogicLine],
-  line~ : Int,
+  line~ : Int32,
 ) -> TextCursor {
   let line = line.clamp(min=0, max=logical_lines.length() - 1)
   TextCursor(logical_lines, line~, position=logical_lines[line].display.end())

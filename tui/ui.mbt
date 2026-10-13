@@ -23,7 +23,7 @@ struct Ui {
   // treat this window as engaged, or they can act past input that is about
   // to arrive. A count, not a flag: rapid submits stack, and the app confirms
   // each delivery with `submission_delivered`.
-  mut pending_submissions : Int
+  mut pending_submissions : Int32
 }
 
 ///|
@@ -115,7 +115,7 @@ async fn Ui::read_tty_events(self : Ui) -> Unit {
 /// first frame, then spawns the command queue and tty reader for the duration of
 /// `body`.
 pub async fn[T] with_ui(
-  config? : Config = Config(),
+  config~ : Config = Config(),
   body : async (Ui) -> T,
 ) -> T {
   let tty = @tty.Tty::open()

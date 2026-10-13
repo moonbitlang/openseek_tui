@@ -32,7 +32,7 @@ struct ToolCall {
 pub fn ToolCall::ToolCall(
   title : @doc.Text,
   status? : ToolStatus,
-  details? : Array[@doc.Text] = [],
+  details~ : Array[@doc.Text] = [],
 ) -> ToolCall {
   { title, status, details: details.copy(), }
 }

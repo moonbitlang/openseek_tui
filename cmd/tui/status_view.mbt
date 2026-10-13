@@ -108,12 +108,12 @@ fn elapsed_seconds(started_ms : Int64, now_ms : Int64) -> Int64 {
 /// composer indent the renderer prepends (2) and one column of slack so the
 /// preview's newest characters are never cut by the renderer's own width
 /// clip, which keeps the line's *front* — the oldest text — on overflow.
-const ActivityChromeColumns : Int = 3
+const ActivityChromeColumns : Int32 = 3
 
 ///|
 /// Most columns the pending-steer acknowledgment may take on the activity
 /// row, so it never starves the streaming preview it shares the line with.
-const SteerSegmentMaxColumns : Int = 44
+const SteerSegmentMaxColumns : Int32 = 44
 
 ///|
 /// The acknowledgment that steering input was sent and awaits its step
@@ -145,9 +145,9 @@ fn pending_steer_segment(steers : Array[String]) -> Array[@doc.Span] {
 fn streaming_activity_spans(
   label : String,
   text : String,
-  cols~ : Int,
+  cols~ : Int32,
   dim_preview~ : Bool,
-  reserved~ : Int,
+  reserved~ : Int32,
 ) -> Array[@doc.Span] {
   let budget = cols -
     ActivityChromeColumns -
@@ -165,7 +165,7 @@ fn streaming_activity_spans(
 }
 
 ///|
-fn format_activity_text(state : State, cols~ : Int) -> @doc.Text? {
+fn format_activity_text(state : State, cols~ : Int32) -> @doc.Text? {
   let started_ms = match state.run {
     Idle => return None
     Running(started_ms) | Interrupting(started_ms) => started_ms

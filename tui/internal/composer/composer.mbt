@@ -1,20 +1,20 @@
 ///|
-const MinTextRows : Int = 1
+const MinTextRows : Int32 = 1
 
 ///|
 /// Default cap on how many editable rows the composer grows to before it
 /// scrolls instead of growing further.
-pub const DefaultMaxTextRows : Int = 4
+pub const DefaultMaxTextRows : Int32 = 4
 
 ///|
 /// Display width of the prompt prefix (`> `, `! `, or the `  ` continuation),
 /// which is always two columns. Every wrapped composer row reserves this much.
-const PromptWidth : Int = 2
+const PromptWidth : Int32 = 2
 
 ///|
 /// Editable content width for a composer rendered at `cols` terminal columns,
 /// i.e. the room left once the two-column prompt prefix is reserved.
-fn compute_content_width(cols~ : Int) -> Int {
+fn compute_content_width(cols~ : Int32) -> Int32 {
   let width = cols - PromptWidth
   width.max(1)
 }
@@ -23,12 +23,12 @@ fn compute_content_width(cols~ : Int) -> Int {
 /// Content width assumed before the composer has been laid out against a real
 /// terminal. The renderer calls `Model::resize` on every frame, so this only
 /// governs editing that happens before the first draw.
-const DefaultContentWidth : Int = 78
+const DefaultContentWidth : Int32 = 78
 
 ///|
 /// Number of editable rows to render for `total` wrapped rows, clamped between
 /// one and `max_text_rows`.
-fn compute_visible_count(total~ : Int, max_text_rows~ : Int) -> Int {
+fn compute_visible_count(total~ : Int32, max_text_rows~ : Int32) -> Int32 {
   let max_text_rows = max_text_rows.max(MinTextRows)
   total.clamp(min=MinTextRows, max=max_text_rows)
 }
@@ -82,18 +82,18 @@ struct Model {
   mut logical_lines : Array[LogicLine]
   mut visual_rows : Array[VisualRow]
   mut cursor : TextCursor
-  mut preferred_column : Int?
-  mut view_start : Int
+  mut preferred_column : Int32?
+  mut view_start : Int32
   // Affinity for a cursor that lands on a soft-wrap boundary: when true the
   // cursor belongs to the end of the earlier wrapped row, not the start of the
   // next one. Set by vertical movement, reset by every other edit.
   mut at_wrap_end : Bool
-  mut content_width : Int
-  max_text_rows : Int
+  mut content_width : Int32
+  max_text_rows : Int32
   // The live cap on visible rows, narrowed by `resize` to the terminal's budget
   // so the composer fits alongside its chrome on a short terminal. Always
   // `<= max_text_rows`.
-  mut visible_cap : Int
+  mut visible_cap : Int32
   mut mode : Mode
 }
 
@@ -102,7 +102,7 @@ struct Model {
 /// grows to at most `max_text_rows` wrapped rows.
 pub fn Model::Model(
   text : String,
-  max_text_rows? : Int = DefaultMaxTextRows,
+  max_text_rows~ : Int32 = DefaultMaxTextRows,
 ) -> Model {
   let max_text_rows = max_text_rows.max(MinTextRows)
   let content_width = DefaultContentWidth
@@ -172,7 +172,7 @@ pub fn Model::mode(self : Model) -> Mode {
 /// long lines add wrapped rows, stopping at `max_text_rows`. When the text wraps
 /// to more rows than this value, `view_start` scrolls the visible window instead
 /// of growing further.
-pub fn Model::visible_text_rows(self : Model) -> Int {
+pub fn Model::visible_text_rows(self : Model) -> Int32 {
   compute_visible_count(
     total=self.visual_rows.length(),
     max_text_rows=self.visible_cap,
@@ -185,7 +185,7 @@ pub fn Model::visible_text_rows(self : Model) -> Int {
 /// `row` is relative to the visible composer text area, not the terminal.
 pub fn Model::visible_line(
   self : Model,
-  row : Int,
+  row : Int32,
 ) -> @displaytext.DisplayText? {
   let index = self.view_start + row
   if index < 0 || index >= self.visual_rows.length() {
@@ -201,7 +201,10 @@ pub fn Model::visible_line(
 /// Only the very first wrapped row of the first logical input line gets `❯ ` or
 /// `! `. Every other row — later logical lines and soft-wrapped continuations
 /// alike — uses two spaces so wrapped content lines up with the editable text.
-pub fn Model::input_prefix(self : Model, row : Int) -> @displaytext.DisplayText {
+pub fn Model::input_prefix(
+  self : Model,
+  row : Int32,
+) -> @displaytext.DisplayText {
   let index = self.view_start + row
   if index >= 0 &&
     index < self.visual_rows.length() &&
@@ -216,7 +219,7 @@ pub fn Model::input_prefix(self : Model, row : Int) -> @displaytext.DisplayText 
 
 ///|
 /// Resolve the current cursor to its wrapped-row index for the live layout.
-fn Model::resolve_cursor_index(self : Model) -> Int {
+fn Model::resolve_cursor_index(self : Model) -> Int32 {
   resolve_cursor(
     self.logical_lines,
     rows=self.visual_rows,
@@ -231,7 +234,7 @@ fn Model::resolve_cursor_index(self : Model) -> Int {
 /// The row is measured in wrapped rows and clamped to the current visible row
 /// count, so terminal renderers can move relative to the current composer
 /// surface even when the underlying cursor is temporarily outside the window.
-pub fn Model::cursor_row(self : Model) -> Int {
+pub fn Model::cursor_row(self : Model) -> Int32 {
   let visible = compute_visible_count(
     total=self.visual_rows.length(),
     max_text_rows=self.visible_cap,
@@ -263,7 +266,7 @@ pub fn Model::cursor_at_last_visual_row(self : Model) -> Bool {
 /// prefix width, and is measured within the cursor's wrapped segment so it stays
 /// correct when a long line soft-wraps. It is based on `DisplayText` column
 /// measurement, not byte length.
-pub fn Model::cursor_offset(self : Model) -> Int {
+pub fn Model::cursor_offset(self : Model) -> Int32 {
   let index = self.resolve_cursor_index()
   let row = self.visual_rows[index]
   let line = self.logical_lines[self.cursor.line]
@@ -277,10 +280,10 @@ fn Model::set_logical_lines(
   self : Model,
   logical_lines~ : Array[LogicLine],
   cursor~ : TextCursor,
-  view_start~ : Int,
-  preferred_column? : Int,
+  view_start~ : Int32,
+  preferred_column? : Int32,
   mode~ : Mode,
-  at_wrap_end? : Bool = false,
+  at_wrap_end~ : Bool = false,
 ) -> Unit {
   let logical_lines = if logical_lines is [] {
     split_logical_lines("")
@@ -313,8 +316,8 @@ fn Model::set_logical_lines(
 fn Model::set_cursor(
   self : Model,
   cursor~ : TextCursor,
-  preferred_column? : Int,
-  at_wrap_end? : Bool = false,
+  preferred_column? : Int32,
+  at_wrap_end~ : Bool = false,
 ) -> Unit {
   self.cursor = TextCursor(
     self.logical_lines,
@@ -350,7 +353,7 @@ fn Model::reclamp_view(self : Model) -> Unit {
 /// `max_rows` is the live row budget available to the composer. The cap narrows
 /// the configured ceiling so the composer fits its surrounding chrome on a
 /// short terminal. Omitting it restores the configured ceiling.
-pub fn Model::resize(self : Model, cols~ : Int, max_rows? : Int) -> Unit {
+pub fn Model::resize(self : Model, cols~ : Int32, max_rows? : Int32) -> Unit {
   self.visible_cap = match max_rows {
     Some(max_rows) => max_rows.clamp(min=MinTextRows, max=self.max_text_rows)
     None => self.max_text_rows
@@ -366,7 +369,7 @@ pub fn Model::resize(self : Model, cols~ : Int, max_rows? : Int) -> Unit {
 ///|
 fn Model::replace_line_range(
   self : Model,
-  line_index~ : Int,
+  line_index~ : Int32,
   start~ : @displaytext.TextualPosition,
   end~ : @displaytext.TextualPosition,
   replacement~ : String,
@@ -398,7 +401,7 @@ fn Model::replace_line_range(
 }
 
 ///|
-fn Model::join_with_next_line(self : Model, line_index~ : Int) -> Unit {
+fn Model::join_with_next_line(self : Model, line_index~ : Int32) -> Unit {
   if line_index < 0 || line_index + 1 >= self.logical_lines.length() {
     self.set_cursor(cursor=self.cursor)
   } else {
@@ -680,7 +683,7 @@ pub fn Model::kill_after(self : Model) -> Unit {
 /// Move the cursor one wrapped row up or down, keeping a preferred display
 /// column. Unlike logical-line movement this steps between the soft-wrapped rows
 /// of a single long line, matching how the composer is drawn.
-pub fn Model::move_vertical(self : Model, delta : Int) -> Unit {
+pub fn Model::move_vertical(self : Model, delta : Int32) -> Unit {
   // Visual rows are slices of logical lines:
   //
   //   logical:  abcdefghij
@@ -743,13 +746,13 @@ fn cursor_line_prefix(model : Model) -> String {
 }
 
 ///|
-fn cursor_column(model : Model) -> Int {
+fn cursor_column(model : Model) -> Int32 {
   let point = model.cursor
   model.logical_lines[point.line].display_column(position=point.position)
 }
 
 ///|
-fn visible_row_text(model : Model, row : Int) -> String {
+fn visible_row_text(model : Model, row : Int32) -> String {
   if model.visible_line(row) is Some(line) {
     line.text()
   } else {

@@ -1,6 +1,6 @@
 ///|
 /// The character budget a `!` command's captured output is cut to.
-let default_max_output_chars : Int = 12000
+let default_max_output_chars : Int32 = 12000
 
 ///|
 /// The result of running a shell command line: the `exit_code` (`None` if the
@@ -8,7 +8,7 @@ let default_max_output_chars : Int = 12000
 /// stdout+stderr `text` (truncated to the character budget), and whether that
 /// truncation happened.
 pub struct ShellOutput {
-  exit_code : Int?
+  exit_code : Int32?
   text : String
   output_limit_reached : Bool
 }
@@ -52,7 +52,7 @@ fn shell_args(cmd : String) -> Array[String] {
 pub async fn collect_shell_output(
   cmd : String,
   cwd? : String,
-  max_output_chars? : Int = default_max_output_chars,
+  max_output_chars~ : Int32 = default_max_output_chars,
 ) -> ShellOutput {
   let (reader, writer) = @process.read_from_process()
   @async.with_task_group() <| group => {
@@ -98,7 +98,7 @@ priv struct OutputPrefix {
 /// returning at most that many characters.
 async fn read_output_prefix(
   reader : @process.ReadFromProcess,
-  max_output_chars : Int,
+  max_output_chars : Int32,
 ) -> OutputPrefix {
   let buffer = Buffer()
   let byte_budget = max_output_chars * 4 + 4

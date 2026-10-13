@@ -49,7 +49,7 @@ pub fn[G] contain(
 /// Put process `pid` and its existing descendants in a new kill-on-close Job
 /// Object; returns the job handle, or 0 when containment is unavailable.
 #cfg(platform="windows")
-extern "C" fn contain_ffi(pid : Int) -> UInt64 = "moonbitlang_openseek_tui_process_tree_contain"
+extern "C" fn contain_ffi(pid : Int32) -> UInt64 = "moonbitlang_openseek_tui_process_tree_contain"
 
 ///|
 /// Terminate every process in the job and close its handle.

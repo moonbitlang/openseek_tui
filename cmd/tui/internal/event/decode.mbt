@@ -142,8 +142,10 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // remaining MCP events are per-tool registry bookkeeping, already summarized
     // by `mcp_tools_registered`. `approval_resolved` retires a prompt this UI
     // never showed — the request arm above is a one-off notice, not a live
-    // card — so there is nothing here to take back.
-    ApprovalResolved(..)
+    // card — so there is nothing here to take back. `prediction_result`
+    // reports an auxiliary completion that never reaches the transcript.
+    PredictionResult(..)
+    | ApprovalResolved(..)
     | CompactionStarted(..)
     | AutoCompactionStarted(..)
     | AutoCompactionFinished(..)

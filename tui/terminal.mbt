@@ -1,8 +1,8 @@
 ///|
 fn Ui::composer_surface(
   self : Ui,
-  cols~ : Int,
-  rows~ : Int,
+  cols~ : Int32,
+  rows~ : Int32,
 ) -> @surface.Surface {
   let completion = match self.completion_menu() {
     Some(menu) if !self.completion.dismissed =>
@@ -47,12 +47,12 @@ async fn Ui::redraw(self : Self) -> Unit {
 /// Lay out one transcript item, prefixed with a blank separator row so items
 /// are visually spaced apart (matching the Codex TUI). The separator is plain,
 /// outside any item background block.
-fn item_rows(doc : @doc.Doc, cols~ : Int) -> Array[@surface.Line] {
+fn item_rows(doc : @doc.Doc, cols~ : Int32) -> Array[@surface.Line] {
   [Line([]), ..doc.layout(width=cols)]
 }
 
 ///|
-fn Ui::transcript_rows(self : Self, cols~ : Int) -> Array[@surface.Line] {
+fn Ui::transcript_rows(self : Self, cols~ : Int32) -> Array[@surface.Line] {
   let rows : Array[@surface.Line] = []
   for doc in self.transcript {
     rows.append(item_rows(doc, cols~))
@@ -120,7 +120,7 @@ pub async fn Ui::append_item(self : Self, item : TranscriptItem) -> Unit {
 /// before the UI has entered the live screen. Lets callers fit transient
 /// content (e.g. a streaming tail preview) to the row the renderer will clip
 /// it to.
-pub fn Ui::columns(self : Self) -> Int {
+pub fn Ui::columns(self : Self) -> Int32 {
   match self.viewport {
     Some(viewport) => viewport.cols()
     None => 80

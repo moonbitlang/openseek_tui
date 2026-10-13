@@ -201,7 +201,7 @@ fn parse_config(matches : @argparse.Matches) -> AppConfig raise {
 /// version this module imports in `moon.mod` (`engine_version_wbtest.mbt` keeps
 /// them in step), so the spawned engine speaks exactly the `serve` protocol and
 /// session format the UI was compiled against.
-const EngineModuleVersion : String = "0.6.0"
+const EngineModuleVersion : String = "0.6.2"
 
 ///|
 /// The engine command when `--engine` is unset: the pinned `moonbitlang/openseek`
@@ -293,7 +293,7 @@ priv enum EngineProbe {
   NotLaunchable
   /// It ran but exited non-zero; carries the exit code and the tail of its
   /// merged output, which is where `moonx` explains a failed download.
-  Failed(Int, String)
+  Failed(Int32, String)
 }
 
 ///|
@@ -348,7 +348,7 @@ fn output_tail(text : String) -> String {
 /// How long the preflight runs before saying why it is slow. A cached `moonx`
 /// engine answers `--help` in well under this, so the notice appears only
 /// while the first launch downloads the pinned release.
-const SlowProbeNoticeMs : Int = 1500
+const SlowProbeNoticeMs : Int32 = 1500
 
 ///|
 /// `probe_engine`, telling the user on stderr when it takes long enough to be a
@@ -460,7 +460,7 @@ test "cli accepts no initial task" {
   assert_true(config.max_steps is None)
   // With no --engine, the pinned openseek release runs through moonx.
   assert_eq(config.engine, "moonx")
-  @debug.assert_eq(config.engine_args_prefix, ["moonbitlang/openseek@0.6.0"])
+  @debug.assert_eq(config.engine_args_prefix, ["moonbitlang/openseek@0.6.2"])
   // No --session still converses in a session: a generated per-launch id, so
   // consecutive prompts share context instead of running amnesiac one-shots.
   assert_true(config.session_id.value().has_prefix("tui-"))

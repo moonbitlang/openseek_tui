@@ -98,7 +98,7 @@ struct Span {
 /// If `style` is omitted, the span uses `Style::default`.
 pub fn Span::Span(
   text : @displaytext.DisplayText,
-  style? : @style.Style = @style.default,
+  style~ : @style.Style = @style.default,
 ) -> Span {
   { display: text, style, }
 }
@@ -113,7 +113,7 @@ pub fn Span::plain(text : String) -> Span {
 /// Lay this block out into physical rows for `width` columns, wrapping by
 /// display width, expanding tabs to the next stop, forcing a row break on every
 /// hard line break (CR, LF, or CRLF), and dropping other stray controls.
-fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
+fn Text::wrap(self : Text, width~ : Int32) -> Array[@surface.Line] {
   let rows : Array[@surface.Line] = []
   let mut spans : Array[@surface.Span] = []
   let mut used = 0
@@ -198,7 +198,7 @@ fn Text::wrap(self : Text, width~ : Int) -> Array[@surface.Line] {
 
 ///|
 /// The first wrapped row of this block for `width` columns, or an empty line.
-pub fn Text::first_line(self : Text, width~ : Int) -> @surface.Line {
+pub fn Text::first_line(self : Text, width~ : Int32) -> @surface.Line {
   match self.wrap(width~) {
     [line, ..] => line
     [] => Line([])
@@ -207,7 +207,7 @@ pub fn Text::first_line(self : Text, width~ : Int) -> @surface.Line {
 
 ///|
 /// Lay every block out in order into physical rows for `width` columns.
-pub fn Doc::layout(self : Doc, width~ : Int) -> Array[@surface.Line] {
+pub fn Doc::layout(self : Doc, width~ : Int32) -> Array[@surface.Line] {
   let rows : Array[@surface.Line] = []
   for text in self.texts {
     rows.append(text.wrap(width~))
