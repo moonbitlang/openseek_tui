@@ -6,15 +6,11 @@ import {
   "moonbitlang/jsonl@0.2.0",
   "moonbitlang/openseek@0.6.2",
   "moonbitlang/openseek_protocol@0.3.1",
-  "moonbit-community/displaytext@0.1.5",
+  "moonbit-community/displaytext@0.1.6",
   "moonbit-community/tty@0.3.0",
   "moonbitlang/async@0.22.4",
   "bobzhang/open_in_browser@0.1.0",
   "moonbitlang/x@0.4.50",
-  // `moonbit-community/displaytext` asks for `kawaz/grapheme@0.10.2`, which
-  // still ships the legacy `moon.mod.json`; raise the minimum so
-  // minimum-version selection picks the migrated 0.10.4 build.
-  "kawaz/grapheme@0.10.4",
 }
 
 readme = "README.md"
