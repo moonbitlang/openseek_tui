@@ -157,6 +157,11 @@ priv struct State {
   mut next_command_id : Int32
   // Outputs steered into a turn whose receipt has not come back yet.
   steered_outputs : Array[SteeredOutput]
+  // The `!` command whose output the active run was started on, until the
+  // engine reports anything for that run. A run that fails while this is
+  // still set failed before the engine answered for the output, so nothing
+  // says the agent read it.
+  mut run_output : String?
   // Outputs of finished `!` commands that could not be sent when they were
   // ready (a compaction or an interrupt was in the way, or the turn they were
   // steered into ended first). Each starts a turn once the conversation is
@@ -181,6 +186,7 @@ fn State::State(config : AppConfig) -> State {
     commands: [],
     next_command_id: 0,
     steered_outputs: [],
+    run_output: None,
     held_outputs: [],
   }
 }
@@ -192,6 +198,7 @@ fn State::State(config : AppConfig) -> State {
 fn State::start_run(self : State, started_ms : Int64) -> Int32 {
   self.run_id += 1
   self.run = Running(started_ms)
+  self.run_output = None
   self.step_response = None
   self.streaming_preview = None
   self.run_id
@@ -211,6 +218,7 @@ fn State::owns_run(self : State, id : Int32) -> Bool {
 fn State::finish_run(self : State) -> Unit {
   self.run = Idle
   self.run_is_compaction = false
+  self.run_output = None
   // Anything still unconfirmed died with the turn; the engine sweeps its
   // queue at turn end and reports each leftover as steer_dropped, which
   // arrives untagged and renders its own resubmit notice.
