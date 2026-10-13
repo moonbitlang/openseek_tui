@@ -25,86 +25,83 @@ fn Ui::composer_surface(
 }
 
 ///|
-async fn Ui::redraw_frame(self : Ui, viewport : @viewport.Viewport) -> Unit {
-  viewport.redraw(
-    self.tty,
-    self.composer_surface(cols=viewport.cols(), rows=viewport.rows()),
+/// Convert a laid-out row to the terminal library's line type. The two differ
+/// only in vocabulary: the same text in the same colors.
+fn to_line(line : @surface.Line) -> @term.Line {
+  Line(
+    line
+    .spans()
+    .map(span => {
+      let style = span.style()
+      Span(
+        span.text(),
+        style=Style(
+          fg=style.foreground,
+          bg=style.background,
+          underline=style.underline,
+        ),
+      )
+    }),
   )
-}
-
-///|
-async fn Ui::redraw(self : Self) -> Unit {
-  // Redraws only run inside `with_entered`'s body, so a missing viewport is a
-  // lifecycle bug — surface it rather than silently skipping the draw.
-  guard self.viewport is Some(viewport) else {
-    abort("redraw without an entered UI")
-  }
-  viewport.refresh_size(self.tty)
-  self.redraw_frame(viewport)
 }
 
 ///|
 /// Lay out one transcript item, prefixed with a blank separator row so items
 /// are visually spaced apart (matching the Codex TUI). The separator is plain,
 /// outside any item background block.
-fn item_rows(doc : @doc.Doc, cols~ : Int32) -> Array[@surface.Line] {
-  [Line([]), ..doc.layout(width=cols)]
+fn item_lines(doc : @doc.Doc, cols~ : Int32) -> Array[@term.Line] {
+  [Line([]), ..doc.layout(width=cols).map(to_line)]
 }
 
 ///|
-fn Ui::transcript_rows(self : Self, cols~ : Int32) -> Array[@surface.Line] {
-  let rows : Array[@surface.Line] = []
+/// Make `transcript_lines` hold the whole transcript laid out for `cols`
+/// columns. Nothing to do unless the width changed since it was last built.
+fn Ui::layout_transcript(self : Self, cols~ : Int32) -> Unit {
+  if cols == self.transcript_cols {
+    return
+  }
+  self.transcript_lines.clear()
   for doc in self.transcript {
-    rows.append(item_rows(doc, cols~))
+    self.transcript_lines.append(item_lines(doc, cols~))
   }
-  rows
+  self.transcript_cols = cols
 }
 
 ///|
-async fn Ui::redraw_after_resize(self : Self, size : @tty.WindowSize) -> Unit {
-  guard self.viewport is Some(viewport) else {
-    abort("resize without an entered UI")
-  }
-  viewport.refresh_size_after_resize(
-    self.tty,
-    rows=size.rows,
-    cols=size.cols,
-    timeout_ms=self.config.esc_timeout_ms,
+/// Draw the whole screen: the transcript in a scrolling area on top, and the
+/// live input area — queued inputs, activity, composer, completion menu and
+/// status — in as many rows as it needs at the bottom.
+async fn Ui::redraw(self : Self) -> Unit {
+  let size = self.terminal.size()
+  let frame = @term.Frame(width=size.width, height=size.height)
+  let surface = self.composer_surface(cols=size.width, rows=size.height)
+  let rows = @term.Layout::vertical([Fill(1), Length(surface.height())])
+  guard rows.split(frame.area()) is [transcript, live] else { return }
+  self.layout_transcript(cols=size.width)
+  frame.lines(
+    transcript,
+    self.transcript_lines,
+    scroll=self.scroll,
+    selection=self.selection,
   )
-  viewport.replay_scrollback(
-    self.tty,
-    scrollback=self.transcript_rows(cols=viewport.cols()),
-    surface=self.composer_surface(cols=viewport.cols(), rows=viewport.rows()),
-  )
+  let rows = Array::makei(surface.height(), row => to_line(surface.line_at(row)))
+  frame.lines(live, rows)
+  frame.set_cursor(live, row=surface.cursor().row(), col=surface.cursor().col())
+  self.terminal.draw(frame)
 }
 
 ///|
-/// Anchor and draw the first frame. `enter` queries the terminal cursor, so this
-/// must run before the tty reader starts (see `with_entered`).
-async fn Ui::enter(self : Self) -> Unit {
-  let size = @viewport.read_terminal_size(self.tty)
-  let viewport = @viewport.Viewport::enter(
-    self.tty,
-    size~,
-    surface=(cols, rows) => self.composer_surface(cols~, rows~),
-    timeout_ms=self.config.esc_timeout_ms,
-  )
-  self.viewport = Some(viewport)
-}
-
-///|
-/// Append a styled `Doc` to the permanent transcript: insert its rows into the
-/// terminal scrollback above the live area, then redraw the live frame. Runs on
-/// the command queue so it serializes with other redraws.
+/// Append a styled `Doc` to the transcript and redraw. Runs on the command
+/// queue so it serializes with other redraws.
 async fn Ui::append_transcript(self : Self, doc : @doc.Doc) -> Unit {
   self.commands.wait(() => {
     self.transcript.push(doc)
-    guard self.viewport is Some(viewport) else {
-      abort("append without an entered UI")
+    // Extend the laid-out transcript in place. Before the first draw there is
+    // no width to lay it out for; the draw builds it from `transcript`.
+    if self.transcript_cols > 0 {
+      self.transcript_lines.append(item_lines(doc, cols=self.transcript_cols))
     }
-    viewport.refresh_size(self.tty)
-    viewport.insert_before(self.tty, item_rows(doc, cols=viewport.cols()))
-    self.redraw_frame(viewport)
+    self.redraw()
   })
 }
 
@@ -116,15 +113,10 @@ pub async fn Ui::append_item(self : Self, item : TranscriptItem) -> Unit {
 }
 
 ///|
-/// The terminal width in columns as of the last redraw, or a conservative 80
-/// before the UI has entered the live screen. Lets callers fit transient
-/// content (e.g. a streaming tail preview) to the row the renderer will clip
-/// it to.
+/// The terminal width in columns. Lets callers fit transient content (e.g. a
+/// streaming tail preview) to the row the renderer will clip it to.
 pub fn Ui::columns(self : Self) -> Int32 {
-  match self.viewport {
-    Some(viewport) => viewport.cols()
-    None => 80
-  }
+  self.terminal.size().width
 }
 
 ///|
@@ -179,12 +171,4 @@ pub async fn Ui::set_live_view(
     self.queued_inputs = queued_inputs.copy()
     self.redraw()
   })
-}
-
-///|
-async fn Ui::leave(self : Self) -> Unit {
-  guard self.viewport is Some(viewport) else { return }
-  self.viewport = None
-  viewport.refresh_size(self.tty)
-  viewport.leave(self.tty)
 }

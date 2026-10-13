@@ -4,8 +4,8 @@ This is where the core layout logic of the input area resides — the view layer
 that decides what the bottom of an Agent TUI (Codex / Claude Code style) looks
 like on any given frame. It takes the live editing state and the surrounding
 context (status line, activity, queued inputs) and stacks them into a single
-[`surface`](../surface/) `Surface`: the finished picture that
-[`viewport`](../viewport/) then draws to the terminal.
+[`surface`](../surface/) `Surface`: the finished picture that the `Ui` then
+draws at the bottom of the screen.
 
 It's one pure function, `composer_surface`. No terminal IO, no input handling —
 given the same state and width it always produces the same surface, which makes

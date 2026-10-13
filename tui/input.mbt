@@ -29,6 +29,9 @@ async fn Ui::submit_current_input(self : Self) -> Input? {
     self.composer.reset()
     self.notice = None
     self.completion.reset()
+    // Bring the end of the transcript back into view: what was just submitted
+    // is about to be appended there.
+    self.scroll.to_bottom()
     self.redraw()
     Some(submitted_input(text, mode))
   }
@@ -239,6 +242,16 @@ async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
       }
       None
     }
+    PageUp => {
+      self.scroll.page_up()
+      self.redraw()
+      None
+    }
+    PageDown => {
+      self.scroll.page_down()
+      self.redraw()
+      None
+    }
     Left => {
       self.composer.move_left()
       self.redraw_after_cursor_move()
@@ -288,6 +301,32 @@ async fn Ui::handle_key(self : Self, key : @tty/input.KeyEvent) -> Event? {
 }
 
 ///|
+/// How many transcript rows one notch of the mouse wheel scrolls.
+const WheelRows : Int32 = 3
+
+///|
+/// The mouse scrolls the transcript with the wheel and selects text in it by
+/// dragging. A selection is copied to the system clipboard as soon as the
+/// button is released, the way a terminal that copies on select behaves: with
+/// mouse reporting on, the terminal no longer selects or copies by itself.
+async fn Ui::handle_mouse(self : Self, mouse : @tty/input.MouseEvent) -> Unit {
+  match mouse.kind {
+    Scroll(Up) => self.scroll.scroll_by(-WheelRows)
+    Scroll(Down) => self.scroll.scroll_by(WheelRows)
+    _ => {
+      self.selection.mouse(mouse)
+      if mouse.kind is Release(Left) && self.selection.text() is Some(text) {
+        self.terminal.set_clipboard(text)
+        self.notice = Some(
+          @doc.dim_text("copied \{text.char_length()} characters"),
+        )
+      }
+    }
+  }
+  self.redraw()
+}
+
+///|
 async fn Ui::handle_tty_event(self : Self, event : @tty.Event) -> Event? {
   match event {
     Input(Key(key)) => self.handle_key(key)
@@ -303,9 +342,15 @@ async fn Ui::handle_tty_event(self : Self, event : @tty.Event) -> Event? {
       self.redraw_after_text_change()
       None
     }
-    Input(FocusIn | FocusOut | Mouse(_)) => None
-    Resize(size) => {
-      self.redraw_after_resize(size)
+    Input(Mouse(mouse)) => {
+      self.handle_mouse(mouse)
+      None
+    }
+    Input(FocusIn | FocusOut) => None
+    // The terminal session already knows the new size; drawing at it lays the
+    // transcript out again for the new width.
+    Resize(_) => {
+      self.redraw()
       None
     }
   }

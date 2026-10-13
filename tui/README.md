@@ -4,11 +4,16 @@ This is the terminal controller for an Agent TUI — the top-level package you
 reach for to build something like the Codex or Claude Code interface: a
 scrolling transcript with a live input box pinned to the bottom.
 
+The UI is full-screen. It takes over the terminal for the session and gives it
+back unchanged on exit, so the transcript does not stay in the terminal's own
+scrollback afterwards. Scrolling back, selecting text and copying it are done by
+the UI itself.
+
 The central type, `Ui`, is best understood as the **controller** between the
 terminal and your agent loop. It owns the terminal session and does all the
 drawing; your job is the reverse of an event loop — you `read_event()` to get
 what the user did, and call `set_*` / `append_*` to push new output back onto
-the screen. Everything below this package (rendering, editing, scrollback) is an
+the screen. Everything below this package (rendering, editing, scrolling) is an
 implementation detail `Ui` drives for you.
 
 ## Usage
@@ -51,8 +56,8 @@ success and error paths.
 
 What you can push onto the screen:
 
-- `ui.append_item(TranscriptItem)` — add a permanent line to the scrollback
-  transcript above the live area.
+- `ui.append_item(TranscriptItem)` — add a permanent item to the transcript
+  above the live area.
 - `ui.set_live_view(status~, activity~, queued_inputs~)` — replace the whole
   live view around the composer in one redraw: the persistent status line
   below it, the transient activity line above it (`None` hides it; it never
@@ -73,6 +78,12 @@ composer_max_rows=…), …)`.
 - Emacs editing: `Ctrl-A`/`Ctrl-E`, `Ctrl-B`/`Ctrl-F`, `Alt-B`/`Alt-F`,
   `Ctrl-H`, `Ctrl-U`/`Ctrl-K`. `Ctrl-D` deletes forward, or quits when empty.
 - `Ctrl-C` / `Esc` return `Interrupt`.
+- `PageUp` / `PageDown` and the mouse wheel scroll the transcript. It follows
+  new output until you scroll up, and follows again once you are back at the
+  end; submitting input jumps back to the end.
+- Dragging with the left mouse button selects transcript text, and releasing
+  the button copies it to the system clipboard. The copy goes through the
+  terminal (OSC 52), so it needs a terminal that supports it.
 
 ## How it fits together
 
@@ -80,6 +91,8 @@ composer_max_rows=…), …)`.
 [`core`](core/) is the semantic model it produces and re-exports (`Input`,
 `Event`, `TranscriptItem`); [`doc`](doc/) is the styled-text vocabulary;
 [`render`](internal/render/) lays the input area out into a surface;
-[`internal/viewport`](internal/viewport/) draws that surface to the real
-terminal and manages scrollback; [`internal/composer`](internal/composer/) and
-[`internal/history`](internal/history/) are the editing core.
+[`internal/composer`](internal/composer/) and
+[`internal/history`](internal/history/) are the editing core. Drawing to the
+terminal — the session, diffing frames, scrolling, selection and the clipboard
+— is `moonbit-community/tui`: each redraw paints one full frame, with the
+transcript in a scrolling area on top and the input area's surface below it.

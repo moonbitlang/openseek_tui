@@ -5,7 +5,7 @@ of one frame, with no terminal and no IO attached. A `Span` is styled text, a
 `Line` is a row of spans, and a `Surface` is a full frame: its rows plus a
 `Cursor`. Think of it as the handoff type between the layers that *decide* what
 to draw ([`doc`](../../doc/), [`render`](../render/)) and the layer that
-*draws* it ([`viewport`](../viewport/)).
+*draws* it (the `Ui`, through `moonbit-community/tui`).
 
 Because a `Surface` is plain immutable data, the producers are pure and easy to
 test, and the renderer never has to re-validate anything: `Surface::new`

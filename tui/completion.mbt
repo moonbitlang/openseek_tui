@@ -118,8 +118,7 @@ fn Ui::sync_completion_menu(self : Self) -> Unit {
 /// cannot be rendered must not capture keys, so this gates `completion_menu_open`
 /// (and the Enter decision) on the same row budget the renderer uses.
 fn Ui::completion_menu_visible(self : Self) -> Bool {
-  guard self.viewport is Some(viewport) else { return true }
-  @render.completion_menu_fits(max_rows=viewport.rows())
+  @render.completion_menu_fits(max_rows=self.terminal.size().height)
 }
 
 ///|
@@ -189,6 +188,7 @@ async fn Ui::submit_slash_command(
   self.history.reset_navigation()
   self.notice = None
   self.completion.reset()
+  self.scroll.to_bottom()
   self.redraw()
   Some(SlashCommand(name~, arguments~))
 }

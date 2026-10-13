@@ -9,8 +9,8 @@ wrapped rows).
 
 The central type, `Model`, deliberately knows nothing about colors, surfaces, or
 the terminal. It only produces plain text plus a cursor offset; the
-[`render`](../render/) layer turns that into a styled surface and
-[`viewport`](../viewport/) draws it. That split is what keeps editing logic
+[`render`](../render/) layer turns that into a styled surface and the `Ui`
+draws it. That split is what keeps editing logic
 testable without a terminal in the loop.
 
 ## Usage

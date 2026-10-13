@@ -2,8 +2,8 @@
 //
 // These are passive, terminal-agnostic value types describing *what* to draw:
 // styled `Span`s form a `Line`, lines plus a `Cursor` form a `Surface` (one
-// rendered frame). The `Ui` builds them from semantic state; the `viewport`
-// engine consumes them to paint a real terminal. Nothing here performs IO.
+// rendered frame). The `Ui` builds them from semantic state and paints them
+// to the terminal. Nothing here performs IO.
 
 ///|
 /// A string fragment with an associated style.
@@ -26,16 +26,13 @@ struct Cursor {
 }
 
 ///|
-/// Render output for one viewport frame.
+/// Render output for the live input area of one frame.
 ///
 /// `Ui` builds a fresh `Surface` from semantic state such as composer text,
-/// status text, and terminal width, then passes it to `Viewport` for placement
-/// and terminal drawing. `Viewport` does not build surfaces because it should
-/// not own composer/status state, but it does cache the last drawn surface so
-/// redraws can diff physical terminal rows and skip unchanged content.
+/// status text, and terminal width, then paints it at the bottom of the
+/// screen.
 ///
-/// A `Surface` always has a cursor. `Ui` produces one for the interactive
-/// composer, and `Viewport` places that surface on the terminal.
+/// A `Surface` always has a cursor: the one of the interactive composer.
 ///
 /// Invariant: `width >= 1`, `cursor.row` is inside `rows` when any row exists,
 /// and `cursor.col` is inside `width`. Construction normalizes these values so

@@ -10,9 +10,9 @@ import {
   "moonbitlang/openseek_tui/tui/internal/render",
   "moonbitlang/openseek_tui/tui/internal/surface",
   "moonbitlang/openseek_tui/tui/internal/task",
-  "moonbitlang/openseek_tui/tui/internal/viewport",
   "moonbitlang/openseek_tui/tui/slash",
   "moonbit-community/tty",
+  "moonbit-community/tui" @term,
   "moonbit-community/tty/input" @tty/input,
 }
 
