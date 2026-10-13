@@ -728,7 +728,22 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
           }
           abandon_outputs(state, cmds)
           match state.run {
-            Idle => if !stopped_commands { cmds.push(Quit) }
+            Idle =>
+              if !stopped_commands {
+                // Nothing is read after a quit, so a receipt still out would
+                // never be reported. With no turn running it can only say
+                // one thing: a steer is applied inside its turn, and that
+                // turn is over. Say so now.
+                for output in state.steered_outputs {
+                  cmds.push(
+                    AppendItem(
+                      output_not_sent_item(output.command, InterruptedFirst),
+                    ),
+                  )
+                }
+                state.steered_outputs.clear()
+                cmds.push(Quit)
+              }
             Running(started_ms) => {
               state.run = Interrupting(started_ms)
               cmds.push(CancelAgent)
@@ -1906,6 +1921,32 @@ test "an interrupted output stays given up when a queued prompt runs next" {
   let cmds = update(state, AgentProgress(run_id=next, AgentFinished("ok")))
   assert_eq(start_agent_count(cmds), 0)
   assert_true(state.run is Idle)
+}
+
+///|
+/// Quitting reads no more receipts. An output whose turn has ended and whose
+/// receipt is still out can only have missed it, so Ctrl-C says so before it
+/// quits rather than leaving a card the agent silently never read.
+test "Ctrl+C reports an undelivered output before it quits" {
+  let state = drain_test_state()
+  let _ = update(state, UiInput(Steer(Prompt("do it"))))
+  let id = enter_command(state, "ls")
+  let _ = update(
+    state,
+    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
+  )
+  let _ = update(
+    state,
+    AgentProgress(run_id=state.run_id, AgentFinished("done")),
+  )
+  assert_true(state.run is Idle)
+  assert_eq(state.steered_outputs.length(), 1)
+  let cmds = update(state, UiInput(Interrupt))
+  guard cmds is [AppendItem(Input(Notice(notice))), Quit] else {
+    fail("expected the not-sent notice, then the quit")
+  }
+  assert_true(notice.contains("`ls`"))
+  assert_eq(state.steered_outputs.length(), 0)
 }
 
 ///|
