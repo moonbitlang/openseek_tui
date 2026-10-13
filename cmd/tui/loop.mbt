@@ -606,9 +606,6 @@ fn abandon_outputs(state : State, cmds : Array[Cmd]) -> Unit {
 priv enum NotSent {
   InterruptedFirst
   EngineExitedFirst
-  // The turn started on the output failed before the engine reported
-  // anything for it.
-  TurnFailedFirst
 }
 
 ///|
@@ -619,7 +616,6 @@ fn output_not_sent_item(command : String, why : NotSent) -> @ui.TranscriptItem {
   let reason = match why {
     InterruptedFirst => "the task was interrupted first"
     EngineExitedFirst => "the engine exited first"
-    TurnFailedFirst => "its turn failed before the engine answered"
   }
   Input(Notice("The output of `\{command}` was not sent: \{reason}."))
 }
@@ -732,22 +728,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
           }
           abandon_outputs(state, cmds)
           match state.run {
-            Idle =>
-              if !stopped_commands {
-                // Nothing is read after a quit, so a receipt still out would
-                // never be reported. With no turn running it can only say
-                // one thing: a steer is applied inside its turn, and that
-                // turn is over. Say so now.
-                for output in state.steered_outputs {
-                  cmds.push(
-                    AppendItem(
-                      output_not_sent_item(output.command, InterruptedFirst),
-                    ),
-                  )
-                }
-                state.steered_outputs.clear()
-                cmds.push(Quit)
-              }
+            Idle => if !stopped_commands { cmds.push(Quit) }
             Running(started_ms) => {
               state.run = Interrupting(started_ms)
               cmds.push(CancelAgent)
@@ -757,11 +738,7 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
         }
         Quit => cmds.push(Quit)
       }
-    AgentProgress(event, ..) => {
-      // The engine has answered for this run, whatever it goes on to say.
-      state.run_output = None
-      handle_agent_event(state, event, cmds)
-    }
+    AgentProgress(event, ..) => handle_agent_event(state, event, cmds)
     AgentCancelled(..) => {
       cmds.push(AppendItem(Error("interrupted")))
       scheduler_on_run_end(state, LoopRunFailed("was interrupted"), cmds)
@@ -773,12 +750,6 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
       }
     AgentFailed(error, ..) => {
       cmds.push(AppendItem(Error("agent failed: \{error}")))
-      // A turn started on a `!` command's output, lost before the engine took
-      // it. The queue goes on as it does after any failed turn, so say that
-      // what is queued behind the command will not have this output to read.
-      if state.run_output is Some(command) {
-        cmds.push(AppendItem(output_not_sent_item(command, TurnFailedFirst)))
-      }
       scheduler_on_run_end(state, LoopRunFailed("failed"), cmds)
       state.finish_run()
     }
@@ -877,7 +848,6 @@ fn update(state : State, message : Msg) -> Array[Cmd] {
     if state.held_outputs.length() > 0 {
       let output = state.held_outputs.remove(0)
       let run_id = state.start_run(@env.now().reinterpret_as_int64())
-      state.run_output = Some(output.command)
       cmds.push(StartAgent(run_id~, output.envelope))
     } else if state.queued.length() > 0 &&
       !state.commands.any(shell => shell.holds_queue) &&
@@ -1674,66 +1644,6 @@ test "a queued shell command holds the queue until its output is answered" {
 }
 
 ///|
-/// The turn on a queued command's output can fail before the engine takes it
-/// (it could not be spawned, or written to). The queue goes on, as it does
-/// after any failed turn — but the prompt behind the command is then asked of
-/// an agent that never read the output, and that is said rather than left to
-/// be inferred from the error.
-test "a failed turn on a queued command's output says the output was not sent" {
-  let state = drain_test_state()
-  guard update(state, UiInput(Queue(Command("make")))) is [RunCommand(id~, _)] else {
-    fail("expected the queued command to start running")
-  }
-  let _ = update(state, UiInput(Queue(Prompt("did it pass?"))))
-  guard update(state, CommandResult(command="make", id~, Ok(test_output("ok"))))
-    is [_, StartAgent(run_id~, _)] else {
-    fail("expected the turn on the output")
-  }
-  let cmds = update(
-    state,
-    AgentFailed(run_id~, Failure::Failure("engine is not running")),
-  )
-  guard cmds
-    is [
-      AppendItem(Error(_)),
-      AppendItem(Input(Notice(notice))),
-      AppendItem(Input(Prompt("did it pass?"))),
-      StartAgent(_, ..),
-    ] else {
-    fail("expected the error, the not-sent notice, then the queued prompt")
-  }
-  assert_true(notice.contains("`make`"))
-}
-
-///|
-/// Once the engine has reported anything for that turn, it has the output: a
-/// failure after that is the turn's, and says nothing about delivery.
-test "a turn on an output that fails after the engine answered claims nothing" {
-  let state = drain_test_state()
-  let id = enter_command(state, "ls")
-  guard update(
-      state,
-      CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
-    )
-    is [_, StartAgent(run_id~, _)] else {
-    fail("expected the turn on the output")
-  }
-  let _ = update(state, AgentProgress(run_id~, AgentStep))
-  let cmds = update(
-    state,
-    AgentFailed(run_id~, Failure::Failure("write failed")),
-  )
-  assert_true(cmds is [AppendItem(Error(_))])
-  // A typed prompt's failed turn claims nothing about any output either.
-  let _ = update(state, UiInput(Steer(Prompt("hello"))))
-  let cmds = update(
-    state,
-    AgentFailed(run_id=state.run_id, Failure::Failure("engine is not running")),
-  )
-  assert_true(cmds is [AppendItem(Error(_))])
-}
-
-///|
 /// Only a command the queue itself started holds it: one run with Enter is
 /// beside the conversation, and what is queued goes ahead.
 test "a shell command run with Enter does not hold the queue" {
@@ -1996,32 +1906,6 @@ test "an interrupted output stays given up when a queued prompt runs next" {
   let cmds = update(state, AgentProgress(run_id=next, AgentFinished("ok")))
   assert_eq(start_agent_count(cmds), 0)
   assert_true(state.run is Idle)
-}
-
-///|
-/// Quitting reads no more receipts. An output whose turn has ended and whose
-/// receipt is still out can only have missed it, so Ctrl-C says so before it
-/// quits rather than leaving a card the agent silently never read.
-test "Ctrl+C reports an undelivered output before it quits" {
-  let state = drain_test_state()
-  let _ = update(state, UiInput(Steer(Prompt("do it"))))
-  let id = enter_command(state, "ls")
-  let _ = update(
-    state,
-    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
-  )
-  let _ = update(
-    state,
-    AgentProgress(run_id=state.run_id, AgentFinished("done")),
-  )
-  assert_true(state.run is Idle)
-  assert_eq(state.steered_outputs.length(), 1)
-  let cmds = update(state, UiInput(Interrupt))
-  guard cmds is [AppendItem(Input(Notice(notice))), Quit] else {
-    fail("expected the not-sent notice, then the quit")
-  }
-  assert_true(notice.contains("`ls`"))
-  assert_eq(state.steered_outputs.length(), 0)
 }
 
 ///|

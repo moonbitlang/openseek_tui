@@ -29,10 +29,12 @@ running.
 
 Ctrl-C stops whatever is running, the turn and every `!` command alike, and
 quits only when nothing is. It also gives up any `!` output that has not
-reached the agent yet, with a notice, rather than letting it start a turn
+reached the agent yet, rather than letting it start a turn
 afterwards. Tab queues an input instead of sending it now; a
 `!` command taken from the queue holds the queue until its output has been
 answered, so a prompt queued behind it is asked of an agent that has read it.
+If that turn fails, the error is shown and the queue advances as after any
+failed prompt.
 
 Killing the engine (a second Ctrl-C, or a quit that the engine does not drain
 within two seconds) first asks it to stop — SIGTERM on Unix, CTRL_BREAK on
