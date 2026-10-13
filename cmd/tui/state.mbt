@@ -66,6 +66,51 @@ priv enum StreamingPreview {
 }
 
 ///|
+/// A `!` shell command the TUI is running. It runs beside the conversation
+/// rather than in its run slot: a prompt typed meanwhile starts its own turn.
+priv struct ShellCommand {
+  // Names the command to its task and to the result that task reports.
+  id : Int32
+  command : String
+  started_ms : Int64
+  // The command was taken from the input queue, which waits for its output
+  // before the next queued input: Tab means "after this", and a prompt queued
+  // behind a command is usually about what the command printed.
+  holds_queue : Bool
+  // Ctrl-C reached this command. Its task may still deliver a result that was
+  // already on its way; that result is shown and not sent.
+  mut interrupted : Bool
+}
+
+///|
+/// The output of a finished `!` command, steered into the running turn and
+/// not yet answered for: the engine reports every steer applied or dropped,
+/// under the tag it was sent with.
+priv struct SteeredOutput {
+  // The tag, unique to this output. Receipts are matched by it and never by
+  // text: the same command run twice sends the same envelope twice.
+  submission_id : String
+  command : String
+  envelope : String
+  // Carried over from the command (`ShellCommand::holds_queue`): the queue
+  // goes on waiting until the output is known to have reached a turn.
+  holds_queue : Bool
+  // Ctrl-C came while the receipt was still out. If the output turns out to
+  // have missed its turn, it is not sent again: the user asked for everything
+  // to stop. The mark is the output's own, so it outlives whatever run starts
+  // next.
+  mut interrupted : Bool
+}
+
+///|
+/// The output of a finished `!` command that is waiting for the conversation
+/// to be idle, to start a turn of its own.
+priv struct HeldOutput {
+  command : String
+  envelope : String
+}
+
+///|
 priv struct State {
   config : AppConfig
   queued : Array[@ui.Input]
@@ -75,10 +120,6 @@ priv struct State {
   // them; a message whose id is not the active run's is stale (it came from a
   // task that has since been superseded) and is dropped. See `State::owns_run`.
   mut run_id : Int32
-  // Whether the active run is a local `!` shell command rather than an
-  // engine turn. Steering and interrupt escalation must not touch the
-  // persistent engine while the work in flight is a local task.
-  mut run_is_command : Bool
   // Whether the active run is a conversation compaction rather than an engine
   // turn. Compaction is a non-steerable model call (the serve engine drops
   // steers during it), so a prompt typed mid-compaction is rejected locally with
@@ -108,11 +149,19 @@ priv struct State {
   /// session at startup and updated only by `goal_updated` events, so it
   /// only ever reflects durably persisted state.
   mut goal : String?
-  // Outstanding fire-and-forget background `!` commands (run alongside a live
-  // turn, `run_id=None`). Their completion hands command context to the engine,
-  // so a scheduled fire must wait for them or that context would leak into the
-  // scheduled turn instead of the conversation it belongs to.
-  mut background_commands : Int32
+  // The `!` commands in flight. Their output is sent into the conversation
+  // when they finish, so a scheduled fire waits for them: the output would
+  // otherwise land in the scheduled turn instead of the exchange it belongs to.
+  commands : Array[ShellCommand]
+  // The id the next `!` command takes.
+  mut next_command_id : Int32
+  // Outputs steered into a turn whose receipt has not come back yet.
+  steered_outputs : Array[SteeredOutput]
+  // Outputs of finished `!` commands that could not be sent when they were
+  // ready (a compaction or an interrupt was in the way, or the turn they were
+  // steered into ended first). Each starts a turn once the conversation is
+  // idle, ahead of queued input.
+  held_outputs : Array[HeldOutput]
 }
 
 ///|
@@ -122,7 +171,6 @@ fn State::State(config : AppConfig) -> State {
     queued: [],
     run: Idle,
     run_id: 0,
-    run_is_command: false,
     run_is_compaction: false,
     pending_steers: [],
     step_response: None,
@@ -130,7 +178,10 @@ fn State::State(config : AppConfig) -> State {
     usage: None,
     schedule: None,
     goal: None,
-    background_commands: 0,
+    commands: [],
+    next_command_id: 0,
+    steered_outputs: [],
+    held_outputs: [],
   }
 }
 
@@ -159,7 +210,6 @@ fn State::owns_run(self : State, id : Int32) -> Bool {
 /// failed): no task running, no pending final or streaming response.
 fn State::finish_run(self : State) -> Unit {
   self.run = Idle
-  self.run_is_command = false
   self.run_is_compaction = false
   // Anything still unconfirmed died with the turn; the engine sweeps its
   // queue at turn end and reports each leftover as steer_dropped, which
@@ -181,31 +231,34 @@ priv enum Msg {
   AgentFailed(run_id~ : Int32, Error)
   // A `!` shell command the TUI ran locally finished; carries the original
   // command and raw result so the loop can render the transcript and produce the
-  // shell-style text handed back to the engine. `run_id` is present when the
-  // command owned the run slot (launched while idle) and absent when it ran in
-  // the background alongside a live agent turn — the foreground case settles the
-  // run, the background case must not.
+  // shell-style text sent into the conversation. `id` is the command's own
+  // (`ShellCommand::id`), not a run's: a command belongs to no run.
   CommandResult(
     command~ : String,
-    run_id~ : Int32?,
+    id~ : Int32,
     Result[@command_context.ShellOutput, Error]
   )
-  // A foreground `!` command cancelled by Ctrl-C before it produced a result.
-  // It has no output to render or hand to the model, but the command line must
-  // still survive in the transcript (the live input echo was dropped), so it
-  // settles the run with a "(cancelled)" command card. Only a foreground
-  // command reaches here, so `run_id` is always present.
-  CommandCancelled(command~ : String, run_id~ : Int32)
+  // A `!` command cancelled by Ctrl-C before it produced a result. It has no
+  // output to render or send, but the command line must still survive in the
+  // transcript (it has no input echo), as a "(cancelled)" command card.
+  CommandCancelled(command~ : String, id~ : Int32)
   // A steer the client could not deliver (no live engine/turn): show the
   // resubmit notice and settle its acknowledgment — the entry was created an
-  // instant ago and cannot have been swept.
-  SteerDropped(String)
+  // instant ago and cannot have been swept. Carries the tag the steer was
+  // sent with, as the engine's own drop does.
+  SteerDropped(String, submission_id~ : String?)
   // A steer the engine rejected on the wire. Its turn's terminal event
   // always precedes it in the stream, so by the time this is processed the
   // acknowledgment it belonged to is already swept: notice only, settling
   // nothing — a fresh identical-text steer of the next turn keeps its own
   // acknowledgment.
-  EngineSteerDropped(String)
+  EngineSteerDropped(String, submission_id~ : String?)
+  // The engine exited without answering for the steer tagged `submission_id`,
+  // a `!` command's output written to that very process. Reported per steer
+  // rather than inferred from `EngineExited`: an exit says nothing about an
+  // output the loop has recorded but not yet sent, or one sent to the engine
+  // spawned since.
+  EngineSteerLost(submission_id~ : String)
   // Session errors are not tied to a model turn, so they are reported without a
   // run id and never affect run lifecycle.
   EngineSessionError(String)
@@ -235,12 +288,13 @@ fn Msg::run_id(self : Msg) -> Int32? {
     AgentProgress(run_id~, _)
     | AgentCancelled(run_id~)
     | AgentFailed(run_id~, _) => Some(run_id)
-    CommandResult(run_id~, _, ..) => run_id
-    CommandCancelled(run_id~, ..) => Some(run_id)
     UiInput(_)
-    | SteerDropped(_)
+    | CommandResult(_, ..)
+    | CommandCancelled(..)
+    | SteerDropped(_, ..)
     | EngineGoalUpdated(_)
-    | EngineSteerDropped(_)
+    | EngineSteerDropped(_, ..)
+    | EngineSteerLost(..)
     | EngineSessionError(_)
     | EngineBackgroundNotice(_)
     | EngineExited
@@ -253,18 +307,22 @@ fn Msg::run_id(self : Msg) -> Int32? {
 ///|
 priv enum Cmd {
   AppendItem(@ui.TranscriptItem)
-  // Start the agent / a local command for a run; carries the run id to tag that
-  // task's messages with.
+  // Start the agent for a run; carries the run id to tag that turn's messages
+  // with.
   StartAgent(run_id~ : Int32, String)
-  // Run a `!` shell command. `run_id` is present for a foreground command
-  // launched while idle — it owns the cancellable run slot — and absent for a
-  // background command running alongside a live agent turn, which is dispatched
-  // fire-and-forget and must not become the cancel target.
-  RunCommand(run_id~ : Int32?, String)
-  // Send typed model-visible input into the persistent serve engine. Prompt
-  // steering lands at the running turn's next step boundary; command context
-  // may also append into an idle engine session without starting a turn.
-  SteerAgent(@agent_runtime.SteerInput)
+  // Run a `!` shell command under `id` (`ShellCommand::id`), beside whatever
+  // the conversation is doing.
+  RunCommand(id~ : Int32, String)
+  // Stop the `!` command `id`. Its task answers with `CommandCancelled`.
+  CancelCommand(id~ : Int32)
+  // Steer the running turn with text the user typed. It lands at the turn's
+  // next step boundary. Untagged: its receipt is matched by text, against the
+  // acknowledgment shown for it (`pending_steers`).
+  SteerAgent(String)
+  // Steer the running turn with a `!` command's output, tagged so its receipt
+  // can be told from typed text's and from another output's
+  // (`SteeredOutput::submission_id`).
+  SteerOutput(submission_id~ : String, String)
   // Ask the serve engine to summarize and compact the conversation; carries the
   // run id so the compaction's wire events are tagged to the run that requested
   // it, exactly like a prompt.
@@ -283,8 +341,48 @@ priv enum Cmd {
 }
 
 ///|
-/// A typed prompt steer as the TUI sends it: text only, and untagged, since
-/// the TUI never reconciles a delivery by id.
-fn prompt_steer(text : String) -> @agent_runtime.SteerInput {
-  Prompt(Content([Text(text)]), submission_id=None)
+/// Begin tracking a `!` command about to run, and return the id its task
+/// reports under.
+fn State::start_command(
+  self : State,
+  command : String,
+  started_ms : Int64,
+  holds_queue~ : Bool,
+) -> Int32 {
+  let id = self.next_command_id
+  self.next_command_id += 1
+  self.commands.push({
+    id,
+    command,
+    started_ms,
+    holds_queue,
+    interrupted: false,
+  })
+  id
+}
+
+///|
+/// The steered output a receipt tagged `submission_id` answers for, no longer
+/// awaited. `None` for an untagged receipt — typed text — and for a tag
+/// nothing is waiting on.
+fn State::settle_output(
+  self : State,
+  submission_id : String?,
+) -> SteeredOutput? {
+  guard submission_id is Some(id) &&
+    self.steered_outputs.search_by(output => output.submission_id == id)
+    is Some(index) else {
+    return None
+  }
+  Some(self.steered_outputs.remove(index))
+}
+
+///|
+/// Stop tracking the `!` command `id`, whose task has reported. `None` when
+/// nothing is tracked under that id.
+fn State::finish_command(self : State, id : Int32) -> ShellCommand? {
+  guard self.commands.search_by(command => command.id == id) is Some(index) else {
+    return None
+  }
+  Some(self.commands.remove(index))
 }

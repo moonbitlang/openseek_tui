@@ -1,7 +1,6 @@
 import {
   "moonbitlang/openseek_protocol" @protocol,
   "moonbitlang/jsonl",
-  "moonbitlang/openseek/agent_runtime",
   "moonbitlang/openseek/agent_session",
   "moonbitlang/openseek/agent_session/store",
   "moonbitlang/openseek_tui/cmd/tui/internal/command_context",

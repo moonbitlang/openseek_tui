@@ -18,6 +18,24 @@ priv struct EngineProcess {
   // bookkeeping: a replaced engine's EOF must not clear — or falsely warn
   // about — a successor's outstanding ack.
   pending_goal_acks : Array[String?]
+  // Tags of the `!` outputs steered to THIS engine and not yet answered by
+  // its steer_applied or steer_dropped. Owned by the process for the same
+  // reason: when it exits, exactly these are lost — not one the loop has
+  // recorded but not yet sent, and not a successor's.
+  unanswered_outputs : Array[String]
+}
+
+///|
+/// The engine answered for the steer tagged `submission_id`, applied or
+/// dropped. Untagged steers — typed text — are not tracked.
+fn EngineProcess::output_answered(
+  self : EngineProcess,
+  submission_id : String?,
+) -> Unit {
+  if submission_id is Some(id) &&
+    self.unanswered_outputs.search(id) is Some(index) {
+    self.unanswered_outputs.remove(index) |> ignore
+  }
 }
 
 ///|
@@ -88,6 +106,7 @@ async fn[G] EngineClient::start(
     run_open: false,
     reader: None,
     pending_goal_acks: [],
+    unanswered_outputs: [],
   }
   self.live = Some(engine)
   let reader_task = group.spawn(no_wait=true) <| () => {
@@ -102,8 +121,18 @@ async fn[G] EngineClient::start(
           // run-tagged message would arrive after finish_run and be eaten
           // by the stale-run guard. Post it untagged so the resubmit notice
           // always reaches the user.
-          SteerDropped(text) =>
-            self.messages.try_put(EngineSteerDropped(text)) |> ignore
+          SteerDropped(text, submission_id~) => {
+            engine.output_answered(submission_id)
+            self.messages.try_put(EngineSteerDropped(text, submission_id~))
+            |> ignore
+          }
+          SteerApplied(Prompt(_, submission_id~)) as applied => {
+            engine.output_answered(submission_id)
+            self.messages.try_put(
+              AgentProgress(run_id=engine.latest_run, applied),
+            )
+            |> ignore
+          }
           // A rejection can answer an idle command (e.g. /goal sent to an
           // engine that does not implement it), where no run owns it and a
           // tagged message would be eaten by the stale-run guard. Rejections
@@ -149,12 +178,8 @@ async fn[G] EngineClient::start(
               ),
             )
             |> ignore
-          // A command context's delivery ack. The output is already rendered as
-          // a local card and the engine appended it synchronously, so there is
-          // nothing to do — in particular, do not echo it like a prompt steer.
-          SteerApplied(Command(_, ..)) => ()
-          // The engine reports this when a command-context append failed; surface
-          // it so the lost output is not silent.
+          // The engine reports this when a turn could not be set up or its
+          // record could not be written; surface it so the loss is not silent.
           AgentError(_) as failure => {
             // A failed turn can swallow a goal notice drained into it (its
             // store append died with the turn): settle pending acks so a
@@ -223,6 +248,13 @@ async fn[G] EngineClient::start(
       )
       |> ignore
     }
+    // A `!` output steered to this engine and never answered for died with
+    // it too. Name each one, so the loop stops waiting for a receipt that
+    // cannot come.
+    for submission_id in engine.unanswered_outputs {
+      self.messages.put(EngineSteerLost(submission_id~))
+    }
+    engine.unanswered_outputs.clear()
     // The watchers this engine owned died with it: let the loop observe the
     // engine boundary, whatever the exit reason.
     self.messages.put(EngineExited)
@@ -302,7 +334,7 @@ async fn[G] EngineClient::prompt(
 
 ///|
 /// Ensure the long-lived engine is running for an explicit user operation
-/// on the durable session (command context, goal update), starting it if
+/// on the durable session (a goal update), starting it if
 /// idle. Returns the live process, or None after posting an
 /// EngineSessionError naming `what`.
 async fn[G] EngineClient::live_for(
@@ -332,82 +364,33 @@ async fn[G] EngineClient::live_for(
 }
 
 ///|
-/// Deliver prompt steering to the open run, or report it dropped when no run
-/// is open to take it.
-async fn EngineClient::steer_prompt(
+/// Steer the open run with user text — typed, or a `!` command's output — or
+/// report it dropped when no run is open to take it. `submission_id` tags the
+/// steer and comes back on its receipt, from the engine or from here.
+async fn EngineClient::steer(
   self : EngineClient,
-  content : @protocol.Content,
-  submission_id~ : String?,
+  text : String,
+  submission_id? : String,
 ) -> Unit {
+  let content : @protocol.Content = Content([Text(text)])
   match self.live {
-    Some(live) if live.run_open =>
+    Some(live) if live.run_open => {
+      if submission_id is Some(id) {
+        live.unanswered_outputs.push(id)
+      }
       self.send(
         live.latest_run,
         (Steer(kind=Prompt, content~, submission_id~) : @protocol.Command).to_json(),
       )
-    _ => self.messages.put(SteerDropped(content.text()))
-  }
-}
-
-///|
-/// Send typed model-visible input to the serve engine. Prompt steering is only
-/// deliverable to an open run; command context may start the long-lived engine
-/// so an idle session can append it without opening a model turn.
-async fn[G] EngineClient::steer(
-  self : EngineClient,
-  group : @async.TaskGroup[G],
-  input : @agent_runtime.SteerInput,
-) -> Unit {
-  match input {
-    // A `Notice` is engine-internal (a tool pushing a completion notice); it is
-    // not something the TUI sends, but route it like a prompt for completeness.
-    Prompt(content, submission_id~) =>
-      self.steer_prompt(content, submission_id~)
-    Notice(text) => self.steer_prompt(Content([Text(text)]), submission_id=None)
-    Command(text, submission_id~) => {
-      guard self.live_for(group, "command context") is Some(live) else {
-        return
-      }
-      let command : Json = (
-        Steer(kind=Command, content=Content([Text(text)]), submission_id~) :
-        @protocol.Command).to_json()
-      // Delivery here is fire-and-forget by design. The serve protocol's
-      // contract is that every accepted command context is answered with
-      // exactly one terminal ack — `steer_applied` (persisted) or
-      // `session_error` (append failed) — and both are surfaced (the latter as
-      // an error). We deliberately do NOT track an outstanding-ack counter to
-      // cover the one out-of-contract gap: an engine that accepts this line and
-      // then exits emitting neither ack (a crash mid-handler, or a custom engine
-      // that ignores the contract). That case leaves the `!` card on screen but
-      // its output absent from the resumed session, with no error.
-      //
-      // This is an intentional trade-off, not an oversight. The idle append is a
-      // single synchronous store write immediately followed by its ack in the
-      // same handler, so the accept-but-never-ack window is vanishingly small
-      // for the real engine. A previous version tracked the pending write and
-      // reported it at EOF, but that bought this rare true-positive at the cost
-      // of a symmetric *false* positive — an engine dying just after the append
-      // succeeded but before the ack was observed would wrongly warn "output not
-      // saved" when it was — plus the bookkeeping to keep the count exact across
-      // batched steers and append failures. The blast radius of the gap is
-      // cosmetic and recoverable: the command is simply missing on resume as if
-      // never run (the user saw it live and can re-run it); nothing is corrupted.
-      live.writer.write("\{command.stringify()}\n") catch {
-        error => {
-          self.live = None
-          self.messages.put(
-            EngineSessionError("failed to send command context: \{error}"),
-          )
-        }
-      }
     }
+    _ => self.messages.put(SteerDropped(text, submission_id~))
   }
 }
 
 ///|
 /// Send a standing-goal update to the serve engine: `Some(text)` sets or
-/// replaces the goal, `None` clears it. Like command context, this is an
-/// explicit user operation on the durable session, so it may start the
+/// replaces the goal, `None` clears it. This is an explicit user operation
+/// on the durable session, so it may start the
 /// long-lived engine to record the goal without opening a model turn. The
 /// engine answers every persisted update with `goal_updated`, which is the
 /// only signal that mutates the TUI's mirrored goal state.
@@ -493,9 +476,8 @@ const EngineDrainGraceMs : Int32 = 2000
 /// Graceful shutdown for TUI exit: closing the engine's stdin is the serve
 /// protocol's EOF signal, letting it finish draining and exit 0. We then wait
 /// (bounded) for the stdout reader to observe that exit, so an engine spawned
-/// just to append a `!` command's output gets to persist it before teardown —
-/// quitting right after a `!` must not lose that context. If the engine does
-/// not exit in time (e.g. a turn is still in flight), kill it so exit never
+/// just to record a goal gets to persist it before teardown. If the engine
+/// does not exit in time (e.g. a turn is still in flight), kill it so exit never
 /// hangs; the task-group teardown reaps whatever remains.
 async fn EngineClient::shutdown(self : EngineClient) -> Unit {
   guard self.live is Some(live) else { return }

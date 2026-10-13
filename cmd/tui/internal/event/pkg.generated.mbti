@@ -1,10 +1,6 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "moonbitlang/openseek_tui/cmd/tui/internal/event"
 
-import {
-  "moonbitlang/openseek/agent_runtime",
-}
-
 // Values
 pub fn decode_event(Json) -> AgentEvent?
 
@@ -17,8 +13,8 @@ pub(all) enum AgentEvent {
   ReasoningDelta(String)
   AssistantDelta(String)
   ReasoningMessage(String)
-  SteerApplied(@agent_runtime.SteerInput)
-  SteerDropped(String)
+  SteerApplied(AppliedSteer)
+  SteerDropped(String, submission_id~ : String?)
   BackgroundNotice(String)
   AssistantMessage(String)
   SessionError(String)
@@ -36,6 +32,11 @@ pub(all) enum AgentEvent {
   ContextYield(String)
   SubrunStarted(kind~ : String, label~ : String)
   SubrunFinished(status~ : String, steps~ : Int, unaccounted~ : String?)
+}
+
+pub(all) enum AppliedSteer {
+  Prompt(String, submission_id~ : String?)
+  Notice(String)
 }
 
 pub(all) struct ToolResultEvent {

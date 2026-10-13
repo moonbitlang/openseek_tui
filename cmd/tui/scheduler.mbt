@@ -129,14 +129,14 @@ fn scheduler_on_run_end(
 /// The single dispatch choke point: invoked by the message loop after **every**
 /// `update` returns — after lifecycle changes have been applied and any queued
 /// user input has been drained — so every idle boundary (Tick, agent terminals,
-/// foreground `!` terminals, background-command completions) is covered with no
-/// per-site fire logic. `input_idle` is the one gate `update` cannot see —
+/// `!` command reports) is covered with no per-site fire logic. `input_idle` is the one gate `update` cannot see —
 /// the composer state and any submission still in flight toward the message
 /// queue are private to the UI; the caller passes `ui.input_idle()`.
 ///
 /// A due schedule fires only at a fully idle moment: no run in flight, nothing
-/// queued, no unconfirmed steers, no background `!` command whose context is
-/// still owed to the engine, and no user interaction on the input surface
+/// queued, no unconfirmed steers, no `!` command still running or whose
+/// steered output is still unanswered for, and no user interaction on the
+/// input surface
 /// (draft text, shell mode, or a just-submitted event still in flight).
 /// Anything less defers — the fire stays due and dispatches at the next idle
 /// boundary.
@@ -154,7 +154,8 @@ fn scheduler_maybe_fire(
   guard state.run is Idle &&
     state.queued.is_empty() &&
     state.pending_steers.is_empty() &&
-    state.background_commands == 0 &&
+    state.steered_outputs.is_empty() &&
+    state.commands.is_empty() &&
     input_idle else {
     return
   }
@@ -162,16 +163,16 @@ fn scheduler_maybe_fire(
   // the user's voice. A drained batch can hold a second Ctrl-C's KillEngine
   // (or a Quit) together with the dying run's terminal event, leaving `run`
   // idle here — but a StartAgent appended now would execute right after the
-  // kill and prompt a dead engine (or an exiting TUI). Likewise a
-  // prompt steer emitted earlier in this batch, with the turn's terminal
-  // behind it having already cleared `pending_steers`: that steer is about to
-  // bounce off the closed turn and come back as a resubmit notice, and firing
-  // now would put the loop's run in front of the user's still-unsettled text.
-  // Command-context steers are the designed exception — the fire is
-  // deliberately ordered after them. Either way the fire stays due for the
-  // next batch.
+  // kill and prompt a dead engine (or an exiting TUI). Likewise a steer
+  // emitted earlier in this batch, with the turn's terminal behind it having
+  // already cleared `pending_steers`: that steer is about to bounce off the
+  // closed turn and come back — typed text as a resubmit notice, a `!`
+  // command's output as a turn of its own — and firing now would put the
+  // loop's run in front of what the user sent first. Either way the fire
+  // stays due for the next batch.
   for cmd in cmds {
-    if cmd is (CancelAgent | KillEngine | Quit | SteerAgent(Prompt(_))) {
+    if cmd
+      is (CancelAgent | KillEngine | Quit | SteerAgent(_) | SteerOutput(_, ..)) {
       return
     }
   }
@@ -345,7 +346,7 @@ fn parse_loop_interval(text : StringView) -> Int32? {
     _ => (text, 1)
   }
   guard parse_loop_number(digits) is Some(value) else { return None }
-  // Bound before multiplying: `604800h * 3600` would overflow Int and wrap
+  // Bound before multiplying: `604800h * 3600` would overflow Int32 and wrap
   // negative, dodging a post-multiplication ceiling check entirely.
   if value > MaxLoopIntervalSecs / unit {
     None
@@ -425,7 +426,7 @@ test "loop interval grammar" {
   assert_true(parse_loop_interval("m") is None)
   assert_true(parse_loop_interval("999999999") is None)
   assert_true(parse_loop_interval("200h") is None)
-  // Would overflow Int if multiplied before the ceiling check.
+  // Would overflow Int32 if multiplied before the ceiling check.
   assert_true(parse_loop_interval("604800h") is None)
   assert_true(parse_loop_interval("604800m") is None)
   // The exact ceiling itself is accepted.
@@ -599,18 +600,18 @@ test "user runs never touch the schedule" {
 }
 
 ///|
-test "background command counter tracks spawn and completion" {
+test "a shell command is tracked from its start to its report" {
   let state = drain_test_state()
-  // Start a user run, then a background `!` alongside it.
+  // Start a user run, then a `!` alongside it.
   let _ = update(state, UiInput(Steer(Prompt("task"))))
   let cmds = update(state, UiInput(Steer(Command("ls"))))
-  assert_eq(run_background_command_count(cmds), 1)
-  assert_eq(state.background_commands, 1)
+  guard cmds is [RunCommand(id~, "ls")] else { fail("expected the command") }
+  assert_eq(state.commands.length(), 1)
   let _ = update(
     state,
-    CommandResult(command="ls", run_id=None, Err(Failure::Failure("boom"))),
+    CommandResult(command="ls", id~, Err(Failure::Failure("boom"))),
   )
-  assert_eq(state.background_commands, 0)
+  assert_eq(state.commands.length(), 0)
 }
 
 ///|
@@ -689,35 +690,53 @@ test "each busy source individually holds a due fire" {
   scheduler_maybe_fire(drafting, input_idle=true, held)
   assert_eq(start_agent_count(held), 1)
 
-  // A background `!` command whose context is still owed to the engine.
+  // A `!` command whose output is still owed to the conversation.
   let waiting = armed_state("30s do x")
   guard waiting.schedule is Some(wait_schedule) else { fail("no schedule") }
   let _ = update(waiting, UiInput(Steer(Prompt("user work"))))
-  let _ = update(waiting, UiInput(Steer(Command("ls"))))
+  guard update(waiting, UiInput(Steer(Command("ls")))) is [RunCommand(id~, _)] else {
+    fail("expected the command")
+  }
   let _ = update(
     waiting,
     AgentProgress(run_id=waiting.run_id, AgentFinished("done")),
   )
   wait_schedule.remaining_secs = 0
-  // Run slot idle, but the background command is still out.
-  assert_eq(waiting.background_commands, 1)
+  // Run slot idle, but the command is still out.
+  assert_eq(waiting.commands.length(), 1)
   let blocked = tick_and_fire(waiting, input_idle=true)
   assert_eq(start_agent_count(blocked), 0)
-  // Its completion is itself an idle boundary: the fire rides the same cycle,
-  // ordered after the command-context steer.
+  // Its output starts the turn that answers it, and that turn is the user's:
+  // the fire stays due behind it rather than taking the idle moment.
   let after = update(
     waiting,
-    CommandResult(command="ls", run_id=None, Err(Failure::Failure("x"))),
+    CommandResult(command="ls", id~, Ok(test_output("a.txt"))),
   )
   scheduler_maybe_fire(waiting, input_idle=true, after)
+  guard after is [AppendItem(ToolCall(_)), StartAgent(run_id~, _)] else {
+    fail("expected the command card and the turn on its output")
+  }
+  assert_eq(wait_schedule.fired_run_id, None)
+  // That turn ending is the idle boundary the fire was waiting for.
+  let ended = update(waiting, AgentProgress(run_id~, AgentFinished("noted")))
+  scheduler_maybe_fire(waiting, input_idle=true, ended)
+  assert_eq(start_agent_count(ended), 1)
+
+  // A command with nothing to answer is an idle boundary itself: the fire
+  // rides the same cycle as its report.
+  let failed = armed_state("30s do x")
+  guard failed.schedule is Some(failed_schedule) else { fail("no schedule") }
+  guard update(failed, UiInput(Steer(Command("ls")))) is [RunCommand(id~, _)] else {
+    fail("expected the command")
+  }
+  failed_schedule.remaining_secs = 0
+  assert_eq(start_agent_count(tick_and_fire(failed, input_idle=true)), 0)
+  let after = update(
+    failed,
+    CommandResult(command="ls", id~, Err(Failure::Failure("x"))),
+  )
+  scheduler_maybe_fire(failed, input_idle=true, after)
   assert_eq(start_agent_count(after), 1)
-  guard after.search_by(cmd => cmd is SteerAgent(_)) is Some(steer_index) else {
-    fail("expected the command-context steer")
-  }
-  guard after.search_by(cmd => cmd is StartAgent(_, ..)) is Some(start_index) else {
-    fail("expected the fire's StartAgent")
-  }
-  assert_true(steer_index < start_index)
 
   // A paused loop never fires, even when due and idle.
   let paused = armed_state("30s do x")
@@ -859,7 +878,7 @@ test "loop status reports a deferred fire as due" {
 }
 
 ///|
-test "a due loop defers behind a prompt steer racing the turn's terminal" {
+test "a due loop defers behind a steer racing the turn's terminal" {
   let state = armed_state("30s do x")
   guard state.schedule is Some(schedule) else { fail("expected a schedule") }
   schedule.remaining_secs = 0
@@ -867,13 +886,11 @@ test "a due loop defers behind a prompt steer racing the turn's terminal" {
   // still ran) with the terminal event behind it having already cleared
   // pending_steers: the steer is about to bounce off the closed turn, so the
   // fire must wait rather than jump ahead of the user's unsettled text.
-  let steering : Array[Cmd] = [SteerAgent(prompt_steer("user text"))]
+  let steering : Array[Cmd] = [SteerAgent("user text")]
   scheduler_maybe_fire(state, input_idle=true, steering)
   assert_eq(start_agent_count(steering), 0)
-  // A command-context steer keeps the designed ordering: fire after it.
-  let command_context : Array[Cmd] = [
-    SteerAgent(Command("ls output", submission_id=None)),
-  ]
-  scheduler_maybe_fire(state, input_idle=true, command_context)
-  assert_eq(start_agent_count(command_context), 1)
+  // With nothing in its way the fire goes ahead.
+  let clear : Array[Cmd] = []
+  scheduler_maybe_fire(state, input_idle=true, clear)
+  assert_eq(start_agent_count(clear), 1)
 }

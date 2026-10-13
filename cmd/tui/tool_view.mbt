@@ -134,10 +134,10 @@ fn command_item(
 }
 
 ///|
-/// Render a foreground `!` command cancelled by Ctrl-C before it produced any
-/// result: the command line with a `(cancelled)` marker and no output. The live
-/// input echo is no longer shown, so this card is what keeps the cancelled
-/// command line in the transcript.
+/// Render a `!` command cancelled by Ctrl-C before it produced any result: the
+/// command line with a `(cancelled)` marker and no output. A command has no
+/// input echo, so this card is what keeps the cancelled command line in the
+/// transcript.
 fn command_cancelled_item(command : String) -> @ui.TranscriptItem {
   ToolCall(
     ToolCall(@doc.Text::plain("$ \{command} (cancelled)"), status=Failed),

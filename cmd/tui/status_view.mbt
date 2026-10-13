@@ -43,12 +43,31 @@ fn status_segments(state : State) -> Array[Segment] {
       text: loop_segment_text(state.schedule),
       style: Style(foreground=Basic(Blue)),
     },
+    // Ahead of the cwd for the same reason: what Ctrl-C would stop must stay
+    // in view.
+    {
+      text: commands_segment_text(state.commands),
+      style: Style(foreground=Basic(Cyan)),
+    },
     { text: state.config.cwd, style: Style(foreground=Basic(Green)), },
     {
       text: format_usage_segment(state.usage),
       style: Style(foreground=Basic(Magenta)),
     },
   ]
+}
+
+///|
+/// The `!` slot on the status bar: the command that is running, or how many
+/// are, and empty when none is. Without it nothing on screen would say that a
+/// command is still out while a turn has the activity row — or that Ctrl-C
+/// will stop something rather than quit.
+fn commands_segment_text(commands : Array[ShellCommand]) -> String {
+  match commands {
+    [] => ""
+    [shell] => "$ \{collapse_preview_whitespace(shell.command)}"
+    _ => "$ ×\{commands.length()}"
+  }
 }
 
 ///|
@@ -167,7 +186,20 @@ fn streaming_activity_spans(
 ///|
 fn format_activity_text(state : State, cols~ : Int32) -> @doc.Text? {
   let started_ms = match state.run {
-    Idle => return None
+    // No turn has the row. A `!` command that is running takes it, so the
+    // screen shows that something is — and for how long.
+    Idle => {
+      guard state.commands is [shell, ..] else { return None }
+      let elapsed = format_elapsed_compact(
+        elapsed_seconds(shell.started_ms, @env.now().reinterpret_as_int64()),
+      )
+      return Some(
+        Text([
+          @doc.Span::plain("Running"),
+          Span(DisplayText(" (\{elapsed})"), style=@style.dim),
+        ]),
+      )
+    }
     Running(started_ms) | Interrupting(started_ms) => started_ms
   }
   let steer_segment = pending_steer_segment(state.pending_steers)
@@ -212,6 +244,23 @@ async fn refresh_ui(ui : @ui.Ui, state : State) -> Unit {
     activity=format_activity_text(state, cols=ui.columns()),
     queued_inputs=state.queued,
   )
+}
+
+///|
+test "a running shell command shows on the status bar and the idle activity row" {
+  let state = drain_test_state()
+  assert_eq(commands_segment_text(state.commands), "")
+  assert_true(format_activity_text(state, cols=80) is None)
+  let _ = update(state, UiInput(Steer(Command("make\ttest"))))
+  // One command is named, on one line whatever it contains.
+  assert_eq(commands_segment_text(state.commands), "$ make test")
+  // With no turn to show, the activity row says a command is running.
+  guard format_activity_text(state, cols=80) is Some(activity) else {
+    fail("expected an activity row for the running command")
+  }
+  assert_true(activity.split_lines() is [_])
+  let _ = update(state, UiInput(Steer(Command("sleep 5"))))
+  assert_eq(commands_segment_text(state.commands), "$ ×2")
 }
 
 ///|

@@ -51,8 +51,7 @@ test "decode maps each engine event kind" {
 test "steer wire events decode to their applied and dropped forms" {
   assert_true(
     @event.decode_event({ "event": "steer_applied", "content": "go left" })
-    is Some(SteerApplied(Prompt(content, ..))) &&
-    content.text() == "go left",
+    is Some(SteerApplied(Prompt("go left", submission_id=None))),
   )
   assert_true(
     @event.decode_event({
@@ -60,8 +59,7 @@ test "steer wire events decode to their applied and dropped forms" {
       "kind": "prompt",
       "content": "go right",
     })
-    is Some(SteerApplied(Prompt(content, ..))) &&
-    content.text() == "go right",
+    is Some(SteerApplied(Prompt("go right", submission_id=None))),
   )
   assert_true(
     @event.decode_event({
@@ -69,7 +67,7 @@ test "steer wire events decode to their applied and dropped forms" {
       "kind": "command",
       "content": "<user_shell_command>",
     })
-    is Some(SteerApplied(Command("<user_shell_command>", ..))),
+    is Some(SteerApplied(Prompt("<user_shell_command>", submission_id=None))),
   )
   assert_true(
     @event.decode_event({
@@ -81,7 +79,25 @@ test "steer wire events decode to their applied and dropped forms" {
   )
   assert_true(
     @event.decode_event({ "event": "steer_dropped", "content": "too late" })
-    is Some(SteerDropped("too late")),
+    is Some(SteerDropped("too late", submission_id=None)),
+  )
+  // The tag a steer was sent with comes back on either receipt.
+  assert_true(
+    @event.decode_event({
+      "event": "steer_applied",
+      "kind": "prompt",
+      "content": "ls output",
+      "submission_id": "shell-3",
+    })
+    is Some(SteerApplied(Prompt("ls output", submission_id=Some("shell-3")))),
+  )
+  assert_true(
+    @event.decode_event({
+      "event": "steer_dropped",
+      "content": "ls output",
+      "submission_id": "shell-3",
+    })
+    is Some(SteerDropped("ls output", submission_id=Some("shell-3"))),
   )
 }
 
