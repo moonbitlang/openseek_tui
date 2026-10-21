@@ -1,5 +1,13 @@
 # moonbitlang/openseek_tui
 
+> [!IMPORTANT]
+> **This repository is archived.** The TUI moved back into
+> [moonbitlang/openseek](https://github.com/moonbitlang/openseek) on 2026-10-21,
+> with its history, as the
+> [`openseek_tui/`](https://github.com/moonbitlang/openseek/tree/main/openseek_tui)
+> workspace member (moonbitlang/openseek#2168). Develop, file issues and publish
+> `moonbitlang/openseek_tui` there.
+
 The interactive terminal UI for [OpenSeek](https://github.com/moonbitlang/openseek):
 the `openseek_tui` binary. It is a scrolling transcript with a live composer
 that drives the headless `openseek` engine over its JSONL protocol — streamed
