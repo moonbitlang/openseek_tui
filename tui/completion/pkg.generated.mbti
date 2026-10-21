@@ -26,8 +26,8 @@ pub fn Model::equal(Self, Self) -> Bool
 pub fn Model::is_open(Self) -> Bool
 pub fn Model::items(Self) -> Array[CompletionItem]
 pub fn Model::not_equal(Self, Self) -> Bool
-pub fn Model::open(items~ : Array[CompletionItem], selected? : Int) -> Self
-pub fn Model::selected(Self) -> Int
+pub fn Model::open(items~ : Array[CompletionItem], selected? : Int32) -> Self
+pub fn Model::selected(Self) -> Int32
 pub fn Model::to_repr(Self) -> @debug.Repr
 
 // Type aliases

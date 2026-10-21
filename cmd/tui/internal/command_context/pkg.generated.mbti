@@ -2,7 +2,7 @@
 package "moonbitlang/openseek_tui/cmd/tui/internal/command_context"
 
 // Values
-pub async fn collect_shell_output(String, cwd? : String, max_output_chars? : Int) -> ShellOutput
+pub async fn collect_shell_output(String, cwd? : String, max_output_chars? : Int32) -> ShellOutput
 
 pub fn encode(String, Result[ShellOutput, Error]) -> String
 
@@ -19,7 +19,7 @@ pub struct ShellCommand {
 }
 
 pub(all) struct ShellOutput {
-  exit_code : Int?
+  exit_code : Int32?
   text : String
   output_limit_reached : Bool
 }

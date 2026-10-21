@@ -12,9 +12,9 @@ import {
 
 // Types and methods
 type Cursor
-pub fn Cursor::Cursor(row~ : Int, col~ : Int) -> Self
-pub fn Cursor::col(Self) -> Int
-pub fn Cursor::row(Self) -> Int
+pub fn Cursor::Cursor(row~ : Int32, col~ : Int32) -> Self
+pub fn Cursor::col(Self) -> Int32
+pub fn Cursor::row(Self) -> Int32
 
 type Line derive(Eq)
 pub fn Line::Line(Array[Span]) -> Self
@@ -31,11 +31,11 @@ pub fn Span::style(Self) -> @style.Style
 pub fn Span::text(Self) -> String
 
 type Surface
-pub fn Surface::Surface(width~ : Int, rows~ : Array[Line], cursor~ : Cursor) -> Self
+pub fn Surface::Surface(width~ : Int32, rows~ : Array[Line], cursor~ : Cursor) -> Self
 pub fn Surface::cursor(Self) -> Cursor
-pub fn Surface::height(Self) -> Int
-pub fn Surface::line_at(Self, Int) -> Line
-pub fn Surface::with_max_rows(Self, Int) -> Self
+pub fn Surface::height(Self) -> Int32
+pub fn Surface::line_at(Self, Int32) -> Line
+pub fn Surface::with_max_rows(Self, Int32) -> Self
 
 // Type aliases
 
