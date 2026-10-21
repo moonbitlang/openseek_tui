@@ -91,12 +91,14 @@ pub fn decode_event(object : Json) -> AgentEvent? {
     // `servers` counts the configuration's entries, not successful contributors
     // — say so, since some may have failed or been skipped.
     StreamRetry(..) => Some(StreamRetry)
-    // Background jobs and workflow runs have no TUI surface yet.
+    // Background jobs, workflow runs and the MCP status snapshot have no TUI
+    // surface yet; the MCP lifecycle notices below still report each server.
     JobChanged(..)
     | JobsSnapshot(..)
     | JobStopResult(..)
     | WorkflowStarted(..)
-    | WorkflowFinished(..) => None
+    | WorkflowFinished(..)
+    | McpStatus(..) => None
     McpToolsRegistered(servers~, tools~, ..) =>
       Some(
         BackgroundNotice(
