@@ -15,11 +15,11 @@ pub async fn[T] with_ui(config? : Config, async (Ui) -> T) -> T
 
 // Types and methods
 type Config
-pub fn Config::Config(esc_timeout_ms? : Int, composer_max_rows? : Int, slash_commands? : Array[@slash.SlashCommandSpec]) -> Self
+pub fn Config::Config(esc_timeout_ms? : Int32, composer_max_rows? : Int32, slash_commands? : Array[@slash.SlashCommandSpec]) -> Self
 
 type Ui
 pub async fn Ui::append_item(Self, @core.TranscriptItem) -> Unit
-pub fn Ui::columns(Self) -> Int
+pub fn Ui::columns(Self) -> Int32
 pub fn Ui::input_idle(Self) -> Bool
 pub async fn Ui::read_event(Self) -> @core.Event
 #deprecated

@@ -16,7 +16,7 @@ pub fn dim_text(String) -> Text
 // Types and methods
 type Doc
 pub fn Doc::Doc(Array[Text]) -> Self
-pub fn Doc::layout(Self, width~ : Int) -> Array[@surface.Line]
+pub fn Doc::layout(Self, width~ : Int32) -> Array[@surface.Line]
 
 type Span derive(@debug.Debug)
 pub fn Span::Span(@displaytext.DisplayText, style? : @style.Style) -> Self
@@ -25,7 +25,7 @@ pub fn Span::to_repr(Self) -> @debug.Repr
 
 type Text derive(@debug.Debug)
 pub fn Text::Text(Array[Span]) -> Self
-pub fn Text::first_line(Self, width~ : Int) -> @surface.Line
+pub fn Text::first_line(Self, width~ : Int32) -> @surface.Line
 pub fn Text::plain(String) -> Self
 pub fn Text::prepend_span(Self, Span) -> Self
 pub fn Text::split_lines(Self) -> Array[Self]

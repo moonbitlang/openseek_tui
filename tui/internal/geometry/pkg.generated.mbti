@@ -6,18 +6,18 @@ import {
 }
 
 // Values
-pub fn clamp_height(@terminal_size.TerminalSize, height~ : Int) -> Int
+pub fn clamp_height(@terminal_size.TerminalSize, height~ : Int32) -> Int32
 
-pub fn clamp_top(@terminal_size.TerminalSize, height~ : Int, top~ : Int) -> Int
+pub fn clamp_top(@terminal_size.TerminalSize, height~ : Int32, top~ : Int32) -> Int32
 
 // Errors
 
 // Types and methods
 type Geometry
-pub fn Geometry::Geometry(top~ : Int, height~ : Int) -> Self
-pub fn Geometry::bottom(Self) -> Int
-pub fn Geometry::height(Self) -> Int
-pub fn Geometry::top(Self) -> Int
+pub fn Geometry::Geometry(top~ : Int32, height~ : Int32) -> Self
+pub fn Geometry::bottom(Self) -> Int32
+pub fn Geometry::height(Self) -> Int32
+pub fn Geometry::top(Self) -> Int32
 
 // Type aliases
 

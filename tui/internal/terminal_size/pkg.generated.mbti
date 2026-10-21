@@ -8,9 +8,9 @@ pub let default : TerminalSize
 
 // Types and methods
 type TerminalSize
-pub fn TerminalSize::TerminalSize(rows~ : Int, cols~ : Int) -> Self
-pub fn TerminalSize::cols(Self) -> Int
-pub fn TerminalSize::rows(Self) -> Int
+pub fn TerminalSize::TerminalSize(rows~ : Int32, cols~ : Int32) -> Self
+pub fn TerminalSize::cols(Self) -> Int32
+pub fn TerminalSize::rows(Self) -> Int32
 
 // Type aliases
 

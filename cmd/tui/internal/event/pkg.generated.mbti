@@ -27,11 +27,11 @@ pub(all) enum AgentEvent {
   CommandRejected(String)
   CompactionFinished(String)
   GoalUpdated(String?)
-  GoalContinue(Int)
+  GoalContinue(Int32)
   GoalBudgetExhausted
   ContextYield(String)
   SubrunStarted(kind~ : String, label~ : String)
-  SubrunFinished(status~ : String, steps~ : Int, unaccounted~ : String?)
+  SubrunFinished(status~ : String, steps~ : Int32, unaccounted~ : String?)
 }
 
 pub(all) enum AppliedSteer {
@@ -46,7 +46,7 @@ pub(all) struct ToolResultEvent {
 }
 
 pub struct UsageInfo {
-  total_tokens : Int
+  total_tokens : Int32
 }
 
 // Type aliases

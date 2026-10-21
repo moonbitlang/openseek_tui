@@ -10,9 +10,9 @@ import {
 }
 
 // Values
-pub fn completion_menu_fits(max_rows~ : Int) -> Bool
+pub fn completion_menu_fits(max_rows~ : Int32) -> Bool
 
-pub fn composer_surface(@composer.Model, activity~ : @doc.Text?, queued_inputs~ : Array[@core.Input], completion? : @completion.Model, status~ : @doc.Text, notice~ : @doc.Text?, cols~ : Int, max_rows~ : Int) -> @surface.Surface
+pub fn composer_surface(@composer.Model, activity~ : @doc.Text?, queued_inputs~ : Array[@core.Input], completion? : @completion.Model, status~ : @doc.Text, notice~ : @doc.Text?, cols~ : Int32, max_rows~ : Int32) -> @surface.Surface
 
 // Errors
 
