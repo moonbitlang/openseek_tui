@@ -4,8 +4,8 @@ version = "0.4.3"
 
 import {
   "moonbitlang/jsonl@0.2.0",
-  "moonbitlang/openseek@0.6.2",
-  "moonbitlang/openseek_protocol@0.3.1",
+  "moonbitlang/openseek@0.7.0",
+  "moonbitlang/openseek_protocol@0.4.0",
   "moonbit-community/displaytext@0.1.6",
   "moonbit-community/tty@0.3.0",
   "moonbitlang/async@0.22.4",

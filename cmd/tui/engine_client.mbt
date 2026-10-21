@@ -380,7 +380,7 @@ async fn EngineClient::steer(
       }
       self.send(
         live.latest_run,
-        (Steer(kind=Prompt, content~, submission_id~) : @protocol.Command).to_json(),
+        (Steer(content~, submission_id~) : @protocol.Command).to_json(),
       )
     }
     _ => self.messages.put(SteerDropped(text, submission_id~))
